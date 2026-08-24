@@ -8,6 +8,7 @@ description:
 version: __APP_VERSION__
 author: ictrek
 category: [ai]
+icon: icon.png
 arch: [amd64, arm64]
 
 frontend:
@@ -95,4 +96,3 @@ storage:
   directories:
     - path: data
       mode: "0755"
-

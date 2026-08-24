@@ -1,24 +1,67 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION_FILE="${ROOT_DIR}/VERSION"
-PART="${1:-patch}"
+APP_LABEL="image_studio"
+TAG_PREFIX="vos-image-studio-v"
+VERSION_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/VERSION"
+REPO_ROOT="$(git -C "$(dirname "$VERSION_FILE")" rev-parse --show-toplevel)"
 
-current="$(tr -d '[:space:]' < "$VERSION_FILE")"
-IFS=. read -r major minor patch <<EOF_VERSION
-$current
-EOF_VERSION
+usage() {
+  cat <<'EOF'
+Usage:
+  ./scripts/update_version.sh [patch|minor|major]
 
-case "$PART" in
-  major) major=$((major + 1)); minor=0; patch=0 ;;
-  minor) minor=$((minor + 1)); patch=0 ;;
-  patch) patch=$((patch + 1)) ;;
-  *) echo "usage: update_version.sh [major|minor|patch]" >&2; exit 1 ;;
-esac
+Updates ictrek.app/VERSION, commits it, creates a VOS CI trigger tag, and
+pushes the branch and tag. GitHub Actions publishes the pull-mode tar on a
+standard SemVer release tag.
+Commit application code changes before running this script.
+EOF
+}
 
-next="${major}.${minor}.${patch}"
-echo "$next" > "$VERSION_FILE"
-echo "[INFO] bumped Image Studio to ${next}"
-echo "[INFO] create release tag after committing: vos-image-studio-v${next}"
+bump_version() {
+  local part="$1" current major minor patch
+  current="$(tr -d '[:space:]' < "$VERSION_FILE")"
+  [[ "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+    echo "invalid VERSION: $current" >&2
+    exit 1
+  }
+  IFS=. read -r major minor patch <<< "$current"
+  case "$part" in
+    patch) patch=$((patch + 1)) ;;
+    minor) minor=$((minor + 1)); patch=0 ;;
+    major) major=$((major + 1)); minor=0; patch=0 ;;
+    *) usage >&2; exit 1 ;;
+  esac
+  printf '%s.%s.%s\n' "$major" "$minor" "$patch"
+}
 
+part="${1:-patch}"
+[[ "${1:-}" != "-h" && "${1:-}" != "--help" ]] || { usage; exit 0; }
+
+cd "$REPO_ROOT"
+git diff --quiet && git diff --cached --quiet || {
+  echo "worktree is not clean; commit code changes before releasing" >&2
+  exit 1
+}
+
+version="$(bump_version "$part")"
+tag="${TAG_PREFIX}${version}"
+public_tag="v${version}"
+git rev-parse -q --verify "refs/tags/${tag}" >/dev/null && {
+  echo "tag already exists: ${tag}" >&2
+  exit 1
+}
+git rev-parse -q --verify "refs/tags/${public_tag}" >/dev/null && {
+  echo "public release tag already exists: ${public_tag}" >&2
+  exit 1
+}
+
+printf '%s\n' "$version" > "$VERSION_FILE"
+git add "$VERSION_FILE"
+git commit -m "chore: release VOS ${APP_LABEL} ${version}"
+git tag "$tag"
+branch="$(git branch --show-current)"
+git push origin "$branch"
+git push origin "$tag"
+
+echo "Pushed ${tag}. GitHub Actions will build the pull tar and create release ${public_tag}."

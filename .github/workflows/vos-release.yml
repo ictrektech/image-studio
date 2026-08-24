@@ -1,0 +1,121 @@
+name: VOS Pull Package Release
+
+on:
+  push:
+    tags:
+      - "vos-image-studio-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Fetch all release tags
+        run: git fetch --force --tags origin
+
+      - name: Write Feishu component credentials
+        run: |
+          cat > "$HOME/.feishu.components.json" <<EOF
+          {
+            "feishu_app_id": "${{ secrets.FEISHU_APP_ID }}",
+            "feishu_app_secret": "${{ secrets.FEISHU_APP_SECRET }}"
+          }
+          EOF
+
+      - name: Build pull-mode package
+        env:
+          FEISHU_SPREADSHEET_TOKEN: ${{ secrets.FEISHU_SPREADSHEET_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#vos-image-studio-v}"
+          PACKAGE_VERSION="$VERSION" ./ictrek.app/scripts/package.sh
+          test -f "ictrek.app/dist/image_studio_${VERSION}_pull.tar"
+
+      - name: Create release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_PREFIX: vos-image-studio-v
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#vos-image-studio-v}"
+          CURRENT="${GITHUB_REF_NAME}"
+          PUBLIC_TAG="v${VERSION}"
+          export PUBLIC_TAG
+          PREVIOUS="$(gh release list --limit 100 --json tagName,publishedAt --jq '[.[] | select(.tagName != env.PUBLIC_TAG) | select((.tagName | startswith("v")) or (.tagName | startswith(env.TAG_PREFIX)))] | sort_by(.publishedAt) | reverse | .[0].tagName // ""')"
+          {
+            echo "Pull-mode VOS app package for com.ictrek.image-studio."
+            echo
+            if [[ -n "$PREVIOUS" ]]; then
+              echo "Changes since ${PREVIOUS}:"
+              git log --no-merges --pretty='- %s (%h)' "${PREVIOUS}..${CURRENT}"
+            else
+              echo "Initial VOS package release."
+              git log --no-merges --pretty='- %s (%h)' -20 "${CURRENT}"
+            fi
+          } > release-notes.md
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#vos-image-studio-v}"
+          PUBLIC_TAG="v${VERSION}"
+          if ! git ls-remote --exit-code --tags origin "refs/tags/${PUBLIC_TAG}" >/dev/null 2>&1; then
+            git tag "$PUBLIC_TAG" "$GITHUB_SHA"
+            git push origin "$PUBLIC_TAG"
+          fi
+          gh release create "$PUBLIC_TAG" "ictrek.app/dist/image_studio_${VERSION}_pull.tar" \
+            --verify-tag \
+            --latest \
+            --title "v${VERSION}" \
+            --notes-file release-notes.md
+
+      - name: Publish package to VOS App Store
+        env:
+          APP_STORE: ${{ secrets.APP_STORE }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${APP_STORE:-}" ]]; then
+            echo "APP_STORE is not configured; skip VOS App Store publish."
+            exit 0
+          fi
+
+          VERSION="${GITHUB_REF_NAME#vos-image-studio-v}"
+          PACKAGE="ictrek.app/dist/image_studio_${VERSION}_pull.tar"
+          base="${APP_STORE%/}"
+          base="${base%/store}"
+          base="${base%/api/apps/publish}"
+          base="${base%/api/apps/validate}"
+
+          validate_response="$(curl -kfsS -F "package=@${PACKAGE}" "${base}/api/apps/validate")"
+          RESPONSE="$validate_response" python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          payload = json.loads(os.environ["RESPONSE"])
+          if payload.get("code") != 0:
+              print(payload, file=sys.stderr)
+              raise SystemExit("App Store package validation failed")
+          print(f"Validated {payload.get('data', {}).get('app_id')}@{payload.get('data', {}).get('version')}")
+          PY
+
+          publish_response="$(curl -kfsS -F "package=@${PACKAGE}" -F "force=true" "${base}/api/apps/publish")"
+          RESPONSE="$publish_response" python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          payload = json.loads(os.environ["RESPONSE"])
+          if payload.get("code") != 0:
+              print(payload, file=sys.stderr)
+              raise SystemExit("App Store publish failed")
+          data = payload.get("data") or {}
+          print(f"Published {data.get('app_id')}@{data.get('version')} to VOS App Store")
+          PY

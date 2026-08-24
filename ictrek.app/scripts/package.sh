@@ -52,6 +52,28 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing command: $1"
 }
 
+validate_yaml_file() {
+  local file="$1"
+  if python3 - "$file" <<'PYYAML'
+import sys
+from pathlib import Path
+
+try:
+    import yaml
+except Exception as exc:
+    raise SystemExit(42)
+
+path = Path(sys.argv[1])
+with path.open("r", encoding="utf-8") as f:
+    yaml.safe_load(f)
+PYYAML
+  then
+    return 0
+  fi
+  command -v ruby >/dev/null 2>&1 || die "missing PyYAML and ruby; cannot validate ${file}"
+  ruby -e 'require "yaml"; YAML.load_file(ARGV.fetch(0))' "$file"
+}
+
 acquire_lock() {
   while ! mkdir "$LOCK_DIR" 2>/dev/null; do
     sleep 1
@@ -418,6 +440,7 @@ done
 for file in manifest.yml configs.yml routers.yml; do
   if [[ -f "${SRC_DIR}/${file}" ]]; then
     render_text_file "${SRC_DIR}/${file}" "${STAGE_DIR}/${file}"
+    validate_yaml_file "${STAGE_DIR}/${file}"
   fi
 done
 cp "${SRC_DIR}/icon.png" "${STAGE_DIR}/icon.png"

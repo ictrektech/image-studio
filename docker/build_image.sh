@@ -40,6 +40,12 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing command: $1"
 }
 
+verify_icon_consistency() {
+  cmp -s ictrek.app/src/icon.png frontend/src/assets/icon.png || {
+    die "frontend/src/assets/icon.png must match ictrek.app/src/icon.png"
+  }
+}
+
 contains() {
   local needle="$1"
   shift
@@ -431,6 +437,7 @@ done
 require_cmd curl
 require_cmd docker
 require_cmd python3
+verify_icon_consistency
 docker buildx version >/dev/null 2>&1 || die "docker buildx is required"
 
 if [[ ! -f "$FEISHU_CONFIG_FILE" ]]; then

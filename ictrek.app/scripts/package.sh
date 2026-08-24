@@ -23,7 +23,7 @@ LOCK_DIR="${DIST_DIR}/.package.lock"
 PROFILES=(
   "amd|AMD_with_mxn100"
   "amd-cuda|AMD_with_cuda"
-  "arm|ARM_without_cuda"
+  "arm|ARM_without_cuda,SOPHON_bm1688"
   "arm-cuda|ARM_with_cuda"
   "l4t|l4t"
   "thor|thor_spark"

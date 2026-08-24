@@ -15,7 +15,7 @@ set -euo pipefail
 #
 # Supported sheets:
 #   AMD: AMD_with_cuda, AMD_with_mxn100
-#   ARM: ARM_without_cuda, ARM_with_cuda, l4t, thor_spark
+#   ARM: ARM_without_cuda, SOPHON_bm1688, ARM_with_cuda, l4t, thor_spark
 # =============================================================================
 
 cd "$(dirname "$0")/.."
@@ -30,7 +30,7 @@ BACKEND_REPOSITORY="${REGISTRY}/image-studio-backend"
 FRONTEND_REPOSITORY="${REGISTRY}/image-studio-frontend"
 
 AMD_SHEETS=("AMD_with_cuda" "AMD_with_mxn100")
-ARM_SHEETS=("ARM_without_cuda" "ARM_with_cuda" "l4t" "thor_spark")
+ARM_SHEETS=("ARM_without_cuda" "SOPHON_bm1688" "ARM_with_cuda" "l4t" "thor_spark")
 
 log() { echo "[INFO] $*"; }
 err() { echo "[ERROR] $*" >&2; }
@@ -336,6 +336,7 @@ sheet_spec() {
     AMD_with_mxn100) printf '%s|%s|%s|%s|%s\n' amd amd docker/Dockerfile.cpu amd_22-alpine amd_alpine ;;
     ARM_with_cuda) printf '%s|%s|%s|%s|%s\n' arm-cuda arm_cuda docker/Dockerfile.arm-cuda arm_22-alpine arm_alpine ;;
     ARM_without_cuda) printf '%s|%s|%s|%s|%s\n' arm arm docker/Dockerfile.cpu arm_22-alpine arm_alpine ;;
+    SOPHON_bm1688) printf '%s|%s|%s|%s|%s\n' arm arm docker/Dockerfile.cpu arm_22-alpine arm_alpine ;;
     l4t) printf '%s|%s|%s|%s|%s\n' l4t l4t docker/Dockerfile.l4t arm_22-alpine arm_alpine ;;
     thor_spark) printf '%s|%s|%s|%s|%s\n' thor thor docker/Dockerfile.thor thor_22-alpine thor_alpine ;;
     *) return 1 ;;
@@ -387,6 +388,7 @@ Usage:
   ./docker/build_image.sh --sheet AMD_with_mxn100
   ./docker/build_image.sh --sheet ARM_with_cuda
   ./docker/build_image.sh --sheet ARM_without_cuda
+  ./docker/build_image.sh --sheet SOPHON_bm1688
   ./docker/build_image.sh --sheet l4t
   ./docker/build_image.sh --sheet thor_spark
   ./docker/build_image.sh --component backend|frontend
@@ -414,7 +416,7 @@ for sheet in "${TARGET_SHEETS[@]}"; do
   if [[ "$HOST_ARCH" == "amd" ]]; then
     contains "$sheet" "AMD_with_cuda" "AMD_with_mxn100" || die "sheet ${sheet} is not valid for tc232/amd"
   else
-    contains "$sheet" "ARM_without_cuda" "ARM_with_cuda" "l4t" "thor_spark" || die "sheet ${sheet} is not valid for arm/thor hosts"
+    contains "$sheet" "ARM_without_cuda" "SOPHON_bm1688" "ARM_with_cuda" "l4t" "thor_spark" || die "sheet ${sheet} is not valid for arm/thor hosts"
   fi
   sheet_spec "$sheet" >/dev/null || die "unsupported sheet: $sheet"
 done
@@ -498,37 +500,44 @@ for sheet in "${TARGET_SHEETS[@]}"; do
     log "Image pushed: ${IMAGE}"
   done
 
-  FEISHU_TOKEN="$(get_feishu_token "$FEISHU_APP_ID" "$FEISHU_APP_SECRET")"
-  SHEET_ID="$(get_sheet_id_by_title "$FEISHU_TOKEN" "$FEISHU_SPREADSHEET_TOKEN" "$sheet")"
-  log "Resolved sheet: ${sheet} -> ${SHEET_ID}"
-
-  FEISHU_TOKEN="$(get_feishu_token "$FEISHU_APP_ID" "$FEISHU_APP_SECRET")"
-  DATE_ROW="$(find_date_row "$FEISHU_TOKEN" "$FEISHU_SPREADSHEET_TOKEN" "$SHEET_ID" "$DATE")"
-  if [[ -z "$DATE_ROW" ]]; then
-    log "Date ${DATE} not found, creating a new row at top of data area"
-    FEISHU_TOKEN="$(get_feishu_token "$FEISHU_APP_ID" "$FEISHU_APP_SECRET")"
-    prepend_date_row "$FEISHU_TOKEN" "$FEISHU_SPREADSHEET_TOKEN" "$SHEET_ID" "$DATE"
-    DATE_ROW=4
-  else
-    log "Date ${DATE} already exists at row ${DATE_ROW}"
+  UPDATE_SHEETS=("$sheet")
+  if [[ "$sheet" == "ARM_without_cuda" ]]; then
+    UPDATE_SHEETS+=("SOPHON_bm1688")
   fi
 
-  for component in "${COMPONENTS[@]}"; do
-    case "$component" in
-      backend)
-        COMPONENT_NAME="$BACKEND_COMPONENT_NAME"
-        REPOSITORY="$BACKEND_REPOSITORY"
-        ;;
-      frontend)
-        COMPONENT_NAME="$FRONTEND_COMPONENT_NAME"
-        REPOSITORY="$FRONTEND_REPOSITORY"
-        ;;
-    esac
+  for update_sheet in "${UPDATE_SHEETS[@]}"; do
     FEISHU_TOKEN="$(get_feishu_token "$FEISHU_APP_ID" "$FEISHU_APP_SECRET")"
-    COMPONENT_COL="$(find_component_column_letter "$FEISHU_TOKEN" "$FEISHU_SPREADSHEET_TOKEN" "$SHEET_ID" "$COMPONENT_NAME")"
-    write_cell "$FEISHU_TOKEN" "$FEISHU_SPREADSHEET_TOKEN" "$SHEET_ID" "${COMPONENT_COL}1" "$COMPONENT_NAME"
-    write_cell "$FEISHU_TOKEN" "$FEISHU_SPREADSHEET_TOKEN" "$SHEET_ID" "${COMPONENT_COL}2" "$REPOSITORY"
-    write_cell "$FEISHU_TOKEN" "$FEISHU_SPREADSHEET_TOKEN" "$SHEET_ID" "${COMPONENT_COL}${DATE_ROW}" "$TAG"
-    log "Feishu updated: ${sheet}!${COMPONENT_COL}${DATE_ROW} = ${TAG}"
+    SHEET_ID="$(get_sheet_id_by_title "$FEISHU_TOKEN" "$FEISHU_SPREADSHEET_TOKEN" "$update_sheet")"
+    log "Resolved sheet: ${update_sheet} -> ${SHEET_ID}"
+
+    FEISHU_TOKEN="$(get_feishu_token "$FEISHU_APP_ID" "$FEISHU_APP_SECRET")"
+    DATE_ROW="$(find_date_row "$FEISHU_TOKEN" "$FEISHU_SPREADSHEET_TOKEN" "$SHEET_ID" "$DATE")"
+    if [[ -z "$DATE_ROW" ]]; then
+      log "Date ${DATE} not found, creating a new row at top of data area"
+      FEISHU_TOKEN="$(get_feishu_token "$FEISHU_APP_ID" "$FEISHU_APP_SECRET")"
+      prepend_date_row "$FEISHU_TOKEN" "$FEISHU_SPREADSHEET_TOKEN" "$SHEET_ID" "$DATE"
+      DATE_ROW=4
+    else
+      log "Date ${DATE} already exists at row ${DATE_ROW}"
+    fi
+
+    for component in "${COMPONENTS[@]}"; do
+      case "$component" in
+        backend)
+          COMPONENT_NAME="$BACKEND_COMPONENT_NAME"
+          REPOSITORY="$BACKEND_REPOSITORY"
+          ;;
+        frontend)
+          COMPONENT_NAME="$FRONTEND_COMPONENT_NAME"
+          REPOSITORY="$FRONTEND_REPOSITORY"
+          ;;
+      esac
+      FEISHU_TOKEN="$(get_feishu_token "$FEISHU_APP_ID" "$FEISHU_APP_SECRET")"
+      COMPONENT_COL="$(find_component_column_letter "$FEISHU_TOKEN" "$FEISHU_SPREADSHEET_TOKEN" "$SHEET_ID" "$COMPONENT_NAME")"
+      write_cell "$FEISHU_TOKEN" "$FEISHU_SPREADSHEET_TOKEN" "$SHEET_ID" "${COMPONENT_COL}1" "$COMPONENT_NAME"
+      write_cell "$FEISHU_TOKEN" "$FEISHU_SPREADSHEET_TOKEN" "$SHEET_ID" "${COMPONENT_COL}2" "$REPOSITORY"
+      write_cell "$FEISHU_TOKEN" "$FEISHU_SPREADSHEET_TOKEN" "$SHEET_ID" "${COMPONENT_COL}${DATE_ROW}" "$TAG"
+      log "Feishu updated: ${update_sheet}!${COMPONENT_COL}${DATE_ROW} = ${TAG}"
+    done
   done
 done

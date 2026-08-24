@@ -13,9 +13,8 @@ routers:
           zh-CN: 图片生成
           en: Image Generation
         icon: lucide:image-plus
-        iframe-src: /app/com.ictrek.image-studio/
+        iframe-src: /app/com.ictrek.image-studio/?v=__APP_VERSION__
         order: 10
         keep-alive: true
         entry-point: true
         embed: true
-

@@ -24,13 +24,23 @@ export default function App() {
   }
 
   const refresh = useCallback(async () => {
+    let nextError = ''
     try {
-      const [modelData, aboutData] = await Promise.all([api.listModels(), api.about()])
-      setModels(modelData)
-      setAbout(aboutData)
-      setError('')
+      setModels(await api.listModels())
     } catch (e: any) {
-      setError(e.message || t.serviceUnavailable)
+      nextError = e.message || t.serviceUnavailable
+    }
+
+    try {
+      setAbout(await api.about())
+    } catch (e: any) {
+      nextError = nextError || e.message || t.serviceUnavailable
+    }
+
+    if (nextError) {
+      setError(nextError)
+    } else {
+      setError('')
     }
   }, [t.serviceUnavailable])
 
@@ -74,7 +84,7 @@ export default function App() {
       </nav>
       {error && <div className="notice error">{error}</div>}
       <main>
-        {tab === 'generate' && <GeneratePage models={models} onRefresh={refresh} t={t} />}
+        {tab === 'generate' && <GeneratePage models={models} onRefresh={refresh} onOpenModels={() => setTab('models')} t={t} />}
         {tab === 'models' && <ModelsPage models={models} onRefresh={refresh} t={t} />}
         {tab === 'jobs' && <JobsPage t={t} />}
         {tab === 'api' && <ApiPage t={t} />}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Download, ImageIcon, RefreshCw, RotateCcw, Sparkles } from 'lucide-react'
+import { Database, Download, ImageIcon, RefreshCw, RotateCcw, Sparkles } from 'lucide-react'
 import { api, GeneratePayload, JobRecord, ModelInfo } from '../api/client'
 import { messages } from '../i18n'
 
@@ -16,7 +16,7 @@ const initialPayload: GeneratePayload = {
   batch_count: 1,
 }
 
-export default function GeneratePage({ models, onRefresh, t }: { models: ModelInfo[]; onRefresh: () => void; t: typeof messages['zh-CN'] }) {
+export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { models: ModelInfo[]; onRefresh: () => void; onOpenModels: () => void; t: typeof messages['zh-CN'] }) {
   const [payload, setPayload] = useState<GeneratePayload>(initialPayload)
   const [jobs, setJobs] = useState<JobRecord[]>([])
   const [selectedJobId, setSelectedJobId] = useState<string>('')
@@ -25,6 +25,7 @@ export default function GeneratePage({ models, onRefresh, t }: { models: ModelIn
 
   const selectedJob = useMemo(() => jobs.find(job => job.job_id === selectedJobId) || jobs[0], [jobs, selectedJobId])
   const selectedModel = models.find(model => model.key === payload.model_key)
+  const modelReady = selectedModel?.status === 'ready'
   const hasRunning = jobs.some(job => job.status === 'queued' || job.status === 'running')
   const selectedOutput = selectedJob?.outputs[0]
   const selectedOutputUrl = selectedJob && selectedOutput ? api.outputUrl(selectedJob.job_id, selectedOutput) : ''
@@ -84,9 +85,16 @@ export default function GeneratePage({ models, onRefresh, t }: { models: ModelIn
         <select value={payload.model_key} onChange={e => setPayload({ ...payload, model_key: e.target.value })}>
           {models.map(model => <option key={model.key} value={model.key}>{model.name}</option>)}
         </select>
-        <div className={`inline-status ${selectedModel?.status === 'ready' ? 'ready' : 'missing'}`}>
-          {selectedModel?.status === 'ready' ? t.modelReady : t.modelMissing} · {selectedModel?.resolved_path || selectedModel?.access_path}
+        <div className={`inline-status ${modelReady ? 'ready' : 'missing'}`}>
+          <strong>{selectedModel?.name || t.noModelsConfigured}</strong>
+          <span>{modelReady ? t.modelReady : t.modelMissing}</span>
+          <code>{selectedModel?.resolved_path || selectedModel?.access_path || '-'}</code>
         </div>
+        {!modelReady && (
+          <button className="secondary-action model-jump-action" onClick={onOpenModels}>
+            <Database size={15} />{t.openModelManagement}
+          </button>
+        )}
 
         <div className="section-label">{t.parameters}</div>
         <div className="control-row two">
@@ -103,7 +111,7 @@ export default function GeneratePage({ models, onRefresh, t }: { models: ModelIn
         </div>
 
         {error && <div className="notice error">{error}</div>}
-        <button className="primary-action generate-action" disabled={submitting} onClick={submit}><Sparkles size={17} />{submitting ? t.submitting : t.submit}</button>
+        <button className="primary-action generate-action" disabled={submitting || !modelReady} onClick={submit}><Sparkles size={17} />{submitting ? t.submitting : t.submit}</button>
       </section>
 
       <section className="panel canvas-panel studio-panel">

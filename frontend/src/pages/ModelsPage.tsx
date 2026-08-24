@@ -1,7 +1,11 @@
-import { Cloud, RefreshCw, ShieldCheck } from 'lucide-react'
+import { CheckCircle2, DownloadCloud, RefreshCw, RotateCw, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 import { api, ModelInfo } from '../api/client'
 import { messages } from '../i18n'
+
+function percent(model: ModelInfo) {
+  return model.status === 'ready' ? 100 : 0
+}
 
 function sizeText(bytes?: number) {
   if (!bytes) return '-'
@@ -35,36 +39,77 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
   }
 
   return (
-    <section className="panel model-zoo">
-      <div className="model-header">
-        <div>
-          <div className="panel-title">{t.modelManagement}</div>
-          <p>{t.modelManagementHelp}</p>
+    <div className="model-page">
+      <section className="panel model-zoo">
+        <div className="model-header">
+          <div>
+            <div className="panel-title">{t.modelManagement}</div>
+            <p>{t.modelManagementHelp}</p>
+          </div>
+          <button className="secondary-action" onClick={onRefresh}><RefreshCw size={15} />{t.refresh}</button>
         </div>
-        <button className="secondary-action" onClick={onRefresh}><RefreshCw size={15} />{t.refresh}</button>
-      </div>
-      {message && <div className="notice">{message}</div>}
-      <div className="model-table">
-        <div className="model-row header">
-          <span>{t.model}</span><span>{t.source}</span><span>{t.status}</span><span>{t.size}</span><span>{t.loadPath}</span><span>{t.actions}</span>
+        {message && <div className="notice">{message}</div>}
+        {models.length === 0 && <div className="empty-small">{t.noModelsConfigured}</div>}
+        <div className="model-card-grid">
+          {models.map(model => {
+            const ready = model.status === 'ready'
+            return (
+              <article className={`managed-model-card ${ready ? 'ready' : 'pending'}`} key={model.key}>
+                <div className="model-card-header">
+                  <div>
+                    <h3>{model.name}</h3>
+                    <p>{model.description}</p>
+                  </div>
+                  <span className={`model-status ${ready ? 'ready' : 'pending'}`}>
+                    <ShieldCheck size={14} />
+                    {ready ? t.modelReady : t.modelMissing}
+                  </span>
+                </div>
+
+                <div className="model-meta">
+                  <div><span>{t.modelId}</span><code>{model.model_id}</code></div>
+                  <div><span>{t.source}</span><code>{model.source}</code></div>
+                  <div><span>{t.loadPath}</span><code>{model.resolved_path || model.access_path}</code></div>
+                  <div><span>{t.expectedFiles}</span><code>{model.expected_files.join(', ')}</code></div>
+                  <div><span>{t.size}</span><code>{sizeText(model.size)}</code></div>
+                  <div><span>{t.status}</span><code>{model.status}</code></div>
+                </div>
+
+                <progress className="model-progress" max="100" value={percent(model)} />
+
+                <div className="model-actions">
+                  <button
+                    className="primary-action compact-action"
+                    disabled={ready || Boolean(busy)}
+                    onClick={() => run(model.key, 'pull')}
+                  >
+                    {ready ? <CheckCircle2 size={15} /> : <DownloadCloud size={15} />}
+                    {ready ? t.downloaded : t.downloadModel}
+                  </button>
+                  <button
+                    className="secondary-action compact-action"
+                    disabled={Boolean(busy)}
+                    onClick={() => run(model.key, 'sync')}
+                  >
+                    <RotateCw size={15} />{t.syncModel}
+                  </button>
+                </div>
+              </article>
+            )
+          })}
         </div>
+      </section>
+
+      <section className="panel model-path-panel">
+        <div className="panel-title">{t.modelHubPathGuide}</div>
+        <p>{t.modelHubPathHelp}</p>
         {models.map(model => (
-          <div className="model-row" key={model.key}>
-            <div>
-              <strong>{model.name}</strong>
-              <small>{model.model_id}</small>
-            </div>
-            <span className="source"><Cloud size={14} />{model.source}</span>
-            <span className={`pill ${model.status}`}><ShieldCheck size={13} />{model.status}</span>
-            <span>{sizeText(model.size)}</span>
-            <code>{model.resolved_path || model.access_path}</code>
-            <div className="row-actions">
-              <button disabled={Boolean(busy)} onClick={() => run(model.key, 'pull')}>Pull</button>
-              <button disabled={Boolean(busy)} onClick={() => run(model.key, 'sync')}>Sync</button>
-            </div>
+          <div className="path-guide" key={model.key}>
+            <span>{model.name}</span>
+            <code>{model.access_path}</code>
           </div>
         ))}
-      </div>
-    </section>
+      </section>
+    </div>
   )
 }

@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
-from app.config import settings
+from app.config import settings as app_settings
 from app.models import GenerateRequest
 from app.services.generation import create_job
 from app.services.models import get_model, list_model_defs, pull_model, sync_model_hub
@@ -16,14 +16,14 @@ router = APIRouter(prefix="/api/v1")
 @router.get("/about")
 async def about():
     return {
-        "app_id": settings.app_id,
-        "app_version": settings.app_version,
-        "profile": settings.profile,
-        "data_dir": str(settings.data_dir),
-        "modelhub_root": str(settings.modelhub_root),
-        "model_hub_api_url": settings.model_hub_api_url,
-        "sd_cpp_bin": settings.sd_cpp_bin,
-        "max_concurrency": settings.max_concurrency,
+        "app_id": app_settings.app_id,
+        "app_version": app_settings.app_version,
+        "profile": app_settings.profile,
+        "data_dir": str(app_settings.data_dir),
+        "modelhub_root": str(app_settings.modelhub_root),
+        "model_hub_api_url": app_settings.model_hub_api_url,
+        "sd_cpp_bin": app_settings.sd_cpp_bin,
+        "max_concurrency": app_settings.max_concurrency,
     }
 
 

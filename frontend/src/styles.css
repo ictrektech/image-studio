@@ -105,9 +105,12 @@ textarea:focus, input:focus, select:focus { border-color: var(--accent); box-sha
 .control-row { display: grid; gap: 10px; }
 .control-row.two { grid-template-columns: 1fr 1fr; }
 .inline-status {
-  margin-top: 8px; padding: 8px; border-radius: 7px; font-size: 11px; line-height: 1.4; word-break: break-all;
+  margin-top: 8px; padding: 9px 10px; border-radius: 7px; font-size: 11px; line-height: 1.4; word-break: break-all;
   background: var(--surface-soft); color: var(--muted);
 }
+.inline-status strong, .inline-status span, .inline-status code { display: block; }
+.inline-status strong { color: #27364a; font-size: 12px; margin-bottom: 3px; }
+.inline-status code { margin-top: 5px; color: inherit; background: rgba(255,255,255,0.62); border: 1px solid rgba(203,213,225,0.6); border-radius: 5px; padding: 4px 6px; }
 .inline-status.ready { color: #14532d; background: #ecfdf3; }
 .inline-status.missing { color: #7c2d12; background: #fff7ed; }
 
@@ -121,6 +124,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--accent); box-sha
 .generate-action { height: 44px; font-size: 14px; box-shadow: 0 12px 24px rgba(7, 137, 154, 0.18); }
 .secondary-action { margin-top: 12px; }
 .download-action { width: 100%; background: var(--accent); border-color: var(--accent); color: white; }
+.model-jump-action { width: 100%; margin-top: 8px; }
 .icon-button { width: 36px; padding: 0; }
 button:disabled { opacity: 0.55; cursor: not-allowed; }
 
@@ -172,6 +176,64 @@ progress { width: 100%; height: 8px; accent-color: var(--accent); margin: 8px 0;
 .side-divider { height: 1px; background: #edf2f7; margin: 16px 0 12px; }
 
 .model-header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+.model-page { display: grid; gap: 14px; }
+.model-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 14px; }
+.managed-model-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--surface);
+}
+.managed-model-card.ready { border-color: #bbf7d0; background: #fbfffd; }
+.managed-model-card.pending { border-color: #fed7aa; background: #fffdf9; }
+.model-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
+.model-card-header h3 { margin: 0; font-size: 15px; letter-spacing: 0; }
+.model-card-header p { max-width: 680px; }
+.model-status {
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  border-radius: 999px; padding: 4px 9px; font-size: 11px; font-weight: 750;
+}
+.model-status.ready { color: #14532d; background: #dcfce7; }
+.model-status.pending { color: #7c2d12; background: #ffedd5; }
+.model-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin-top: 14px;
+}
+.model-meta div { min-width: 0; }
+.model-meta span { display: block; color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+.model-meta code {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  padding: 6px 7px;
+  font-size: 11px;
+}
+.model-progress { margin-top: 14px; }
+.model-actions { display: flex; gap: 8px; margin-top: 12px; }
+.compact-action { width: auto; margin-top: 0; min-width: 132px; }
+.model-path-panel { max-width: none; }
+.path-guide {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid #edf2f7;
+  font-size: 12px;
+}
+.path-guide:first-of-type { margin-top: 10px; }
+.path-guide span { color: #334155; font-weight: 700; }
+.path-guide code {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 6px 7px;
+}
 .model-table { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .model-row {
   display: grid;
@@ -216,5 +278,7 @@ pre { background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 14px; ov
   .studio-panel { min-height: auto; }
   .preview-canvas { min-height: 320px; }
   .model-row, .job-row { grid-template-columns: 1fr; }
+  .model-card-grid, .model-meta, .path-guide { grid-template-columns: 1fr; }
+  .model-card-header, .model-actions { flex-direction: column; align-items: stretch; }
   .thumb-strip { grid-template-columns: repeat(4, 1fr); }
 }

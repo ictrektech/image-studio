@@ -9,6 +9,8 @@ job tracking, generated-file access, and Model Hub backed model management.
 - Generate images from prompts through a local `sd-cli` compatible runtime.
 - Keep VOS user sessions, language preference, and generated files separated
   under the app data path.
+- Use VOS OIDC Fastpath when available, then verify tokens through VOS
+  `/v1000/oauth2/userinfo`; legacy token probing is only a compatibility path.
 - Expose HTTP APIs that same-account VOS apps can call through the VOS gateway.
 - Manage required diffusion model files through Model Hub paths and APIs.
 - Package as a VOS pull-mode app with `amd`, `amd-cuda`, `arm`, `arm-cuda`,
@@ -104,3 +106,5 @@ cd ictrek.app
 ```
 
 The package is written to `ictrek.app/dist/image_studio_<version>_pull.tar`.
+For formal releases, use `ictrek.app/scripts/update_version.sh`; GitHub Actions
+is the authoritative package builder and VOS App Store publisher.

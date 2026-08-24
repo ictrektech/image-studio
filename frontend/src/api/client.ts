@@ -1,3 +1,5 @@
+import { getVOSBearerToken } from './vos-auth'
+
 const API_BASE = import.meta.env.VITE_API_BASE || '/api/com.ictrek.image-studio'
 
 export interface ModelInfo {
@@ -54,8 +56,14 @@ export interface UserSettings {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = await getVOSBearerToken().catch(() => null)
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(init?.headers || {}),
+  }
   const resp = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+    headers,
     ...init,
   })
   if (!resp.ok) {

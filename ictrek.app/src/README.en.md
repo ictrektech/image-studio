@@ -12,6 +12,9 @@ generated-file access, and model management.
 - Model files are owned by Model Hub and mounted read-only into Image Studio.
 - The UI supports Chinese and English, and saves the language choice in the
   current VOS user's app settings.
+- The app prefers VOS OIDC Fastpath for the current platform user. Jobs,
+  language settings, and generated files are separated by user context without
+  exposing internal user directories in the UI.
 
 ## Model
 

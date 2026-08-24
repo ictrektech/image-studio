@@ -29,7 +29,37 @@ configs:
     description:
       zh-CN: VOS 网络内的 Model Hub 后端 API 地址，用于触发模型下载和同步。
       en: Model Hub backend API URL inside VOS network, used to trigger model pull and sync.
-    default: http://model-hub-backend:5005
+  default: http://model-hub-backend:5005
+
+  - name: IMAGE_STUDIO_VOS_SSO_ENABLED
+    type: boolean
+    title:
+      zh-CN: 启用 VOS 用户隔离
+      en: Enable VOS User Isolation
+    description:
+      zh-CN: 打开后，前端会携带 VOS 当前用户 token，后端通过 VOS 校验后按用户隔离图片、任务和会话设置。
+      en: When enabled, the frontend sends the current VOS user token and the backend verifies it with VOS before isolating images, jobs, and session settings by user.
+    default: true
+
+  - name: IMAGE_STUDIO_VOS_USERINFO_URL
+    type: string
+    title:
+      zh-CN: VOS 旧版用户校验地址
+      en: Legacy VOS User Check URL
+    description:
+      zh-CN: App 容器访问 VOS backend `/v1000/user/check` 的地址，用于旧版 VOS token 校验。
+      en: URL for the app container to reach VOS backend `/v1000/user/check` for legacy VOS token verification.
+    default: http://172.17.0.1:8105/v1000/user/check
+
+  - name: IMAGE_STUDIO_VOS_OIDC_USERINFO_URL
+    type: string
+    title:
+      zh-CN: VOS OIDC 用户信息地址
+      en: VOS OIDC Userinfo URL
+    description:
+      zh-CN: App 容器访问 VOS backend `/v1000/oauth2/userinfo` 的地址，用于 OIDC Fastpath token 校验。
+      en: URL for the app container to reach VOS backend `/v1000/oauth2/userinfo` for OIDC Fastpath token verification.
+    default: http://172.17.0.1:8105/v1000/oauth2/userinfo
 
   - name: SD_CPP_BIN
     type: string
@@ -64,4 +94,3 @@ configs:
     default: 900
     minimum: 60
     maximum: 7200
-

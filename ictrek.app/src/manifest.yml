@@ -18,10 +18,30 @@ frontend:
 platform:
   version: ">=3.0.0"
 
+dependencies:
+  apps:
+    - id: com.ictrek.model-hub
+      version: ">=0.0.54"
+      optional: false
+
 oauth2:
   client:
-    enable: true
-    scopes: [openid, profile, email]
+    id: com.ictrek.image-studio
+    redirect_uris:
+      - https://app.vos-platform.internal/callback
+    grant_types:
+      - authorization_code
+      - refresh_token
+    response_types:
+      - code
+    scopes:
+      - openid
+      - profile
+      - email
+    pkce_required: true
+    token_endpoint_auth_method: none
+    access_token_ttl: 3600
+    refresh_token_ttl: 1209600
 
 permissions:
   defines:
@@ -32,7 +52,7 @@ permissions:
       description:
         zh-CN: 允许同账户应用调用 Image Studio 生成图片。
         en: Allows same-account apps to generate images through Image Studio.
-      default_roles: [admin, user]
+      default_roles: [system_admin, platform_admin, normal_user]
     - code: com.ictrek.image-studio:model:manage
       name:
         zh-CN: 管理模型
@@ -40,7 +60,7 @@ permissions:
       description:
         zh-CN: 允许触发 Model Hub 模型下载和同步。
         en: Allows triggering Model Hub model pull and sync actions.
-      default_roles: [admin]
+      default_roles: [system_admin, platform_admin]
 
 profiles:
   - name: amd

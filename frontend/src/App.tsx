@@ -6,6 +6,7 @@ import ModelsPage from './pages/ModelsPage'
 import JobsPage from './pages/JobsPage'
 import ApiPage from './pages/ApiPage'
 import { Language, messages } from './i18n'
+import appIcon from './assets/icon.png'
 
 type Tab = 'generate' | 'models' | 'jobs' | 'api'
 
@@ -49,7 +50,7 @@ export default function App() {
     <div className="app-shell">
       <header className="topbar">
         <div className="brand">
-          <div className="brand-mark"><ImageIcon size={20} /></div>
+          <img className="brand-mark" src={appIcon} alt="" />
           <div>
             <h1>Image Studio</h1>
             <p>{t.appSubtitle}</p>

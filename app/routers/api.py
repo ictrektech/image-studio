@@ -29,17 +29,17 @@ async def about():
 
 @router.get("/settings")
 async def settings(request: Request):
-    return load_settings(current_user_key(request))
+    return load_settings(await current_user_key(request))
 
 
 @router.put("/settings")
 async def update_settings(request: Request, payload: dict):
-    return save_settings(current_user_key(request), payload)
+    return save_settings(await current_user_key(request), payload)
 
 
 @router.post("/generate")
 async def generate(request: Request, payload: GenerateRequest):
-    user_key = current_user_key(request)
+    user_key = await current_user_key(request)
     try:
         job = await create_job(user_key, payload)
     except FileNotFoundError as exc:
@@ -49,12 +49,12 @@ async def generate(request: Request, payload: GenerateRequest):
 
 @router.get("/jobs")
 async def jobs(request: Request):
-    return list_jobs(current_user_key(request))
+    return list_jobs(await current_user_key(request))
 
 
 @router.get("/jobs/{job_id}")
 async def job(request: Request, job_id: str):
-    item = load_job(current_user_key(request), job_id)
+    item = load_job(await current_user_key(request), job_id)
     if not item:
         raise HTTPException(status_code=404, detail="job not found")
     return item
@@ -62,7 +62,7 @@ async def job(request: Request, job_id: str):
 
 @router.get("/outputs")
 async def outputs(request: Request):
-    user_key = current_user_key(request)
+    user_key = await current_user_key(request)
     result = []
     for item in list_jobs(user_key):
         for name in item.outputs:
@@ -80,7 +80,7 @@ async def outputs(request: Request):
 
 @router.get("/outputs/{job_id}/{filename}")
 async def output_file(request: Request, job_id: str, filename: str):
-    path = job_dir(current_user_key(request), job_id) / filename
+    path = job_dir(await current_user_key(request), job_id) / filename
     if not path.exists():
         raise HTTPException(status_code=404, detail="output not found")
     return FileResponse(path)

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Download, ImageIcon, Play, RefreshCw } from 'lucide-react'
+import { Download, ImageIcon, RefreshCw, RotateCcw, Sparkles } from 'lucide-react'
 import { api, GeneratePayload, JobRecord, ModelInfo } from '../api/client'
 import { messages } from '../i18n'
 
@@ -26,6 +26,8 @@ export default function GeneratePage({ models, onRefresh, t }: { models: ModelIn
   const selectedJob = useMemo(() => jobs.find(job => job.job_id === selectedJobId) || jobs[0], [jobs, selectedJobId])
   const selectedModel = models.find(model => model.key === payload.model_key)
   const hasRunning = jobs.some(job => job.status === 'queued' || job.status === 'running')
+  const selectedOutput = selectedJob?.outputs[0]
+  const selectedOutputUrl = selectedJob && selectedOutput ? api.outputUrl(selectedJob.job_id, selectedOutput) : ''
 
   const loadJobs = async () => {
     const data = await api.listJobs()
@@ -59,12 +61,24 @@ export default function GeneratePage({ models, onRefresh, t }: { models: ModelIn
 
   return (
     <div className="workspace-grid">
-      <section className="panel prompt-panel">
-        <div className="panel-title">{t.prompt}</div>
+      <section className="panel prompt-panel studio-panel">
+        <div className="panel-heading">
+          <div>
+            <div className="panel-title">{t.generationSettings}</div>
+            <p>{selectedModel?.name || t.model}</p>
+          </div>
+          <button className="quiet-button" onClick={() => setPayload(initialPayload)} title={t.reset}><RotateCcw size={15} />{t.reset}</button>
+        </div>
         <label>{t.positivePrompt}</label>
-        <textarea value={payload.prompt} onChange={e => setPayload({ ...payload, prompt: e.target.value })} rows={5} />
+        <div className="textarea-wrap">
+          <textarea value={payload.prompt} onChange={e => setPayload({ ...payload, prompt: e.target.value })} rows={6} />
+          <span>{payload.prompt.length}/2000</span>
+        </div>
         <label>{t.negativePrompt}</label>
-        <textarea value={payload.negative_prompt} onChange={e => setPayload({ ...payload, negative_prompt: e.target.value })} rows={3} />
+        <div className="textarea-wrap compact">
+          <textarea value={payload.negative_prompt} onChange={e => setPayload({ ...payload, negative_prompt: e.target.value })} rows={3} />
+          <span>{payload.negative_prompt.length}/2000</span>
+        </div>
 
         <label>{t.model}</label>
         <select value={payload.model_key} onChange={e => setPayload({ ...payload, model_key: e.target.value })}>
@@ -74,6 +88,7 @@ export default function GeneratePage({ models, onRefresh, t }: { models: ModelIn
           {selectedModel?.status === 'ready' ? t.modelReady : t.modelMissing} · {selectedModel?.resolved_path || selectedModel?.access_path}
         </div>
 
+        <div className="section-label">{t.parameters}</div>
         <div className="control-row two">
           <div><label>{t.width}</label><input type="number" value={payload.width} onChange={e => setPayload({ ...payload, width: Number(e.target.value) })} /></div>
           <div><label>{t.height}</label><input type="number" value={payload.height} onChange={e => setPayload({ ...payload, height: Number(e.target.value) })} /></div>
@@ -84,52 +99,70 @@ export default function GeneratePage({ models, onRefresh, t }: { models: ModelIn
         </div>
         <div className="control-row two">
           <div><label>{t.sampler}</label><select value={payload.sampler} onChange={e => setPayload({ ...payload, sampler: e.target.value })}><option value="euler_a">Euler A</option><option value="euler">Euler</option><option value="dpm++2m">DPM++ 2M</option></select></div>
-          <div><label>{t.seed}</label><input type="number" value={payload.seed} onChange={e => setPayload({ ...payload, seed: Number(e.target.value) })} /></div>
+          <div><label>{t.seed}</label><input type="number" title={t.randomSeedHint} value={payload.seed} onChange={e => setPayload({ ...payload, seed: Number(e.target.value) })} /></div>
         </div>
 
         {error && <div className="notice error">{error}</div>}
-        <button className="primary-action" disabled={submitting} onClick={submit}><Play size={16} />{submitting ? t.submitting : t.submit}</button>
+        <button className="primary-action generate-action" disabled={submitting} onClick={submit}><Sparkles size={17} />{submitting ? t.submitting : t.submit}</button>
       </section>
 
-      <section className="panel canvas-panel">
+      <section className="panel canvas-panel studio-panel">
         <div className="canvas-toolbar">
           <div>
-            <div className="panel-title">{t.preview}</div>
+            <div className="panel-title">{t.imagePreview}</div>
             <p>{selectedJob ? selectedJob.prompt : t.previewHint}</p>
           </div>
           <button className="icon-button" onClick={loadJobs} title="刷新"><RefreshCw size={17} /></button>
         </div>
-        <div className="preview-canvas">
-          {selectedJob?.outputs[0] ? (
-            <img src={api.outputUrl(selectedJob.job_id, selectedJob.outputs[0])} alt="Generated output" />
+        <div className={`preview-canvas ${selectedOutputUrl ? 'has-output' : ''}`}>
+          {selectedOutputUrl ? (
+            <img src={selectedOutputUrl} alt="Generated output" />
           ) : (
-            <div className="empty-preview"><ImageIcon size={40} /><span>{selectedJob ? selectedJob.status : t.noOutput}</span></div>
+            <div className="empty-preview">
+              <ImageIcon size={42} />
+              <strong>{selectedJob ? selectedJob.status : t.noOutput}</strong>
+              <span>{selectedJob ? t.waitingOutput : t.previewHint}</span>
+            </div>
           )}
         </div>
-        <div className="thumb-strip">
-          {jobs.slice(0, 6).map(job => (
-            <button className={`thumb ${job.job_id === selectedJob?.job_id ? 'active' : ''}`} key={job.job_id} onClick={() => setSelectedJobId(job.job_id)}>
-              {job.outputs[0] ? <img src={api.outputUrl(job.job_id, job.outputs[0])} alt="" /> : <span>{job.status}</span>}
-            </button>
-          ))}
+        <div className="history-heading">
+          <span>{t.recentOutputs}</span>
+          <small>{jobs.length} {t.imageCount}</small>
+        </div>
+        <div className="thumb-strip" aria-label={t.recentOutputs}>
+          {jobs.slice(0, 8).map(job => {
+            const output = job.outputs[0]
+            return (
+              <button className={`thumb ${job.job_id === selectedJob?.job_id ? 'active' : ''}`} key={job.job_id} onClick={() => setSelectedJobId(job.job_id)}>
+                {output ? <img src={api.outputUrl(job.job_id, output)} alt="" /> : <span>{job.status}</span>}
+              </button>
+            )
+          })}
         </div>
       </section>
 
-      <aside className="panel detail-panel">
-        <div className="panel-title">{t.currentJob}</div>
+      <aside className="panel detail-panel studio-panel">
+        <div className="panel-heading">
+          <div className="panel-title">{t.currentJob}</div>
+          {selectedJob && <span className={`job-status ${selectedJob.status}`}>{selectedJob.status}</span>}
+        </div>
         {selectedJob ? (
           <>
-            <div className={`job-status ${selectedJob.status}`}>{selectedJob.status}</div>
-            <div className="kv"><span>Job ID</span><code>{selectedJob.job_id}</code></div>
+            <div className="kv"><span>{t.jobId}</span><code>{selectedJob.job_id}</code></div>
+            <div className="kv"><span>{t.progress}</span><code>{Math.round(selectedJob.progress * 100)}%</code></div>
             <progress max={1} value={selectedJob.progress} />
-            <div className="kv"><span>Steps</span><code>{selectedJob.steps}</code></div>
-            <div className="kv"><span>Size</span><code>{selectedJob.width} x {selectedJob.height}</code></div>
-            <div className="kv"><span>Session</span><code>{selectedJob.user_key}</code></div>
-            <div className="kv"><span>Model</span><code>{selectedJob.model_path}</code></div>
-            {selectedJob.outputs[0] && <a className="secondary-action" href={api.outputUrl(selectedJob.job_id, selectedJob.outputs[0])} download><Download size={15} />{t.downloadOutput}</a>}
+            <div className="kv"><span>{t.steps}</span><code>{selectedJob.steps}</code></div>
+            <div className="kv"><span>{t.size}</span><code>{selectedJob.width} x {selectedJob.height}</code></div>
+            <div className="kv"><span>{t.modelPath}</span><code>{selectedJob.model_path}</code></div>
+            {selectedOutputUrl && <a className="secondary-action download-action" href={selectedOutputUrl} download><Download size={15} />{t.downloadOutput}</a>}
             {selectedJob.error && <div className="notice error">{selectedJob.error}</div>}
           </>
         ) : <div className="empty-small">{t.noJobs}</div>}
+        <div className="side-divider" />
+        <div className="panel-title small-title">{t.modelInfo}</div>
+        <div className="kv"><span>{t.model}</span><code>{selectedModel?.name || '-'}</code></div>
+        <div className="kv"><span>{t.status}</span><code>{selectedModel?.status || '-'}</code></div>
+        <div className="kv"><span>{t.loadPath}</span><code>{selectedModel?.resolved_path || selectedModel?.access_path || '-'}</code></div>
         <button className="secondary-action" onClick={onRefresh}><RefreshCw size={15} />{t.refreshModels}</button>
       </aside>
     </div>

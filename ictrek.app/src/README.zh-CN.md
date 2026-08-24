@@ -10,6 +10,8 @@ Image Studio 是基于 `stable-diffusion.cpp` 的本地图像生成工作台，�
 - 同账户应用可通过 `/api/com.ictrek.image-studio` 调用生成 API。
 - 模型文件由 Model Hub 管理，Image Studio 只读挂载共享模型目录。
 - 页面支持中文和 English，用户切换后会保存到当前 VOS 用户的应用设置。
+- 应用优先使用 VOS OIDC Fastpath 识别当前平台用户；生成任务、语言设置和
+  输出文件会自动按用户上下文分隔，界面不显示内部用户目录。
 
 ## 模型
 

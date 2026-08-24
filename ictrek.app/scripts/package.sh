@@ -357,7 +357,7 @@ verify_package() {
     die "routers.yml sidebar iframe-src must be ${expected_iframe_src}"
   fi
   env_text="$(tar xOf "$app_tarball" .env)"
-  if printf '%s\n' "$env_text" | grep -Eq '_(amd_cuda|arm_cuda|thor)_[0-9]{8}$|:(amd_cuda|arm_cuda|thor)_[0-9]{8}$'; then
+  if printf '%s\n' "$env_text" | grep -Eq '_(amd_cuda|arm_cuda)_[0-9]{8}$|:(amd_cuda|arm_cuda)_[0-9]{8}$|thor_cu128|thor_cuda'; then
     die ".env contains non-standard CUDA image tag prefix"
   fi
   if printf '%s\n' "$routers_text" | grep -Eq 'iframe-src:[[:space:]]*https?://'; then

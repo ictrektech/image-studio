@@ -23,6 +23,7 @@ cd "$(dirname "$0")/.."
 FEISHU_CONFIG_FILE="${HOME}/.feishu.json"
 FEISHU_SPREADSHEET_TOKEN="Htotsn3oahO1zxt73YMcaB1zn8e"
 REGISTRY="swr.cn-southwest-2.myhuaweicloud.com/ictrek"
+GITHUB_ACCELERATOR="${GITHUB_ACCELERATOR:-https://gh-proxy.com/}"
 
 BACKEND_COMPONENT_NAME="image-studio-backend"
 FRONTEND_COMPONENT_NAME="image-studio-frontend"
@@ -344,7 +345,7 @@ sheet_spec() {
     ARM_without_cuda) printf '%s|%s|%s|%s|%s\n' arm arm docker/Dockerfile.cpu arm_22-alpine arm_alpine ;;
     SOPHON_bm1688) printf '%s|%s|%s|%s|%s\n' arm arm docker/Dockerfile.cpu arm_22-alpine arm_alpine ;;
     l4t) printf '%s|%s|%s|%s|%s\n' l4t l4t docker/Dockerfile.l4t arm_22-alpine arm_alpine ;;
-    thor_spark) printf '%s|%s|%s|%s|%s\n' thor thor_cu128 docker/Dockerfile.thor thor_22-alpine thor_alpine ;;
+    thor_spark) printf '%s|%s|%s|%s|%s\n' thor thor docker/Dockerfile.thor thor_22-alpine thor_alpine ;;
     *) return 1 ;;
   esac
 }
@@ -400,7 +401,7 @@ Usage:
   ./docker/build_image.sh --component backend|frontend
 
 Tag prefixes are profile-specific:
-  amd, amd_cu128, arm, arm_cu128, l4t, thor_cu128
+  amd, amd_cu128, arm, arm_cu128, l4t, thor
 EOF
       exit 0
       ;;
@@ -459,15 +460,20 @@ for sheet in "${TARGET_SHEETS[@]}"; do
   TAG="${TAG_PREFIX}_${TAG_OVERRIDE:-$DATE}"
   BUILD_ARGS=(
     --build-arg "PYTHON_BASE_IMAGE=${REGISTRY}/python:${TAG_PREFIX%%_cuda}_3.12-slim"
+    --build-arg "GITHUB_ACCELERATOR=${GITHUB_ACCELERATOR}"
   )
   if [[ "$PROFILE" == "l4t" ]]; then
-    BUILD_ARGS=(--build-arg "PYTHON_BASE_IMAGE=${REGISTRY}/python:l4t_3.12")
+    BUILD_ARGS=(--build-arg "L4T_PYTORCH_BASE_IMAGE=${REGISTRY}/pytorch_py312:jet_2.7.0" --build-arg "GITHUB_ACCELERATOR=${GITHUB_ACCELERATOR}")
   elif [[ "$PROFILE" == "thor" ]]; then
-    BUILD_ARGS=(--build-arg "PYTHON_BASE_IMAGE=${REGISTRY}/python:thor_3.12")
+    BUILD_ARGS=(--build-arg "NVIDIA_PYTORCH_BASE_IMAGE=${REGISTRY}/nvidia-pytorch:arm_25.08-py3" --build-arg "GITHUB_ACCELERATOR=${GITHUB_ACCELERATOR}")
   elif [[ "$PROFILE" == "arm-cuda" ]]; then
-    BUILD_ARGS=(--build-arg "PYTHON_BASE_IMAGE=${REGISTRY}/python:arm_3.12-slim")
+    BUILD_ARGS=(--build-arg "NVIDIA_PYTORCH_BASE_IMAGE=${REGISTRY}/nvidia-pytorch:arm_25.08-py3" --build-arg "GITHUB_ACCELERATOR=${GITHUB_ACCELERATOR}")
   elif [[ "$PROFILE" == "amd-cuda" ]]; then
-    BUILD_ARGS=(--build-arg "PYTHON_BASE_IMAGE=${REGISTRY}/python:amd_3.12-slim")
+    BUILD_ARGS=(
+      --build-arg "CUDA_DEVEL_BASE_IMAGE=${REGISTRY}/nvidia-cuda:amd_12.8.1-cudnn-devel-ubuntu22.04"
+      --build-arg "CUDA_RUNTIME_BASE_IMAGE=${REGISTRY}/nvidia-cuda:amd_12.8.1-runtime-ubuntu22.04"
+      --build-arg "GITHUB_ACCELERATOR=${GITHUB_ACCELERATOR}"
+    )
   fi
 
   log "Profile: ${PROFILE}; tag: ${TAG}"

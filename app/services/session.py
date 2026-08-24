@@ -34,6 +34,9 @@ async def current_user_key(request: Request) -> str:
 
 
 def bearer_token(request: Request) -> str:
+    query_token = (request.query_params.get("access_token") or "").strip()
+    if query_token:
+        return query_token
     auth = request.headers.get("authorization", "").strip()
     if auth.lower().startswith("bearer "):
         return auth[7:].strip()

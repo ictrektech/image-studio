@@ -47,6 +47,7 @@ const SCOPE = 'openid profile email'
 const TOKEN_CACHE_KEY = 'image_studio_vos_token'
 
 let tokenPromise: Promise<string | null> | null = null
+let memoryToken: { access_token: string; expires_at: number } | null = null
 
 export async function getVOSBearerToken(): Promise<string | null> {
   if (tokenPromise) return tokenPromise
@@ -56,7 +57,30 @@ export async function getVOSBearerToken(): Promise<string | null> {
   return tokenPromise
 }
 
+export function getCachedVOSBearerToken(): string | null {
+  if (memoryToken?.access_token && Date.now() < memoryToken.expires_at) {
+    return memoryToken.access_token
+  }
+  return readCachedToken()
+}
+
+export function clearCachedVOSBearerToken() {
+  memoryToken = null
+  try {
+    sessionStorage.removeItem(TOKEN_CACHE_KEY)
+    localStorage.removeItem(TOKEN_CACHE_KEY)
+  } catch {
+    // Best-effort cache cleanup.
+  }
+}
+
 async function resolveVOSBearerToken(): Promise<string | null> {
+  const injected = tokenFromInjectedContext() || tokenFromLocalStorage()
+  if (injected) {
+    rememberToken({ access_token: injected, expires_in: 3600 })
+    return injected
+  }
+
   const cached = readCachedToken()
   if (cached) return cached
 
@@ -70,8 +94,11 @@ async function resolveVOSBearerToken(): Promise<string | null> {
 }
 
 function readCachedToken(): string | null {
+  if (memoryToken?.access_token && Date.now() < memoryToken.expires_at) {
+    return memoryToken.access_token
+  }
   try {
-    const raw = sessionStorage.getItem(TOKEN_CACHE_KEY)
+    const raw = sessionStorage.getItem(TOKEN_CACHE_KEY) || localStorage.getItem(TOKEN_CACHE_KEY)
     if (!raw) return null
     const data = JSON.parse(raw)
     if (!data?.access_token || Date.now() > Number(data.expires_at || 0)) return null
@@ -82,14 +109,26 @@ function readCachedToken(): string | null {
 }
 
 function cacheToken(token: VOSTokenSet) {
+  rememberToken(token)
+}
+
+function rememberToken(token: VOSTokenSet) {
   try {
     const ttl = Math.max(60, Number(token.expires_in || 3600) - 60)
-    sessionStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify({
+    memoryToken = {
       access_token: token.access_token,
       expires_at: Date.now() + ttl * 1000,
-    }))
+    }
+    const raw = JSON.stringify(memoryToken)
+    sessionStorage.setItem(TOKEN_CACHE_KEY, raw)
+    localStorage.setItem(TOKEN_CACHE_KEY, raw)
   } catch {
-    // Best-effort cache only. Requests still carry the in-memory token.
+    if (!memoryToken) {
+      memoryToken = {
+        access_token: token.access_token,
+        expires_at: Date.now() + 3540 * 1000,
+      }
+    }
   }
 }
 

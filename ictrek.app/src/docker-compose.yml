@@ -7,6 +7,7 @@ x-image-studio-backend-env: &image-studio-backend-env
   IMAGE_STUDIO_DATA_DIR: /data
   MODEL_HUB_SHARED_MODELS_PATH: /modelhub
   MODEL_HUB_API_URL: ${MODEL_HUB_API_URL:-http://model-hub-backend:5005}
+  IMAGE_STUDIO_HF_ENDPOINT: ${IMAGE_STUDIO_HF_ENDPOINT:-https://hf-mirror.com}
   IMAGE_STUDIO_VOS_SSO_ENABLED: ${IMAGE_STUDIO_VOS_SSO_ENABLED:-true}
   IMAGE_STUDIO_VOS_USERINFO_URL: ${IMAGE_STUDIO_VOS_USERINFO_URL:-http://172.17.0.1:8105/v1000/user/check}
   IMAGE_STUDIO_VOS_OIDC_USERINFO_URL: ${IMAGE_STUDIO_VOS_OIDC_USERINFO_URL:-http://172.17.0.1:8105/v1000/oauth2/userinfo}
@@ -49,7 +50,7 @@ x-image-studio-backend-base: &image-studio-backend-base
   environment: *image-studio-backend-env
   volumes:
     - ${IMAGE_STUDIO_DATA_PATH:-/data/vos_workspace/image_studio}:/data
-    - ${MODEL_HUB_SHARED_MODELS_PATH:-/data/vos_workspace/model_hub}:/modelhub:ro
+    - ${MODEL_HUB_SHARED_MODELS_PATH:-/data/vos_workspace/model_hub}:/modelhub
   labels:
     - "traefik.enable=true"
     - "traefik.docker.network=vos_default"

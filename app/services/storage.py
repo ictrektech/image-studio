@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -54,6 +55,19 @@ def list_jobs(user_key: str) -> list[JobRecord]:
         except Exception:
             continue
     return sorted(jobs, key=lambda job: job.created_at, reverse=True)
+
+
+def delete_job(user_key: str, job_id: str) -> bool:
+    item = load_job(user_key, job_id)
+    if not item:
+        return False
+    path = job_path(user_key, job_id)
+    if path.exists():
+        path.unlink()
+    output_dir = user_dir(user_key) / job_id
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
+    return True
 
 
 def settings_path(user_key: str) -> Path:

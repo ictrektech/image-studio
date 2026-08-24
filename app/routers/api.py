@@ -6,9 +6,9 @@ from fastapi.responses import FileResponse
 from app.config import settings as app_settings
 from app.models import GenerateRequest
 from app.services.generation import create_job
-from app.services.models import get_model, list_model_defs, pull_model, sync_model_hub
+from app.services.models import get_model, list_model_defs_with_hub_state, pull_model, sync_model_hub
 from app.services.session import current_user_key
-from app.services.storage import job_dir, list_jobs, load_job, load_settings, save_settings
+from app.services.storage import delete_job, job_dir, list_jobs, load_job, load_settings, save_settings
 
 router = APIRouter(prefix="/api/v1")
 
@@ -44,6 +44,10 @@ async def generate(request: Request, payload: GenerateRequest):
         job = await create_job(user_key, payload)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=409, detail=f"模型文件未就绪: {exc}")
+    except KeyError:
+        raise HTTPException(status_code=404, detail="model not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     return job
 
 
@@ -58,6 +62,14 @@ async def job(request: Request, job_id: str):
     if not item:
         raise HTTPException(status_code=404, detail="job not found")
     return item
+
+
+@router.delete("/jobs/{job_id}")
+async def delete_generation_job(request: Request, job_id: str):
+    deleted = delete_job(await current_user_key(request), job_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="job not found")
+    return {"deleted": True, "job_id": job_id}
 
 
 @router.get("/outputs")
@@ -88,7 +100,7 @@ async def output_file(request: Request, job_id: str, filename: str):
 
 @router.get("/models")
 async def models():
-    return list_model_defs()
+    return await list_model_defs_with_hub_state()
 
 
 @router.get("/models/{key}")

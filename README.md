@@ -6,7 +6,8 @@ job tracking, generated-file access, and Model Hub backed model management.
 
 ## Scope
 
-- Generate images from prompts through a local `sd-cli` compatible runtime.
+- Generate images from prompts and continue from previously generated images
+  through a local `sd-cli` compatible runtime.
 - Keep VOS user sessions, language preference, and generated files separated
   under the app data path.
 - Use VOS OIDC Fastpath when available, then verify tokens through VOS
@@ -35,28 +36,66 @@ Main endpoints:
 | `POST` | `/api/v1/generate` | Create a generation job |
 | `GET` | `/api/v1/jobs` | List current user's jobs |
 | `GET` | `/api/v1/jobs/{job_id}` | Read one job |
+| `DELETE` | `/api/v1/jobs/{job_id}` | Delete one job and its generated files |
 | `GET` | `/api/v1/outputs` | List generated files for current user |
 | `GET` | `/api/v1/outputs/{job_id}/{filename}` | Download one generated file |
 | `GET` | `/api/v1/models` | List managed model definitions and state |
 | `POST` | `/api/v1/models/{key}/pull` | Trigger Model Hub pull |
 | `POST` | `/api/v1/models/{key}/sync` | Ask Model Hub to sync local model registry |
 
-## Model Hub Integration
+## Model Sources And Model Hub Integration
 
-The default SD 1.5 model is expected from Model Hub:
+`stable-diffusion.cpp` is not limited to SD 1.5. Image Studio's backend model
+registry exposes the sd.cpp-supported image, image-edit, and video model
+families. The UI shows every managed entry with its family, capabilities,
+shared path, and download/sync actions.
+
+Two download paths coexist:
+
+- **SD 1.5** keeps coming from Model Hub (`vivibit/stable-diffusion-v1-5` on
+  ModelScope). Pulling it delegates to the Model Hub API, so the task and its
+  progress appear natively in the Model Hub UI.
+- **Every other family** downloads straight from HuggingFace inside the
+  Image Studio backend, using the curated file list from the sd.cpp docs
+  (diffusion model + required VAE / text encoders, GGUF quants where the docs
+  recommend them). `HF_ENDPOINT` defaults to `https://hf-mirror.com` for
+  mirror acceleration; override it (or `IMAGE_STUDIO_HF_ENDPOINT` in the VOS
+  package) to download directly.
+
+HF downloads are written in the Model Hub compatible layout, so both sides
+stay in sync:
 
 ```text
-/modelhub/export/ms/vivibit/stable-diffusion-v1-5/current/v1-5-pruned-emaonly.safetensors
+<shared>/export/hf/<org>/<repo>/snapshots/<commit>/<repo-relative files>
 ```
 
-The app also checks the raw ModelScope snapshot layout:
+After a download finishes, Image Studio calls `POST /api/v1/models/sync` on
+Model Hub, which registers the repo, refreshes the `current` symlink, and
+makes the model visible in the Model Hub UI. In the other direction,
+Image Studio reads Model Hub's registry and task list to display pull
+progress for Model Hub-managed models (SD 1.5, Mage-Flow).
+
+All models resolve through the same shared-root convention:
 
 ```text
-/modelhub/modelscope/vivibit/stable-diffusion-v1-5/v1-5-pruned-emaonly.safetensors
+/modelhub/export/<ms|hf>/<org>/<repo>/current/
 ```
 
-At install time, set `MODEL_HUB_SHARED_MODELS_PATH` to the same shared model
-root used by Model Hub, usually `/data/vos_workspace/model_hub`.
+When a model is ready, Image Studio resolves the largest compatible model file
+under that directory (`.safetensors`, `.ckpt`, `.pt`, `.pth`, or `.gguf`) and
+passes it to `sd-cli`.
+
+Notes:
+
+- The Model Hub shared root must be mounted writable (the VOS package mounts
+  it at `/modelhub` without `:ro`) so HF downloads can land in `export/hf`.
+- Mage-Flow families pull through Model Hub from the official
+  `microsoft/*` ModelScope mirrors because the HuggingFace repos are gated.
+- SeFi-Image is registered but gated on HuggingFace: downloading requires an
+  `HF_TOKEN` for an account that accepted the license, plus the sd.cpp
+  conversion script before use.
+- Multi-file families (FLUX, Qwen-Image, Wan, …) fetch only the doc-selected
+  variants; expect roughly 5-40 GB per family.
 
 ## Development
 
@@ -85,7 +124,7 @@ the matching host:
 | --- | --- | --- |
 | `amd`, `amd-cuda` | `tc232` | image tags `amd_YYYYMMDD` / `amd_cu128_YYYYMMDD` |
 | `arm`, `arm-cuda`, `l4t` | `tc192` | image tags `arm_YYYYMMDD` / `arm_cu128_YYYYMMDD` / `l4t_YYYYMMDD` |
-| `thor` | `tc97` | image tag `thor_cu128_YYYYMMDD` |
+| `thor` | `tc97` | image tag `thor_YYYYMMDD` |
 
 Build script entrypoint:
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Database, Download, ImageIcon, RefreshCw, RotateCcw, Sparkles } from 'lucide-react'
+import { Database, Download, ImageIcon, RefreshCw, RotateCcw, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { api, GeneratePayload, JobRecord, ModelInfo } from '../api/client'
 import { messages } from '../i18n'
 
@@ -7,10 +7,13 @@ const initialPayload: GeneratePayload = {
   prompt: 'a cozy mountain cabin at dusk, warm lights, snowy pine trees, cinematic lighting, ultra detailed',
   negative_prompt: 'blurry, low quality, watermark, text, deformed',
   model_key: 'sd15',
+  init_job_id: '',
+  init_filename: '',
   width: 768,
   height: 768,
   steps: 30,
   cfg_scale: 7,
+  strength: 0.75,
   sampler: 'euler_a',
   seed: -1,
   batch_count: 1,
@@ -24,11 +27,30 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
   const [submitting, setSubmitting] = useState(false)
 
   const selectedJob = useMemo(() => jobs.find(job => job.job_id === selectedJobId) || jobs[0], [jobs, selectedJobId])
+  const imageModels = useMemo(() => models.filter(model => model.capabilities.includes('txt2img') || model.capabilities.includes('img2img')), [models])
   const selectedModel = models.find(model => model.key === payload.model_key)
   const modelReady = selectedModel?.status === 'ready'
+  const modelSupportsImages = Boolean(selectedModel?.capabilities.includes('txt2img') || selectedModel?.capabilities.includes('img2img'))
+  const isEditModel = selectedModel?.runtime?.ref_flag === '-r'
+  const supportsStrength = !isEditModel
   const hasRunning = jobs.some(job => job.status === 'queued' || job.status === 'running')
   const selectedOutput = selectedJob?.outputs[0]
   const selectedOutputUrl = selectedJob && selectedOutput ? api.outputUrl(selectedJob.job_id, selectedOutput) : ''
+  const isImg2Img = Boolean(payload.init_job_id && payload.init_filename)
+
+  const switchModel = (key: string) => {
+    const next = models.find(model => model.key === key)
+    const defaults = next?.runtime?.defaults || {}
+    setPayload({
+      ...payload,
+      model_key: key,
+      width: defaults.width ?? payload.width,
+      height: defaults.height ?? payload.height,
+      steps: defaults.steps ?? payload.steps,
+      cfg_scale: defaults.cfg_scale ?? payload.cfg_scale,
+      sampler: defaults.sampler ?? payload.sampler,
+    })
+  }
 
   const loadJobs = async () => {
     const data = await api.listJobs()
@@ -60,6 +82,37 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
     }
   }
 
+  const reuseSelectedOutput = () => {
+    if (!selectedJob || !selectedOutput) return
+    reuseOutput(selectedJob, selectedOutput)
+  }
+
+  const reuseOutput = (job: JobRecord, output: string) => {
+    setPayload({
+      ...payload,
+      init_job_id: job.job_id,
+      init_filename: output,
+      width: job.width,
+      height: job.height,
+    })
+  }
+
+  const clearSourceImage = () => {
+    setPayload({ ...payload, init_job_id: '', init_filename: '' })
+  }
+
+  const deleteSelectedJob = async () => {
+    if (!selectedJob) return
+    await deleteJob(selectedJob)
+  }
+
+  const deleteJob = async (job: JobRecord) => {
+    if (!window.confirm(t.confirmDelete)) return
+    await api.deleteJob(job.job_id)
+    if (selectedJobId === job.job_id) setSelectedJobId('')
+    await loadJobs()
+  }
+
   return (
     <div className="workspace-grid">
       <section className="panel prompt-panel studio-panel">
@@ -82,21 +135,31 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
         </div>
 
         <label>{t.model}</label>
-        <select value={payload.model_key} onChange={e => setPayload({ ...payload, model_key: e.target.value })}>
-          {models.map(model => <option key={model.key} value={model.key}>{model.name}</option>)}
+        <select value={payload.model_key} onChange={e => switchModel(e.target.value)}>
+          {imageModels.map(model => <option key={model.key} value={model.key}>{model.name} · {model.family}</option>)}
         </select>
         <div className={`inline-status ${modelReady ? 'ready' : 'missing'}`}>
           <strong>{selectedModel?.name || t.noModelsConfigured}</strong>
-          <span>{modelReady ? t.modelReady : t.modelMissing}</span>
+          <span>{modelSupportsImages ? (modelReady ? t.modelReady : t.modelMissing) : t.chooseModelHint}</span>
           <code>{selectedModel?.resolved_path || selectedModel?.access_path || '-'}</code>
         </div>
-        {!modelReady && (
+        {(!modelReady || !modelSupportsImages) && (
           <button className="secondary-action model-jump-action" onClick={onOpenModels}>
             <Database size={15} />{t.openModelManagement}
           </button>
         )}
 
         <div className="section-label">{t.parameters}</div>
+        <div className={`inline-status ${isImg2Img ? 'ready' : ''}`}>
+          <strong>{isImg2Img ? (isEditModel ? t.imageEdit : t.imageToImage) : t.textToImage}</strong>
+          <span>{isImg2Img ? (isEditModel ? t.imageEditHint : t.sourceImageHint) : t.previewHint}</span>
+          {isImg2Img && <code>{payload.init_job_id}/{payload.init_filename}</code>}
+        </div>
+        {isImg2Img && (
+          <button className="quiet-button source-clear-button" onClick={clearSourceImage} type="button">
+            <RotateCcw size={15} />{t.clear}
+          </button>
+        )}
         <div className="control-row two">
           <div><label>{t.width}</label><input type="number" value={payload.width} onChange={e => setPayload({ ...payload, width: Number(e.target.value) })} /></div>
           <div><label>{t.height}</label><input type="number" value={payload.height} onChange={e => setPayload({ ...payload, height: Number(e.target.value) })} /></div>
@@ -105,13 +168,18 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
           <div><label>{t.steps}</label><input type="number" value={payload.steps} onChange={e => setPayload({ ...payload, steps: Number(e.target.value) })} /></div>
           <div><label>{t.cfgScale}</label><input type="number" step="0.5" value={payload.cfg_scale} onChange={e => setPayload({ ...payload, cfg_scale: Number(e.target.value) })} /></div>
         </div>
+        {isImg2Img && supportsStrength && (
+          <div className="control-row">
+            <div><label>{t.strength}</label><input type="number" min="0" max="1" step="0.05" value={payload.strength} onChange={e => setPayload({ ...payload, strength: Number(e.target.value) })} /></div>
+          </div>
+        )}
         <div className="control-row two">
-          <div><label>{t.sampler}</label><select value={payload.sampler} onChange={e => setPayload({ ...payload, sampler: e.target.value })}><option value="euler_a">Euler A</option><option value="euler">Euler</option><option value="dpm++2m">DPM++ 2M</option></select></div>
+          <div><label>{t.sampler}</label><select value={payload.sampler} onChange={e => setPayload({ ...payload, sampler: e.target.value })}><option value="euler_a">Euler A</option><option value="euler">Euler</option><option value="heun">Heun</option><option value="dpm++2m">DPM++ 2M</option></select></div>
           <div><label>{t.seed}</label><input type="number" title={t.randomSeedHint} value={payload.seed} onChange={e => setPayload({ ...payload, seed: Number(e.target.value) })} /></div>
         </div>
 
         {error && <div className="notice error">{error}</div>}
-        <button className="primary-action generate-action" disabled={submitting || !modelReady} onClick={submit}><Sparkles size={17} />{submitting ? t.submitting : t.submit}</button>
+        <button className="primary-action generate-action" disabled={submitting || !modelReady || !modelSupportsImages} onClick={submit}><Sparkles size={17} />{submitting ? t.submitting : t.submit}</button>
       </section>
 
       <section className="panel canvas-panel studio-panel">
@@ -134,16 +202,31 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
           )}
         </div>
         <div className="history-heading">
-          <span>{t.recentOutputs}</span>
+          <span>{t.conversation}</span>
           <small>{jobs.length} {t.imageCount}</small>
         </div>
-        <div className="thumb-strip" aria-label={t.recentOutputs}>
+        <div className="turn-list" aria-label={t.conversation}>
           {jobs.slice(0, 8).map(job => {
             const output = job.outputs[0]
+            const outputUrl = output ? api.outputUrl(job.job_id, output) : ''
             return (
-              <button className={`thumb ${job.job_id === selectedJob?.job_id ? 'active' : ''}`} key={job.job_id} onClick={() => setSelectedJobId(job.job_id)}>
-                {output ? <img src={api.outputUrl(job.job_id, output)} alt="" /> : <span>{job.status}</span>}
-              </button>
+              <article className={`turn-card ${job.job_id === selectedJob?.job_id ? 'active' : ''}`} key={job.job_id}>
+                <button className="turn-thumb" onClick={() => setSelectedJobId(job.job_id)}>
+                  {outputUrl ? <img src={outputUrl} alt="" /> : <span>{job.status}</span>}
+                </button>
+                <div className="turn-body">
+                  <div className="turn-meta">
+                    <strong>{job.job_id === jobs[0]?.job_id ? t.latestTurn : job.status}</strong>
+                    <span>{job.width} x {job.height}</span>
+                  </div>
+                  <p>{job.prompt}</p>
+                  <div className="turn-actions">
+                    {output && <button className="quiet-button" onClick={() => reuseOutput(job, output)}><Wand2 size={14} />{t.continueThread}</button>}
+                    {outputUrl && <a className="quiet-button" href={outputUrl} download><Download size={14} />{t.downloadOutput}</a>}
+                    <button className="quiet-button danger-action" onClick={() => deleteJob(job)}><Trash2 size={14} />{t.deleteOutput}</button>
+                  </div>
+                </div>
+              </article>
             )
           })}
         </div>
@@ -162,7 +245,13 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
             <div className="kv"><span>{t.steps}</span><code>{selectedJob.steps}</code></div>
             <div className="kv"><span>{t.size}</span><code>{selectedJob.width} x {selectedJob.height}</code></div>
             <div className="kv"><span>{t.modelPath}</span><code>{selectedJob.model_path}</code></div>
-            {selectedOutputUrl && <a className="secondary-action download-action" href={selectedOutputUrl} download><Download size={15} />{t.downloadOutput}</a>}
+            {selectedOutputUrl && (
+              <div className="job-actions">
+                <a className="secondary-action download-action" href={selectedOutputUrl} download><Download size={15} />{t.downloadOutput}</a>
+                <button className="secondary-action" onClick={reuseSelectedOutput}><Wand2 size={15} />{t.reuseOutput}</button>
+                <button className="secondary-action danger-action" onClick={deleteSelectedJob}><Trash2 size={15} />{t.deleteOutput}</button>
+              </div>
+            )}
             {selectedJob.error && <div className="notice error">{selectedJob.error}</div>}
           </>
         ) : <div className="empty-small">{t.noJobs}</div>}

@@ -24,7 +24,7 @@ x-image-studio-frontend-base: &image-studio-frontend-base
   labels:
     - "traefik.enable=true"
     - "traefik.docker.network=vos_default"
-    - "traefik.http.routers.image-studio-top-open.rule=PathPrefix(`/app/com.ictrek.image-studio`) && HeadersRegexp(`Sec-Fetch-Dest`, `document`)"
+    - "traefik.http.routers.image-studio-top-open.rule=PathPrefix(`/app/com.ictrek.image-studio`) && HeaderRegexp(`Sec-Fetch-Dest`, `document`)"
     - "traefik.http.routers.image-studio-top-open.priority=1000"
     - "traefik.http.routers.image-studio-top-open.service=image-studio-web"
     - "traefik.http.routers.image-studio-top-open.middlewares=image-studio-top-open-redirect"

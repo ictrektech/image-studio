@@ -11,6 +11,9 @@ COPY docker/install_sd_cpp.sh /usr/local/bin/install_sd_cpp.sh
 RUN chmod +x /usr/local/bin/install_sd_cpp.sh && SD_CPP_INSTALL_DIR=/opt/sd-cpp SD_CPP_SKIP_VERIFY=true /usr/local/bin/install_sd_cpp.sh
 
 FROM ${L4T_PYTORCH_BASE_IMAGE}
+# 基础镜像默认把 PIP_INDEX_URL 指向 jetson-ai-lab 源（国内不可达），这里覆盖为可用的镜像源
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     IMAGE_STUDIO_MOCK_WHEN_RUNTIME_MISSING=false

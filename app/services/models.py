@@ -13,8 +13,8 @@ MODEL_DEFS = [
     {
         "key": "sd15",
         "name": "Stable Diffusion v1.5 EMA",
-        "model_id": "vivibit/stable-diffusion-v1-5",
-        "source": "modelscope",
+        "model_id": "ms://vivibit/stable-diffusion-v1-5",
+        "source": "ms",
         "description": "SD 1.5 ema-only safetensors prepared for stable-diffusion.cpp.",
         "expected_files": ["v1-5-pruned-emaonly.safetensors", "v1-inference.yaml"],
         "relative_candidates": [
@@ -64,9 +64,11 @@ def model_info(item: dict[str, Any]) -> ModelInfo:
 
 async def pull_model(key: str) -> dict[str, Any]:
     info = get_model(key)
-    payload = {"source": info.source, "model_id": info.model_id}
+    payload = {"source": info.source, "model_id": info.model_id, "name": info.name}
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(f"{settings.model_hub_api_url}/api/v1/models/pull", json=payload)
+        if resp.status_code == 409:
+            return {"status": "active", "model_id": info.model_id, "detail": resp.json().get("detail", "")}
         resp.raise_for_status()
         return resp.json()
 
@@ -83,4 +85,3 @@ def model_path_for(key: str) -> Path:
     if not info.resolved_path:
         raise FileNotFoundError(info.access_path)
     return Path(info.resolved_path)
-

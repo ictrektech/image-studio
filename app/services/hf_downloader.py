@@ -140,15 +140,19 @@ async def _heartbeat(key: str, specs: list[tuple[str, list[str]]]) -> None:
 
 
 def _dir_bytes(root: Path) -> int:
-    """统计 snapshots 根目录已落盘字节数，跳过下载器自身的缓存元数据目录。"""
+    """统计已落盘字节数。
+
+    下载中的大文件位于 .cache/huggingface/download/*.incomplete（hf_hub_download
+    的断点续传缓冲），必须计入才能反映真实进度；只排除锁与元数据小文件。
+    """
     total = 0
     if not root.exists():
         return 0
     for path in root.rglob("*"):
         if not path.is_file():
             continue
-        parts = path.relative_to(root).parts
-        if any(part.startswith(".") for part in parts[:-1]):
+        name = path.name
+        if name.endswith((".lock", ".metadata")) or name in (".gitignore", "CACHEDIR.TAG"):
             continue
         try:
             total += path.stat().st_size
@@ -179,6 +183,8 @@ def merge_state(key: str, info: dict[str, Any]) -> None:
         info["status"] = "downloading"
         info["progress"] = state.get("progress", 0.0)
         info["current_file"] = state.get("current_file", "")
+        info["downloaded_bytes"] = state.get("downloaded_bytes", 0)
+        info["total_bytes"] = state.get("total_bytes", 0)
     elif state["status"] == "failed" and info["status"] == "missing":
         info["status"] = "failed"
         info["error"] = state.get("error", "")

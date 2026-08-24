@@ -65,5 +65,7 @@ class ModelInfo(BaseModel):
     size: int | None = None
     progress: float | None = None
     current_file: str | None = None
+    downloaded_bytes: int | None = None
+    total_bytes: int | None = None
     error: str | None = None
     model_hub_status: dict[str, Any] | None = None

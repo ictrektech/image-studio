@@ -36,6 +36,8 @@ export interface ModelInfo {
   size?: number
   progress?: number | null
   current_file?: string | null
+  downloaded_bytes?: number | null
+  total_bytes?: number | null
   error?: string | null
 }
 

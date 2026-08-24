@@ -21,6 +21,13 @@ function sizeText(bytes?: number) {
   return `${value.toFixed(idx === 0 ? 0 : 2)} ${units[idx]}`
 }
 
+function bytesText(model: ModelInfo) {
+  if (!model.downloaded_bytes) return ''
+  return model.total_bytes
+    ? `${sizeText(model.downloaded_bytes)} / ${sizeText(model.total_bytes)}`
+    : sizeText(model.downloaded_bytes)
+}
+
 export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo[]; onRefresh: () => void; t: typeof messages['zh-CN'] }) {
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
@@ -97,7 +104,9 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
 
                 <progress className="model-progress" max="100" value={percent(model)} />
                 {downloading && model.current_file && (
-                  <p className="model-current-file">{t.downloadingFile}: {model.current_file}</p>
+                  <p className="model-current-file">
+                    {t.downloadingFile}: {model.current_file}{bytesText(model) && ` · ${bytesText(model)}`}
+                  </p>
                 )}
                 {failed && model.error && <p className="model-error">{model.error}</p>}
 

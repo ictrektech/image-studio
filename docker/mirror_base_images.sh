@@ -51,7 +51,7 @@ case "$PROFILE" in
     ;;
   thor)
     mirror python:3.12-slim "${REGISTRY}/python:thor_3.12"
-    mirror node:22 "${REGISTRY}/node:thor_22"
+    mirror node:22-alpine "${REGISTRY}/node:thor_22-alpine"
     mirror nginx:alpine "${REGISTRY}/nginx:thor_alpine"
     ;;
   *)
@@ -59,4 +59,3 @@ case "$PROFILE" in
     exit 1
     ;;
 esac
-

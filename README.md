@@ -83,7 +83,7 @@ the matching host:
 | --- | --- | --- |
 | `amd`, `amd-cuda` | `tc232` | `amd_3.12-slim`, `amd_22-alpine`, `amd_alpine` |
 | `arm`, `arm-cuda`, `l4t` | `tc192` | `arm_3.12-slim`, `arm_22-alpine`, `arm_alpine`, `l4t_3.12` |
-| `thor` | `tc97` | `thor_3.12`, `thor_22`, `thor_alpine` |
+| `thor` | `tc97` | `thor_3.12`, `thor_22-alpine`, `thor_alpine` |
 
 Build script entrypoint:
 

@@ -36,7 +36,7 @@ profile_spec() {
     ARM_with_cuda) printf '%s|%s|%s|%s|%s\n' arm-cuda arm_cuda docker/Dockerfile.arm-cuda arm_22-alpine arm_alpine ;;
     ARM_without_cuda) printf '%s|%s|%s|%s|%s\n' arm arm docker/Dockerfile.cpu arm_22-alpine arm_alpine ;;
     l4t) printf '%s|%s|%s|%s|%s\n' l4t l4t docker/Dockerfile.l4t arm_22-alpine arm_alpine ;;
-    thor_spark) printf '%s|%s|%s|%s|%s\n' thor thor docker/Dockerfile.thor thor_22 thor_alpine ;;
+    thor_spark) printf '%s|%s|%s|%s|%s\n' thor thor docker/Dockerfile.thor thor_22-alpine thor_alpine ;;
     *) return 1 ;;
   esac
 }
@@ -83,4 +83,3 @@ fi
 
 log "built profile=${PROFILE} tag=${TAG}"
 log "Feishu update is intentionally not embedded yet; write ${TAG} under image-studio-backend and image-studio-frontend for ${TARGET_SHEET}."
-

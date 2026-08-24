@@ -1,0 +1,67 @@
+configs:
+  - name: IMAGE_STUDIO_DATA_PATH
+    type: path
+    title:
+      zh-CN: Image Studio 数据目录
+      en: Image Studio Data Path
+    description:
+      zh-CN: 保存用户会话、生成任务和输出文件。不同 VOS 用户会在该目录下自动分隔。
+      en: Stores sessions, generation jobs, and output files. VOS users are separated automatically inside this path.
+    default: /data/vos_workspace/image_studio
+    hints: [com.ictrek.ai.generated-assets]
+
+  - name: MODEL_HUB_SHARED_MODELS_PATH
+    type: path
+    title:
+      zh-CN: Model Hub 共享模型目录
+      en: Model Hub Shared Models Path
+    description:
+      zh-CN: Model Hub 的宿主机共享模型根目录，Image Studio 会只读挂载并解析 diffusion 模型路径。
+      en: Host shared model root managed by Model Hub. Image Studio mounts it read-only and resolves diffusion model paths.
+    default: /data/vos_workspace/model_hub
+    hints: [com.ictrek.model.storage]
+
+  - name: MODEL_HUB_API_URL
+    type: string
+    title:
+      zh-CN: Model Hub API 地址
+      en: Model Hub API URL
+    description:
+      zh-CN: VOS 网络内的 Model Hub 后端 API 地址，用于触发模型下载和同步。
+      en: Model Hub backend API URL inside VOS network, used to trigger model pull and sync.
+    default: http://model-hub-backend:5005
+
+  - name: SD_CPP_BIN
+    type: string
+    title:
+      zh-CN: sd.cpp 命令
+      en: sd.cpp Command
+    description:
+      zh-CN: 容器内 stable-diffusion.cpp CLI 路径；默认使用 PATH 中的 sd-cli。
+      en: stable-diffusion.cpp CLI path inside the container; defaults to sd-cli in PATH.
+    default: sd-cli
+
+  - name: IMAGE_STUDIO_MAX_CONCURRENCY
+    type: integer
+    title:
+      zh-CN: 最大并发生成数
+      en: Maximum Concurrent Generations
+    description:
+      zh-CN: 同时运行的生成任务数量。显存较小设备建议保持 1。
+      en: Number of simultaneous generation jobs. Keep 1 on smaller VRAM devices.
+    default: 1
+    minimum: 1
+    maximum: 4
+
+  - name: IMAGE_STUDIO_GENERATE_TIMEOUT_SECONDS
+    type: integer
+    title:
+      zh-CN: 生成超时时间
+      en: Generation Timeout
+    description:
+      zh-CN: 单个生成任务的最长运行秒数。
+      en: Maximum runtime in seconds for one generation job.
+    default: 900
+    minimum: 60
+    maximum: 7200
+

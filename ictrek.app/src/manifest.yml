@@ -1,0 +1,98 @@
+id: com.ictrek.image-studio
+name:
+  zh-CN: Image Studio
+  en: Image Studio
+description:
+  zh-CN: 基于 stable-diffusion.cpp 的本地图像生成工作台，提供生成 API、任务记录、模型管理和 Model Hub 路径接入。
+  en: Local image generation workspace powered by stable-diffusion.cpp, with generation APIs, job history, model management, and Model Hub path integration.
+version: __APP_VERSION__
+author: ictrek
+category: [ai]
+arch: [amd64, arm64]
+
+frontend:
+  enabled: true
+  basePath: /app/com.ictrek.image-studio
+
+platform:
+  version: ">=3.0.0"
+
+oauth2:
+  client:
+    enable: true
+    scopes: [openid, profile, email]
+
+permissions:
+  defines:
+    - code: com.ictrek.image-studio:image:generate
+      name:
+        zh-CN: 生成图片
+        en: Generate Images
+      description:
+        zh-CN: 允许同账户应用调用 Image Studio 生成图片。
+        en: Allows same-account apps to generate images through Image Studio.
+      default_roles: [admin, user]
+    - code: com.ictrek.image-studio:model:manage
+      name:
+        zh-CN: 管理模型
+        en: Manage Models
+      description:
+        zh-CN: 允许触发 Model Hub 模型下载和同步。
+        en: Allows triggering Model Hub model pull and sync actions.
+      default_roles: [admin]
+
+profiles:
+  - name: amd
+    title:
+      zh-CN: AMD64 CPU
+      en: AMD64 CPU
+    description:
+      zh-CN: AMD64 平台，不声明 nvidia runtime，适合 CPU 或外部 runtime 测试。
+      en: AMD64 platform without nvidia runtime, for CPU or external runtime testing.
+    conflicts: [amd-cuda, arm, arm-cuda, l4t, thor]
+  - name: amd-cuda
+    title:
+      zh-CN: AMD64 CUDA
+      en: AMD64 CUDA
+    description:
+      zh-CN: AMD64 NVIDIA CUDA 平台，声明 nvidia runtime。
+      en: AMD64 NVIDIA CUDA platform with nvidia runtime.
+    conflicts: [amd, arm, arm-cuda, l4t, thor]
+  - name: arm
+    title:
+      zh-CN: ARM64 CPU
+      en: ARM64 CPU
+    description:
+      zh-CN: ARM64 平台，不声明 nvidia runtime。
+      en: ARM64 platform without nvidia runtime.
+    conflicts: [amd, amd-cuda, arm-cuda, l4t, thor]
+  - name: arm-cuda
+    title:
+      zh-CN: ARM64 CUDA
+      en: ARM64 CUDA
+    description:
+      zh-CN: ARM64 NVIDIA CUDA 平台，声明 nvidia runtime。
+      en: ARM64 NVIDIA CUDA platform with nvidia runtime.
+    conflicts: [amd, amd-cuda, arm, l4t, thor]
+  - name: l4t
+    title:
+      zh-CN: Jetson / L4T
+      en: Jetson / L4T
+    description:
+      zh-CN: Jetson / L4T 平台，声明 nvidia runtime。
+      en: Jetson / L4T platform with nvidia runtime.
+    conflicts: [amd, amd-cuda, arm, arm-cuda, thor]
+  - name: thor
+    title:
+      zh-CN: Thor
+      en: Thor
+    description:
+      zh-CN: Thor 平台，声明 nvidia runtime。
+      en: Thor platform with nvidia runtime.
+    conflicts: [amd, amd-cuda, arm, arm-cuda, l4t]
+
+storage:
+  directories:
+    - path: data
+      mode: "0755"
+

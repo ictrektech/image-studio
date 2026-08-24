@@ -1,0 +1,211 @@
+x-image-studio-frontend-env: &image-studio-frontend-env
+  APP_VERSION: "__APP_VERSION__"
+  API_BASE: /api/com.ictrek.image-studio
+
+x-image-studio-backend-env: &image-studio-backend-env
+  IMAGE_STUDIO_APP_VERSION: "__APP_VERSION__"
+  IMAGE_STUDIO_DATA_DIR: /data
+  MODEL_HUB_SHARED_MODELS_PATH: /modelhub
+  MODEL_HUB_API_URL: ${MODEL_HUB_API_URL:-http://model-hub-backend:5005}
+  SD_CPP_BIN: ${SD_CPP_BIN:-sd-cli}
+  IMAGE_STUDIO_MAX_CONCURRENCY: ${IMAGE_STUDIO_MAX_CONCURRENCY:-1}
+  IMAGE_STUDIO_GENERATE_TIMEOUT_SECONDS: ${IMAGE_STUDIO_GENERATE_TIMEOUT_SECONDS:-900}
+
+x-image-studio-frontend-base: &image-studio-frontend-base
+  restart: unless-stopped
+  networks:
+    vos_default:
+      aliases:
+        - image-studio-frontend
+  environment: *image-studio-frontend-env
+  labels:
+    - "traefik.enable=true"
+    - "traefik.docker.network=vos_default"
+    - "traefik.http.routers.image-studio-top-open.rule=PathPrefix(`/app/com.ictrek.image-studio`) && HeadersRegexp(`Sec-Fetch-Dest`, `document`)"
+    - "traefik.http.routers.image-studio-top-open.priority=1000"
+    - "traefik.http.routers.image-studio-top-open.service=image-studio-web"
+    - "traefik.http.routers.image-studio-top-open.middlewares=image-studio-top-open-redirect"
+    - "traefik.http.middlewares.image-studio-top-open-redirect.redirectregex.regex=^(https?://[^/]+)/app/com\\.ictrek\\.image-studio/?(?:\\?.*)?$"
+    - "traefik.http.middlewares.image-studio-top-open-redirect.redirectregex.replacement=$${1}/#/app/com.ictrek.image-studio/com-ictrek-image-studio/image-studio"
+    - "traefik.http.middlewares.image-studio-top-open-redirect.redirectregex.permanent=false"
+    - "traefik.http.routers.image-studio-web.rule=PathPrefix(`/app/com.ictrek.image-studio`)"
+    - "traefik.http.routers.image-studio-web.service=image-studio-web"
+    - "traefik.http.routers.image-studio-web.middlewares=image-studio-web-slash,image-studio-web-strip"
+    - "traefik.http.middlewares.image-studio-web-slash.redirectregex.regex=^(.*)/app/com\\.ictrek\\.image-studio$"
+    - "traefik.http.middlewares.image-studio-web-slash.redirectregex.replacement=$${1}/app/com.ictrek.image-studio/"
+    - "traefik.http.middlewares.image-studio-web-slash.redirectregex.permanent=true"
+    - "traefik.http.middlewares.image-studio-web-strip.stripprefix.prefixes=/app/com.ictrek.image-studio"
+    - "traefik.http.services.image-studio-web.loadbalancer.server.port=80"
+
+x-image-studio-backend-base: &image-studio-backend-base
+  restart: unless-stopped
+  networks:
+    vos_default:
+      aliases:
+        - image-studio-backend
+  environment: *image-studio-backend-env
+  volumes:
+    - ${IMAGE_STUDIO_DATA_PATH:-/data/vos_workspace/image_studio}:/data
+    - ${MODEL_HUB_SHARED_MODELS_PATH:-/data/vos_workspace/model_hub}:/modelhub:ro
+  labels:
+    - "traefik.enable=true"
+    - "traefik.docker.network=vos_default"
+    - "traefik.http.routers.image-studio-api.rule=PathPrefix(`/api/com.ictrek.image-studio`)"
+    - "traefik.http.routers.image-studio-api.service=image-studio-api"
+    - "traefik.http.routers.image-studio-api.middlewares=image-studio-api-strip"
+    - "traefik.http.middlewares.image-studio-api-strip.stripprefix.prefixes=/api/com.ictrek.image-studio"
+    - "traefik.http.services.image-studio-api.loadbalancer.server.port=5000"
+  healthcheck:
+    test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=3).read()\" >/dev/null 2>&1 || exit 1"]
+    interval: 30s
+    timeout: 10s
+    start_period: 10s
+    retries: 3
+
+x-image-studio-backend-gpu-base: &image-studio-backend-gpu-base
+  <<: *image-studio-backend-base
+  runtime: nvidia
+  environment:
+    <<: *image-studio-backend-env
+    NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+    NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
+
+services:
+  image-studio-frontend-amd:
+    <<: *image-studio-frontend-base
+    profiles: ["amd"]
+    image: ${IMAGE_STUDIO_FRONTEND_AMD_IMAGE}
+    environment:
+      <<: *image-studio-frontend-env
+      FRONTEND_IMAGE: ${IMAGE_STUDIO_FRONTEND_AMD_IMAGE}
+    pull_policy: always
+    depends_on:
+      image-studio-backend-amd:
+        condition: service_healthy
+
+  image-studio-backend-amd:
+    <<: *image-studio-backend-base
+    profiles: ["amd"]
+    image: ${IMAGE_STUDIO_BACKEND_AMD_IMAGE}
+    environment:
+      <<: *image-studio-backend-env
+      IMAGE_STUDIO_PROFILE: amd
+    pull_policy: always
+
+  image-studio-frontend-amd-cuda:
+    <<: *image-studio-frontend-base
+    profiles: ["amd-cuda"]
+    image: ${IMAGE_STUDIO_FRONTEND_AMD_CUDA_IMAGE}
+    environment:
+      <<: *image-studio-frontend-env
+      FRONTEND_IMAGE: ${IMAGE_STUDIO_FRONTEND_AMD_CUDA_IMAGE}
+    pull_policy: always
+    depends_on:
+      image-studio-backend-amd-cuda:
+        condition: service_healthy
+
+  image-studio-backend-amd-cuda:
+    <<: *image-studio-backend-gpu-base
+    profiles: ["amd-cuda"]
+    image: ${IMAGE_STUDIO_BACKEND_AMD_CUDA_IMAGE}
+    environment:
+      <<: *image-studio-backend-env
+      IMAGE_STUDIO_PROFILE: amd-cuda
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
+    pull_policy: always
+
+  image-studio-frontend-arm:
+    <<: *image-studio-frontend-base
+    profiles: ["arm"]
+    image: ${IMAGE_STUDIO_FRONTEND_ARM_IMAGE}
+    environment:
+      <<: *image-studio-frontend-env
+      FRONTEND_IMAGE: ${IMAGE_STUDIO_FRONTEND_ARM_IMAGE}
+    pull_policy: always
+    depends_on:
+      image-studio-backend-arm:
+        condition: service_healthy
+
+  image-studio-backend-arm:
+    <<: *image-studio-backend-base
+    profiles: ["arm"]
+    image: ${IMAGE_STUDIO_BACKEND_ARM_IMAGE}
+    environment:
+      <<: *image-studio-backend-env
+      IMAGE_STUDIO_PROFILE: arm
+    pull_policy: always
+
+  image-studio-frontend-arm-cuda:
+    <<: *image-studio-frontend-base
+    profiles: ["arm-cuda"]
+    image: ${IMAGE_STUDIO_FRONTEND_ARM_CUDA_IMAGE}
+    environment:
+      <<: *image-studio-frontend-env
+      FRONTEND_IMAGE: ${IMAGE_STUDIO_FRONTEND_ARM_CUDA_IMAGE}
+    pull_policy: always
+    depends_on:
+      image-studio-backend-arm-cuda:
+        condition: service_healthy
+
+  image-studio-backend-arm-cuda:
+    <<: *image-studio-backend-gpu-base
+    profiles: ["arm-cuda"]
+    image: ${IMAGE_STUDIO_BACKEND_ARM_CUDA_IMAGE}
+    environment:
+      <<: *image-studio-backend-env
+      IMAGE_STUDIO_PROFILE: arm-cuda
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
+    pull_policy: always
+
+  image-studio-frontend-l4t:
+    <<: *image-studio-frontend-base
+    profiles: ["l4t"]
+    image: ${IMAGE_STUDIO_FRONTEND_L4T_IMAGE}
+    environment:
+      <<: *image-studio-frontend-env
+      FRONTEND_IMAGE: ${IMAGE_STUDIO_FRONTEND_L4T_IMAGE}
+    pull_policy: always
+    depends_on:
+      image-studio-backend-l4t:
+        condition: service_healthy
+
+  image-studio-backend-l4t:
+    <<: *image-studio-backend-gpu-base
+    profiles: ["l4t"]
+    image: ${IMAGE_STUDIO_BACKEND_L4T_IMAGE}
+    environment:
+      <<: *image-studio-backend-env
+      IMAGE_STUDIO_PROFILE: l4t
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
+    pull_policy: always
+
+  image-studio-frontend-thor:
+    <<: *image-studio-frontend-base
+    profiles: ["thor"]
+    image: ${IMAGE_STUDIO_FRONTEND_THOR_IMAGE}
+    environment:
+      <<: *image-studio-frontend-env
+      FRONTEND_IMAGE: ${IMAGE_STUDIO_FRONTEND_THOR_IMAGE}
+    pull_policy: always
+    depends_on:
+      image-studio-backend-thor:
+        condition: service_healthy
+
+  image-studio-backend-thor:
+    <<: *image-studio-backend-gpu-base
+    profiles: ["thor"]
+    image: ${IMAGE_STUDIO_BACKEND_THOR_IMAGE}
+    environment:
+      <<: *image-studio-backend-env
+      IMAGE_STUDIO_PROFILE: thor
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
+    pull_policy: always
+
+networks:
+  vos_default:
+    external: true
+

@@ -1,0 +1,21 @@
+routers:
+  - id: com-ictrek-image-studio
+    kind: group
+    title:
+      zh-CN: Image Studio
+      en: Image Studio
+    icon: lucide:image
+    order: 210
+    children:
+      - id: image-studio
+        kind: page
+        title:
+          zh-CN: 图片生成
+          en: Image Generation
+        icon: lucide:image-plus
+        iframe-src: /app/com.ictrek.image-studio/
+        order: 10
+        keep-alive: true
+        entry-point: true
+        embed: true
+

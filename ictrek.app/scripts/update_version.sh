@@ -35,6 +35,11 @@ bump_version() {
   printf '%s.%s.%s\n' "$major" "$minor" "$patch"
 }
 
+remote_tag_exists() {
+  local tag="$1"
+  git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1
+}
+
 part="${1:-patch}"
 [[ "${1:-}" != "-h" && "${1:-}" != "--help" ]] || { usage; exit 0; }
 
@@ -47,14 +52,16 @@ git diff --quiet && git diff --cached --quiet || {
 version="$(bump_version "$part")"
 tag="${TAG_PREFIX}${version}"
 public_tag="v${version}"
-git rev-parse -q --verify "refs/tags/${tag}" >/dev/null && {
-  echo "tag already exists: ${tag}" >&2
+
+if remote_tag_exists "$tag"; then
+  echo "VOS trigger tag already exists on origin: ${tag}" >&2
   exit 1
-}
-git rev-parse -q --verify "refs/tags/${public_tag}" >/dev/null && {
-  echo "public release tag already exists: ${public_tag}" >&2
+fi
+
+if remote_tag_exists "$public_tag"; then
+  echo "public release tag already exists on origin: ${public_tag}" >&2
   exit 1
-}
+fi
 
 printf '%s\n' "$version" > "$VERSION_FILE"
 git add "$VERSION_FILE"

@@ -338,13 +338,13 @@ PY
 
 sheet_spec() {
   case "$1" in
-    AMD_with_cuda) printf '%s|%s|%s|%s|%s\n' amd-cuda amd_cuda docker/Dockerfile.amd-cuda amd_22-alpine amd_alpine ;;
+    AMD_with_cuda) printf '%s|%s|%s|%s|%s\n' amd-cuda amd_cu128 docker/Dockerfile.amd-cuda amd_22-alpine amd_alpine ;;
     AMD_with_mxn100) printf '%s|%s|%s|%s|%s\n' amd amd docker/Dockerfile.cpu amd_22-alpine amd_alpine ;;
-    ARM_with_cuda) printf '%s|%s|%s|%s|%s\n' arm-cuda arm_cuda docker/Dockerfile.arm-cuda arm_22-alpine arm_alpine ;;
+    ARM_with_cuda) printf '%s|%s|%s|%s|%s\n' arm-cuda arm_cu128 docker/Dockerfile.arm-cuda arm_22-alpine arm_alpine ;;
     ARM_without_cuda) printf '%s|%s|%s|%s|%s\n' arm arm docker/Dockerfile.cpu arm_22-alpine arm_alpine ;;
     SOPHON_bm1688) printf '%s|%s|%s|%s|%s\n' arm arm docker/Dockerfile.cpu arm_22-alpine arm_alpine ;;
     l4t) printf '%s|%s|%s|%s|%s\n' l4t l4t docker/Dockerfile.l4t arm_22-alpine arm_alpine ;;
-    thor_spark) printf '%s|%s|%s|%s|%s\n' thor thor docker/Dockerfile.thor thor_22-alpine thor_alpine ;;
+    thor_spark) printf '%s|%s|%s|%s|%s\n' thor thor_cu128 docker/Dockerfile.thor thor_22-alpine thor_alpine ;;
     *) return 1 ;;
   esac
 }
@@ -400,7 +400,7 @@ Usage:
   ./docker/build_image.sh --component backend|frontend
 
 Tag prefixes are profile-specific:
-  amd, amd_cuda, arm, arm_cuda, l4t, thor
+  amd, amd_cu128, arm, arm_cu128, l4t, thor_cu128
 EOF
       exit 0
       ;;

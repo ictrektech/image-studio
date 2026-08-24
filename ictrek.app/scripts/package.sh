@@ -5,7 +5,6 @@ APP_NAME="image_studio"
 APP_ID="com.ictrek.image-studio"
 ROUTER_GROUP_ID="com-ictrek-image-studio"
 ROUTER_PAGE_ID="image-studio"
-ROUTER_IFRAME_SRC="/app/com.ictrek.image-studio/"
 ROUTER_HASH_PATH="#/app/com.ictrek.image-studio/com-ictrek-image-studio/image-studio"
 FRONTEND_BASE_PATH="/app/com.ictrek.image-studio"
 SPREADSHEET_TOKEN="${FEISHU_SPREADSHEET_TOKEN:-Htotsn3oahO1zxt73YMcaB1zn8e}"
@@ -353,8 +352,13 @@ verify_package() {
   if ! printf '%s\n' "$routers_text" | grep -Fq "      - id: ${ROUTER_PAGE_ID}"; then
     die "routers.yml must declare sidebar page id ${ROUTER_PAGE_ID}"
   fi
-  if ! printf '%s\n' "$routers_text" | grep -Fq "        iframe-src: ${ROUTER_IFRAME_SRC}"; then
-    die "routers.yml sidebar iframe-src must be ${ROUTER_IFRAME_SRC}"
+  expected_iframe_src="/app/${APP_ID}/?v=${APP_VERSION}"
+  if ! printf '%s\n' "$routers_text" | grep -Fq "        iframe-src: ${expected_iframe_src}"; then
+    die "routers.yml sidebar iframe-src must be ${expected_iframe_src}"
+  fi
+  env_text="$(tar xOf "$app_tarball" .env)"
+  if printf '%s\n' "$env_text" | grep -Eq '_(amd_cuda|arm_cuda|thor)_[0-9]{8}$|:(amd_cuda|arm_cuda|thor)_[0-9]{8}$'; then
+    die ".env contains non-standard CUDA image tag prefix"
   fi
   if printf '%s\n' "$routers_text" | grep -Eq 'iframe-src:[[:space:]]*https?://'; then
     die "routers.yml iframe-src must use a VOS same-origin /app/<app-id>/ path"

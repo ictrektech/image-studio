@@ -83,9 +83,9 @@ the matching host:
 
 | Profile | Host | Base image tags |
 | --- | --- | --- |
-| `amd`, `amd-cuda` | `tc232` | `amd_3.12-slim`, `amd_22-alpine`, `amd_alpine` |
-| `arm`, `arm-cuda`, `l4t` | `tc192` | `arm_3.12-slim`, `arm_22-alpine`, `arm_alpine`, `l4t_3.12` |
-| `thor` | `tc97` | `thor_3.12`, `thor_22-alpine`, `thor_alpine` |
+| `amd`, `amd-cuda` | `tc232` | image tags `amd_YYYYMMDD` / `amd_cu128_YYYYMMDD` |
+| `arm`, `arm-cuda`, `l4t` | `tc192` | image tags `arm_YYYYMMDD` / `arm_cu128_YYYYMMDD` / `l4t_YYYYMMDD` |
+| `thor` | `tc97` | image tag `thor_cu128_YYYYMMDD` |
 
 Build script entrypoint:
 

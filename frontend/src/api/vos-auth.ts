@@ -122,13 +122,13 @@ async function requestFastpathToken(): Promise<VOSTokenSet | null> {
 
 async function waitForOAuth2(timeoutMs = 3000): Promise<VOSOAuth2 | null> {
   const existing = window.vos_platform?.api?.v1000?.oauth2
-  if (existing?.authorize && existing.token) return existing
+  if (isOAuth2(existing)) return existing
 
   const start = Date.now()
   return new Promise(resolve => {
     const timer = window.setInterval(() => {
       const oauth2 = window.vos_platform?.api?.v1000?.oauth2
-      if (oauth2?.authorize && oauth2.token) {
+      if (isOAuth2(oauth2)) {
         window.clearInterval(timer)
         resolve(oauth2)
       } else if (Date.now() - start >= timeoutMs) {
@@ -137,6 +137,10 @@ async function waitForOAuth2(timeoutMs = 3000): Promise<VOSOAuth2 | null> {
       }
     }, 50)
   })
+}
+
+function isOAuth2(value: VOSOAuth2 | undefined): value is VOSOAuth2 {
+  return typeof value?.authorize === 'function' && typeof value?.token === 'function'
 }
 
 function tokenFromInjectedContext(): string | null {

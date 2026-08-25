@@ -25,6 +25,9 @@ from app.config import settings  # noqa: E402
 logger = logging.getLogger("image-studio.hf-downloader")
 
 _tasks: dict[str, dict[str, Any]] = {}
+# 每个模型 key 当前活跃的桥接（用于新下载接管时立即关闭旧记录，
+# 避免旧循环在文件边界退出前与新模式同时刷新任务记录）
+_bridges: dict[str, "_TaskBridge"] = {}
 
 
 def task_state(key: str) -> dict[str, Any] | None:
@@ -55,6 +58,11 @@ async def start_download(key: str, sources: list[dict[str, Any]], force: bool = 
         if not force:
             return False
         request_cancel(key)
+    # 旧循环可能还在当前大文件的写入中（到文件边界才退出），先关闭它的
+    # 任务记录并停止其后续写入，避免两条记录并行刷新造成界面横跳。
+    old_bridge = _bridges.get(key)
+    if old_bridge is not None:
+        old_bridge.supersede()
     _tasks[key] = {
         "status": "running",
         "progress": 0.0,
@@ -86,6 +94,7 @@ async def _run(key: str, sources: list[dict[str, Any]]) -> None:
     state = _tasks[key]
     specs = [(spec["model_id"], list(spec.get("files") or [])) for spec in sources if spec["source"] == "hf"]
     bridge = _TaskBridge(specs)
+    _bridges[key] = bridge
     # 先启动进度上报（立刻进入 DOWNLOADING），文件清单/总大小后台并行获取，
     # 避免清单查询期间任务停留在"等待中"。
     per_repo_totals: dict[str, int] = {}
@@ -132,6 +141,10 @@ async def _run(key: str, sources: list[dict[str, Any]]) -> None:
         logger.error("HF 下载失败: %s, error=%s", key, exc)
     finally:
         heartbeat.cancel()
+        # 仅当自己仍是当前注册的桥接才移除：被 supersede 之后可能已有新下载
+        # 以同一 key 重新注册，此时旧循环退出不应干扰新桥接。
+        if _bridges.get(key) is bridge:
+            _bridges.pop(key, None)
 
 
 class _TaskBridge:
@@ -142,6 +155,7 @@ class _TaskBridge:
     """
 
     def __init__(self, specs: list[tuple[str, list[str]]]) -> None:
+        self._superseded = False
         self.records = {
             repo_id: {"task_id": f"is_{uuid.uuid4().hex[:12]}", "last_write": 0.0, "last_bytes": 0, "last_time": 0.0}
             for repo_id, _ in specs
@@ -149,7 +163,19 @@ class _TaskBridge:
         for repo_id, rec in self.records.items():
             self._write(rec["task_id"], repo_id, "PENDING")
 
+    def supersede(self) -> None:
+        """关闭旧任务的桥接：停止后续写入，并把已写记录收尾为 FAILED（由新下载接管）。
+
+        触发场景："重新下载"时旧循环可能还在当前大文件的写入中，若等它
+        自己收尾，会与新的下载记录并行刷新，造成任务页进度横跳。
+        """
+        self._superseded = True
+        for repo_id, rec in list(self.records.items()):
+            self._write(rec["task_id"], repo_id, "FAILED", error_msg="已被新的下载任务接管")
+
     def update(self, repo_id: str, downloaded: int, total: int) -> None:
+        if self._superseded:
+            return
         rec = self.records.get(repo_id)
         if not rec:
             return
@@ -167,10 +193,14 @@ class _TaskBridge:
         self._write(rec["task_id"], repo_id, "DOWNLOADING", progress=progress, speed=speed, eta=eta)
 
     def finish(self) -> None:
+        if self._superseded:
+            return
         for repo_id, rec in self.records.items():
             self._write(rec["task_id"], repo_id, "READY", progress=1.0)
 
     def fail(self, error: str) -> None:
+        if self._superseded:
+            return
         for repo_id, rec in self.records.items():
             self._write(rec["task_id"], repo_id, "FAILED", error_msg=error[:500])
 

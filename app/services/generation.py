@@ -26,6 +26,7 @@ ROLE_FLAGS = {
     "llm_vision": "--llm_vision",
     "clip_vision": "--clip_vision",
     "embeddings_connectors": "--embeddings-connectors",
+    "high_noise": "--high-noise-diffusion-model",
     "uncond": "--uncond-diffusion-model",
 }
 

@@ -28,6 +28,13 @@ function bytesText(model: ModelInfo) {
     : sizeText(model.downloaded_bytes)
 }
 
+function sizeDisplay(model: ModelInfo, t: typeof messages['zh-CN']) {
+  if (model.size) return sizeText(model.size)
+  if (model.status === 'downloading') return bytesText(model) || '-'
+  if (model.files?.length) return `${model.files.length} ${t.filesCountLabel}`
+  return '-'
+}
+
 export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo[]; onRefresh: () => void; t: typeof messages['zh-CN'] }) {
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
@@ -97,10 +104,11 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
                   <div><span>{t.modelId}</span><code>{model.model_id}</code></div>
                   <div><span>{t.source}</span><code>{model.source}</code></div>
                   <div><span>{t.family}</span><code>{model.family}</code></div>
+                  <div><span>{t.paramsLabel}</span><code>{model.params || '-'}</code></div>
                   <div><span>{t.capabilities}</span><code>{model.capabilities.join(', ')}</code></div>
                   <div><span>{t.loadPath}</span><code>{model.resolved_path || model.access_path}</code></div>
                   <div><span>{t.expectedFiles}</span><code>{model.expected_files.join(', ')}</code></div>
-                  <div><span>{t.size}</span><code>{sizeText(model.size)}</code></div>
+                  <div><span>{t.size}</span><code>{sizeDisplay(model, t)}</code></div>
                   <div><span>{t.status}</span><code>{model.status}</code></div>
                 </div>
 

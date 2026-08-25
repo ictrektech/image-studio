@@ -64,6 +64,7 @@ class ModelInfo(BaseModel):
     preferred: bool = False
     description: str
     expected_files: list[str]
+    params: str = ""
     runtime: dict[str, Any] = Field(default_factory=dict)
     access_path: str
     resolved_path: str | None = None

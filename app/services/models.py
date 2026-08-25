@@ -96,6 +96,7 @@ def _model(
         "expected_files": list(MODEL_FILE_PATTERNS),
         "preferred": preferred,
         "runtime": runtime,
+        "params": "",
     }
 
 
@@ -357,8 +358,108 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
         extra_args=[*_FA_ARGS, "-v"],
         defaults={"width": 832, "height": 480, "steps": 20, "cfg_scale": 3.0, "sampler": "euler", "video_frames": 33, "fps": 24},
     ),
+    "wan21-t2v-14b": _runtime(
+        mode="video",
+        model_flag="--diffusion-model",
+        roles={
+            "vae": "split_files/vae/wan_2.1_vae.safetensors",
+            "t5xxl": "split_files/text_encoders/umt5_xxl_fp16.safetensors",
+        },
+        extra_args=[*_FA_ARGS, "--flow-shift", "3.0", "-v"],
+        defaults={"width": 832, "height": 480, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
+    ),
+    "wan21-i2v-14b": _runtime(
+        mode="video",
+        model_flag="--diffusion-model",
+        ref_flag="-i",
+        roles={
+            "vae": "split_files/vae/wan_2.1_vae.safetensors",
+            "t5xxl": "split_files/text_encoders/umt5_xxl_fp16.safetensors",
+            "clip_vision": "split_files/clip_vision/clip_vision_h.safetensors",
+        },
+        extra_args=[*_FA_ARGS, "--flow-shift", "3.0", "-v"],
+        defaults={"width": 480, "height": 832, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
+    ),
+    "wan22-t2v-a14b": _runtime(
+        mode="video",
+        model_flag="--diffusion-model",
+        roles={
+            "high_noise": "split_files/diffusion_models/wan2.2_t2v_high_noise_14B_fp16.safetensors",
+            "vae": "split_files/vae/wan2.2_vae.safetensors",
+            "t5xxl": "split_files/text_encoders/umt5_xxl_fp16.safetensors",
+        },
+        extra_args=[*_FA_ARGS, "--flow-shift", "3.0",
+                    "--high-noise-cfg-scale", "3.5", "--high-noise-sampling-method", "euler", "--high-noise-steps", "8", "-v"],
+        defaults={"width": 832, "height": 480, "steps": 10, "cfg_scale": 3.5, "sampler": "euler", "video_frames": 33, "fps": 24},
+    ),
+    "wan22-i2v-a14b": _runtime(
+        mode="video",
+        model_flag="--diffusion-model",
+        ref_flag="-i",
+        roles={
+            "high_noise": "split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp16.safetensors",
+            "vae": "split_files/vae/wan2.2_vae.safetensors",
+            "t5xxl": "split_files/text_encoders/umt5_xxl_fp16.safetensors",
+        },
+        extra_args=[*_FA_ARGS, "--flow-shift", "3.0",
+                    "--high-noise-cfg-scale", "3.5", "--high-noise-sampling-method", "euler", "--high-noise-steps", "8", "-v"],
+        defaults={"width": 832, "height": 480, "steps": 10, "cfg_scale": 3.5, "sampler": "euler", "video_frames": 33, "fps": 24},
+    ),
+    "hunyuan-i2v-720p": _runtime(
+        mode="video",
+        model_flag="--diffusion-model",
+        ref_flag="-i",
+        roles={
+            "vae": "split_files/vae/hunyuanvideo15_vae_fp16.safetensors",
+            "llm": "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
+            "t5xxl": "split_files/text_encoders/byt5_small_glyphxl_fp16.safetensors",
+        },
+        extra_args=["--diffusion-fa", "--offload-to-cpu", "--vae-tiling", "-v"],
+        defaults={"width": 1280, "height": 720, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
+        negative=False,
+    ),
+    "hunyuan-t2v-480p": _runtime(
+        mode="video",
+        model_flag="--diffusion-model",
+        roles={
+            "vae": "split_files/vae/hunyuanvideo15_vae_fp16.safetensors",
+            "llm": "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
+            "t5xxl": "split_files/text_encoders/byt5_small_glyphxl_fp16.safetensors",
+        },
+        extra_args=["--diffusion-fa", "--offload-to-cpu", "--vae-tiling", "-v"],
+        defaults={"width": 960, "height": 480, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
+        negative=False,
+    ),
+    "minimax-ref2va": _runtime(
+        mode="video",
+        model_flag="--diffusion-model",
+        ref_flag="-r",
+        roles={
+            "vae": "vae/minimax_h3_video_vae_fp16.safetensors",
+            "audio_vae": "vae/minimax_h3_audio_vae_fp32.safetensors",
+            "llm": "qwen3vl_32b_minimax_h3-Q4_K_M.gguf",
+        },
+        extra_args=["--diffusion-fa", "--offload-to-cpu", "--rng", "cpu", "-v"],
+        defaults={"width": 864, "height": 480, "steps": 20, "cfg_scale": 1.0, "sampler": "euler", "video_frames": 56, "fps": 24},
+        negative=False,
+    ),
 }
 
+
+# 参数量（官方标注或可从文件体积推得；不确定的留空，不编造）
+MODEL_PARAMS: dict[str, str] = {
+    "sd15": "860M", "sd2": "865M", "sd-turbo": "860M",
+    "sdxl": "3.5B", "sdxl-turbo": "3.5B",
+    "sd3": "2B", "sd35": "8.1B", "sd35-medium": "2.5B",
+    "flux-schnell": "12B", "flux-dev": "12B", "flux-kontext": "12B", "flux2": "32B",
+    "qwen-image": "20B", "qwen-image-edit": "20B",
+    "wan21": "1.3B", "wan21-t2v-14b": "14B", "wan21-i2v-14b": "14B",
+    "wan22": "5B", "wan22-t2v-a14b": "14B×2", "wan22-i2v-a14b": "14B×2",
+    "ltx-video": "22B",
+    "hunyuan-video": "8.3B", "hunyuan-i2v-720p": "8.3B", "hunyuan-t2v-480p": "8.3B",
+    "lingbot-video": "1.3B",
+    "chroma": "6B", "chroma-radiance": "6B", "z-image": "6B",
+}
 
 MODEL_DEFS = [
     _model(
@@ -425,7 +526,7 @@ MODEL_DEFS = [
     ),
     _model(
         "sd35",
-        "Stable Diffusion 3.5",
+        "Stable Diffusion 3.5 Large",
         "SD3.5",
         ["txt2img"],
         "Stable Diffusion 3.5 Large fp8 checkpoint with clip_l/clip_g/t5xxl encoders supported by sd.cpp.",
@@ -439,6 +540,20 @@ MODEL_DEFS = [
                     "text_encoders/clip_g.safetensors",
                     "text_encoders/t5xxl_fp16.safetensors",
                 ],
+            }
+        ],
+    ),
+    _model(
+        "sd35-medium",
+        "Stable Diffusion 3.5 Medium",
+        "SD3.5",
+        ["txt2img"],
+        "Stable Diffusion 3.5 Medium fp8 checkpoint with built-in clip/t5xxl encoders supported by sd.cpp.",
+        [
+            {
+                "source": "hf",
+                "model_id": "Comfy-Org/stable-diffusion-3.5-fp8",
+                "files": ["sd3.5_medium_incl_clips_t5xxlfp8scaled.safetensors"],
             }
         ],
     ),
@@ -536,7 +651,7 @@ MODEL_DEFS = [
     ),
     _model(
         "wan21",
-        "Wan 2.1",
+        "Wan 2.1 T2V 1.3B",
         "Wan Video",
         ["video"],
         "Wan 2.1 T2V 1.3B fp16 with umt5-xxl text encoder and wan 2.1 VAE supported by sd.cpp.",
@@ -554,7 +669,7 @@ MODEL_DEFS = [
     ),
     _model(
         "wan22",
-        "Wan 2.2",
+        "Wan 2.2 TI2V 5B",
         "Wan Video",
         ["video"],
         "Wan 2.2 TI2V 5B fp16 with umt5-xxl text encoder and wan 2.2 VAE supported by sd.cpp.",
@@ -564,6 +679,81 @@ MODEL_DEFS = [
                 "model_id": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
                 "files": [
                     "split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors",
+                    "split_files/text_encoders/umt5_xxl_fp16.safetensors",
+                    "split_files/vae/wan2.2_vae.safetensors",
+                ],
+            }
+        ],
+    ),
+    _model(
+        "wan21-t2v-14b",
+        "Wan 2.1 T2V 14B",
+        "Wan Video",
+        ["video"],
+        "Wan 2.1 T2V 14B fp16 with umt5-xxl text encoder and wan 2.1 VAE supported by sd.cpp.",
+        [
+            {
+                "source": "hf",
+                "model_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+                "files": [
+                    "split_files/diffusion_models/wan2.1_t2v_14B_fp16.safetensors",
+                    "split_files/text_encoders/umt5_xxl_fp16.safetensors",
+                    "split_files/vae/wan_2.1_vae.safetensors",
+                ],
+            }
+        ],
+    ),
+    _model(
+        "wan21-i2v-14b",
+        "Wan 2.1 I2V 14B 480P",
+        "Wan Video",
+        ["video"],
+        "Wan 2.1 I2V 14B 480p fp16 (first-frame image-to-video) with umt5-xxl, clip_vision_h and wan 2.1 VAE supported by sd.cpp.",
+        [
+            {
+                "source": "hf",
+                "model_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+                "files": [
+                    "split_files/diffusion_models/wan2.1_i2v_480p_14B_fp16.safetensors",
+                    "split_files/text_encoders/umt5_xxl_fp16.safetensors",
+                    "split_files/vae/wan_2.1_vae.safetensors",
+                    "split_files/clip_vision/clip_vision_h.safetensors",
+                ],
+            }
+        ],
+    ),
+    _model(
+        "wan22-t2v-a14b",
+        "Wan 2.2 T2V A14B",
+        "Wan Video",
+        ["video"],
+        "Wan 2.2 T2V A14B dual low/high-noise 14B fp16 with umt5-xxl and wan 2.2 VAE supported by sd.cpp.",
+        [
+            {
+                "source": "hf",
+                "model_id": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+                "files": [
+                    "split_files/diffusion_models/wan2.2_t2v_low_noise_14B_fp16.safetensors",
+                    "split_files/diffusion_models/wan2.2_t2v_high_noise_14B_fp16.safetensors",
+                    "split_files/text_encoders/umt5_xxl_fp16.safetensors",
+                    "split_files/vae/wan2.2_vae.safetensors",
+                ],
+            }
+        ],
+    ),
+    _model(
+        "wan22-i2v-a14b",
+        "Wan 2.2 I2V A14B",
+        "Wan Video",
+        ["video"],
+        "Wan 2.2 I2V A14B dual low/high-noise 14B fp16 (first-frame image-to-video) with umt5-xxl and wan 2.2 VAE supported by sd.cpp.",
+        [
+            {
+                "source": "hf",
+                "model_id": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+                "files": [
+                    "split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp16.safetensors",
+                    "split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp16.safetensors",
                     "split_files/text_encoders/umt5_xxl_fp16.safetensors",
                     "split_files/vae/wan2.2_vae.safetensors",
                 ],
@@ -592,7 +782,7 @@ MODEL_DEFS = [
     ),
     _model(
         "hunyuan-video",
-        "HunyuanVideo 1.5",
+        "HunyuanVideo 1.5 T2V 720P",
         "Video",
         ["video"],
         "HunyuanVideo 1.5 720p T2V fp16 with qwen VAE, Qwen2.5-VL-7B and byt5 glyph encoder supported by sd.cpp.",
@@ -602,6 +792,44 @@ MODEL_DEFS = [
                 "model_id": "Comfy-Org/HunyuanVideo_1.5_repackaged",
                 "files": [
                     "split_files/diffusion_models/hunyuanvideo1.5_720p_t2v_fp16.safetensors",
+                    "split_files/vae/hunyuanvideo15_vae_fp16.safetensors",
+                    "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
+                    "split_files/text_encoders/byt5_small_glyphxl_fp16.safetensors",
+                ],
+            }
+        ],
+    ),
+    _model(
+        "hunyuan-i2v-720p",
+        "HunyuanVideo 1.5 I2V 720P",
+        "Video",
+        ["video"],
+        "HunyuanVideo 1.5 720p I2V fp16 (first-frame image-to-video) with qwen VAE, Qwen2.5-VL-7B and byt5 glyph encoder supported by sd.cpp.",
+        [
+            {
+                "source": "hf",
+                "model_id": "Comfy-Org/HunyuanVideo_1.5_repackaged",
+                "files": [
+                    "split_files/diffusion_models/hunyuanvideo1.5_720p_i2v_fp16.safetensors",
+                    "split_files/vae/hunyuanvideo15_vae_fp16.safetensors",
+                    "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
+                    "split_files/text_encoders/byt5_small_glyphxl_fp16.safetensors",
+                ],
+            }
+        ],
+    ),
+    _model(
+        "hunyuan-t2v-480p",
+        "HunyuanVideo 1.5 T2V 480P",
+        "Video",
+        ["video"],
+        "HunyuanVideo 1.5 480p T2V fp16, the lighter text-to-video entry, with qwen VAE, Qwen2.5-VL-7B and byt5 glyph encoder supported by sd.cpp.",
+        [
+            {
+                "source": "hf",
+                "model_id": "Comfy-Org/HunyuanVideo_1.5_repackaged",
+                "files": [
+                    "split_files/diffusion_models/hunyuanvideo1.5_480p_t2v_fp16.safetensors",
                     "split_files/vae/hunyuanvideo15_vae_fp16.safetensors",
                     "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
                     "split_files/text_encoders/byt5_small_glyphxl_fp16.safetensors",
@@ -620,6 +848,25 @@ MODEL_DEFS = [
                 "source": "hf",
                 "model_id": "leejet/MiniMax-H3-GGUF",
                 "files": ["minimax_h3_fl2va-Q4_K_M.gguf", "qwen3vl_32b_minimax_h3-Q4_K_M.gguf"],
+            },
+            {
+                "source": "hf",
+                "model_id": "Comfy-Org/MiniMax-H3",
+                "files": ["vae/minimax_h3_video_vae_fp16.safetensors", "vae/minimax_h3_audio_vae_fp32.safetensors"],
+            },
+        ],
+    ),
+    _model(
+        "minimax-ref2va",
+        "MiniMax-H3 Ref2VA",
+        "Video",
+        ["video"],
+        "MiniMax-H3 Ref2VA pruned Q4_K_M GGUF (reference-image-to-video) with qwen3vl-32b text encoder and video/audio VAE supported by sd.cpp.",
+        [
+            {
+                "source": "hf",
+                "model_id": "leejet/MiniMax-H3-GGUF",
+                "files": ["minimax_h3_ref2va_pruned-Q4_K_M.gguf", "qwen3vl_32b_minimax_h3-Q4_K_M.gguf"],
             },
             {
                 "source": "hf",
@@ -890,6 +1137,9 @@ MODEL_DEFS = [
     ),
 ]
 
+for _item in MODEL_DEFS:
+    _item["params"] = MODEL_PARAMS.get(_item["key"], "")
+
 
 def list_model_defs() -> list[ModelInfo]:
     return [model_info(item) for item in MODEL_DEFS]
@@ -929,9 +1179,10 @@ def _relative_candidates(item: dict[str, Any]) -> list[str]:
 def model_info(item: dict[str, Any]) -> ModelInfo:
     resolved = None
     size = None
+    registered_files = list(item.get("files") or [])
     for rel in _relative_candidates(item):
         candidate = settings.modelhub_root / rel
-        found = _resolve_model_file(candidate)
+        found = _resolve_model_file(candidate, registered_files[0] if registered_files else None)
         if found:
             resolved = found
             size = found.stat().st_size
@@ -948,6 +1199,7 @@ def model_info(item: dict[str, Any]) -> ModelInfo:
         "family": item["family"],
         "capabilities": item["capabilities"],
         "preferred": item["preferred"],
+        "params": item.get("params", ""),
         "runtime": item["runtime"],
         "description": item["description"],
         "expected_files": item["expected_files"],
@@ -985,7 +1237,13 @@ def runtime_paths_for(key: str) -> dict[str, Path]:
     return roles
 
 
-def _resolve_model_file(path: Path) -> Path | None:
+def _resolve_model_file(path: Path, preferred_rel: str | None = None) -> Path | None:
+    # 多文件仓库（diffusion + 文本编码器同仓）必须用注册清单里的主模型文件，
+    # 不能按体积猜——umt5/qwen3vl 等编码器常比小尺寸 diffusion 模型更大。
+    if preferred_rel:
+        preferred = path / preferred_rel
+        if preferred.is_file() and _is_model_file(preferred):
+            return preferred
     if path.is_file() and _is_model_file(path):
         return path
     if not path.is_dir():

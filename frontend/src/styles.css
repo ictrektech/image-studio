@@ -559,3 +559,8 @@ pre { background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 14px; ov
 }
 .composer-video-hint { font-size: 11px; color: var(--muted); align-self: end; padding-bottom: 10px; }
 .job-thumb video { width: 100%; height: 100%; object-fit: cover; }
+.param-groups { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+.param-group { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px 12px; background: var(--surface-soft); }
+.param-group-title { font-size: 12px; font-weight: 760; color: var(--text); margin-bottom: 6px; }
+.param-group label { margin: 8px 0 4px; }
+.video-params .video-duration { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; }

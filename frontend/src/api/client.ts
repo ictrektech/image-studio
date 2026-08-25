@@ -29,6 +29,7 @@ export interface ModelInfo {
   preferred: boolean
   description: string
   expected_files: string[]
+  params?: string
   runtime?: ModelRuntime
   access_path: string
   resolved_path?: string

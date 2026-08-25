@@ -220,7 +220,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
           <button className="quiet-button" onClick={onRefresh} title={t.refreshModels}><RefreshCw size={15} /></button>
         </div>
         <select value={payload.model_key} onChange={e => switchModel(e.target.value)}>
-          {imageModels.map(model => <option key={model.key} value={model.key}>{model.name} · {model.family}</option>)}
+          {imageModels.map(model => <option key={model.key} value={model.key}>{model.name}{model.params ? ` (${model.params})` : ''} · {model.family}</option>)}
         </select>
         <div className={`inline-status ${modelReady ? 'ready' : 'missing'}`}>
           <strong>{selectedModel?.name || t.noModelsConfigured}</strong>
@@ -239,6 +239,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
               </div>
               <div><span>{t.source}</span><code>{selectedModel.source}</code></div>
               <div><span>{t.family}</span><code>{selectedModel.family}</code></div>
+              <div><span>{t.paramsLabel}</span><code>{selectedModel.params || '-'}</code></div>
               <div><span>{t.capabilities}</span><code>{selectedModel.capabilities.join(', ')}</code></div>
               <div><span>{t.modelId}</span><code>{selectedModel.model_id}</code></div>
               <div><span>{t.size}</span><code>{modelReady ? formatSize(selectedModel.size) : modelDownloading ? formatSize(selectedModel.downloaded_bytes ?? undefined) : '-'}</code></div>
@@ -469,32 +470,29 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
           <div><label>{t.width}</label><input type="number" value={payload.width} onChange={e => setPayload({ ...payload, width: Number(e.target.value) })} /></div>
           <div><label>{t.height}</label><input type="number" value={payload.height} onChange={e => setPayload({ ...payload, height: Number(e.target.value) })} /></div>
         </div>
-        <div className={`video-params${isVideoModel ? '' : ' param-ignored'}`}>
-          <div className="section-label">{t.videoParamsTitle}{!isVideoModel && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</div>
-          <div className="control-row two">
-            <div><label>{t.videoFrames}</label><input type="number" min="2" max="240" value={payload.video_frames} onChange={e => setPayload({ ...payload, video_frames: Number(e.target.value) })} /></div>
-            <div><label>{t.videoFps}</label><input type="number" min="1" max="60" value={payload.fps} onChange={e => setPayload({ ...payload, fps: Number(e.target.value) })} /></div>
-          </div>
-          {videoDuration && <span className="video-duration">{t.videoDurationHint} {videoDuration} {t.videoSeconds}</span>}
-        </div>
         <div className="control-row two">
           <div><label>{t.steps}</label><input type="number" value={payload.steps} onChange={e => setPayload({ ...payload, steps: Number(e.target.value) })} /></div>
           <div><label>{t.cfgScale}</label><input type="number" step="0.5" value={payload.cfg_scale} onChange={e => setPayload({ ...payload, cfg_scale: Number(e.target.value) })} /></div>
-        </div>
-        <div className={`control-row${isImg2Img && supportsStrength ? '' : ' param-ignored'}`}>
-          <div>
-            <label>{t.strength}{!(isImg2Img && supportsStrength) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label>
-            <input type="number" min="0" max="1" step="0.05" value={payload.strength} onChange={e => setPayload({ ...payload, strength: Number(e.target.value) })} />
-          </div>
         </div>
         <div className="control-row two">
           <div><label>{t.sampler}</label><select value={payload.sampler} onChange={e => setPayload({ ...payload, sampler: e.target.value })}><option value="euler_a">Euler A</option><option value="euler">Euler</option><option value="heun">Heun</option><option value="dpm++2m">DPM++ 2M</option></select></div>
           <div><label>{t.seed}</label><input type="number" title={t.randomSeedHint} value={payload.seed} onChange={e => setPayload({ ...payload, seed: Number(e.target.value) })} /></div>
         </div>
-        <div className={`control-row${isVideoModel ? ' param-ignored' : ''}`}>
-          <div>
-            <label>{t.batch}{isVideoModel && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label>
+        <div className="param-groups">
+          <div className={`param-group${isVideoModel ? ' param-ignored' : ''}`}>
+            <div className="param-group-title">{t.imageParamsTitle}{isVideoModel && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</div>
+            <label>{t.strength}{!(isImg2Img && supportsStrength) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label>
+            <input type="number" min="0" max="1" step="0.05" value={payload.strength} onChange={e => setPayload({ ...payload, strength: Number(e.target.value) })} />
+            <label>{t.batch}</label>
             <input type="number" min="1" max="4" value={payload.batch_count} onChange={e => setPayload({ ...payload, batch_count: Number(e.target.value) })} />
+          </div>
+          <div className={`param-group${isVideoModel ? '' : ' param-ignored'}`}>
+            <div className="param-group-title">{t.videoParamsTitle}{!isVideoModel && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</div>
+            <label>{t.videoFrames}</label>
+            <input type="number" min="2" max="240" value={payload.video_frames} onChange={e => setPayload({ ...payload, video_frames: Number(e.target.value) })} />
+            <label>{t.videoFps}</label>
+            <input type="number" min="1" max="60" value={payload.fps} onChange={e => setPayload({ ...payload, fps: Number(e.target.value) })} />
+            {videoDuration && <span className="video-duration">{t.videoDurationHint} {videoDuration} {t.videoSeconds}</span>}
           </div>
         </div>
         <p className="api-note">{t.paramsIgnoredHint}</p>

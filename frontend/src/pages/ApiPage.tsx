@@ -6,44 +6,52 @@ import { messages } from '../i18n'
 type T = typeof messages['zh-CN']
 
 // 内置注册表快照（实时状态以 GET /api/v1/models 为准）
-const MODEL_KEYS: [string, string, string, string][] = [
-  ['sd15', 'SD 1.x', 'Stable Diffusion v1.5 EMA', 'txt2img, img2img'],
-  ['sd2', 'SD 2.x', 'Stable Diffusion 2.1', 'txt2img, img2img'],
-  ['sd-turbo', 'SD Turbo', 'SD Turbo', 'txt2img, img2img'],
-  ['sdxl', 'SDXL', 'Stable Diffusion XL Base', 'txt2img, img2img'],
-  ['sdxl-turbo', 'SDXL Turbo', 'SDXL Turbo', 'txt2img, img2img'],
-  ['sd3', 'SD3', 'Stable Diffusion 3', 'txt2img'],
-  ['sd35', 'SD3.5', 'Stable Diffusion 3.5', 'txt2img'],
-  ['flux-schnell', 'FLUX', 'FLUX.1 Schnell', 'txt2img'],
-  ['flux-dev', 'FLUX', 'FLUX.1 Dev', 'txt2img'],
-  ['flux-kontext', 'FLUX Edit', 'FLUX.1 Kontext Dev', 'img2img, edit'],
-  ['flux2', 'FLUX', 'FLUX.2', 'txt2img'],
-  ['qwen-image', 'Qwen', 'Qwen Image', 'txt2img'],
-  ['qwen-image-edit', 'Qwen Edit', 'Qwen Image Edit', 'img2img, edit'],
-  ['lens', 'Image', 'Lens', 'txt2img'],
-  ['chroma', 'Image', 'Chroma', 'txt2img'],
-  ['chroma-radiance', 'Image', 'Chroma1 Radiance', 'txt2img'],
-  ['longcat-image', 'Image', 'LongCat Image', 'txt2img'],
-  ['longcat-image-edit', 'Image Edit', 'LongCat Image Edit', 'img2img, edit'],
-  ['z-image', 'Image', 'Z-Image', 'txt2img'],
-  ['minit2i', 'Image', 'MiniT2I', 'txt2img'],
-  ['ovis-image', 'Image', 'Ovis-Image', 'txt2img'],
-  ['anima', 'Image', 'Anima', 'txt2img'],
-  ['ernie-image', 'Image', 'ERNIE-Image', 'txt2img'],
-  ['boogu-image', 'Image', 'Boogu Image', 'txt2img'],
-  ['boogu-image-edit', 'Image Edit', 'Boogu Image Edit', 'img2img, edit'],
-  ['krea2', 'Image', 'Krea2', 'txt2img'],
-  ['mage-flow', 'Image', 'Mage-Flow', 'txt2img'],
-  ['mage-flow-edit', 'Image Edit', 'Mage-Flow Edit', 'img2img, edit'],
-  ['sefi-image', 'Image', 'SeFi-Image', 'txt2img'],
-  ['hidream-o1', 'Image', 'HiDream-O1-Image', 'txt2img'],
-  ['ideogram4', 'Image', 'Ideogram4', 'txt2img'],
-  ['wan21', 'Wan Video', 'Wan 2.1', 'video'],
-  ['wan22', 'Wan Video', 'Wan 2.2', 'video'],
-  ['ltx-video', 'Video', 'LTX Video', 'video'],
-  ['hunyuan-video', 'Video', 'HunyuanVideo 1.5', 'video'],
-  ['minimax-h3', 'Video', 'MiniMax-H3', 'video'],
-  ['lingbot-video', 'Video', 'LingBot Video', 'video'],
+const MODEL_KEYS: [string, string, string, string, string][] = [
+  ['sd15', '860M', 'SD 1.x', 'Stable Diffusion v1.5 EMA', 'txt2img, img2img'],
+  ['sd2', '865M', 'SD 2.x', 'Stable Diffusion 2.1', 'txt2img, img2img'],
+  ['sd-turbo', '860M', 'SD Turbo', 'SD Turbo', 'txt2img, img2img'],
+  ['sdxl', '3.5B', 'SDXL', 'Stable Diffusion XL Base', 'txt2img, img2img'],
+  ['sdxl-turbo', '3.5B', 'SDXL Turbo', 'SDXL Turbo', 'txt2img, img2img'],
+  ['sd3', '2B', 'SD3', 'Stable Diffusion 3', 'txt2img'],
+  ['sd35', '8.1B', 'SD3.5', 'Stable Diffusion 3.5 Large', 'txt2img'],
+  ['sd35-medium', '2.5B', 'SD3.5', 'Stable Diffusion 3.5 Medium', 'txt2img'],
+  ['flux-schnell', '12B', 'FLUX', 'FLUX.1 Schnell', 'txt2img'],
+  ['flux-dev', '12B', 'FLUX', 'FLUX.1 Dev', 'txt2img'],
+  ['flux-kontext', '12B', 'FLUX Edit', 'FLUX.1 Kontext Dev', 'img2img, edit'],
+  ['flux2', '32B', 'FLUX', 'FLUX.2', 'txt2img'],
+  ['qwen-image', '20B', 'Qwen', 'Qwen Image', 'txt2img'],
+  ['qwen-image-edit', '20B', 'Qwen Edit', 'Qwen Image Edit', 'img2img, edit'],
+  ['lens', '', 'Image', 'Lens', 'txt2img'],
+  ['chroma', '6B', 'Image', 'Chroma', 'txt2img'],
+  ['chroma-radiance', '6B', 'Image', 'Chroma1 Radiance', 'txt2img'],
+  ['longcat-image', '', 'Image', 'LongCat Image', 'txt2img'],
+  ['longcat-image-edit', '', 'Image Edit', 'LongCat Image Edit', 'img2img, edit'],
+  ['z-image', '6B', 'Image', 'Z-Image', 'txt2img'],
+  ['minit2i', '', 'Image', 'MiniT2I', 'txt2img'],
+  ['ovis-image', '', 'Image', 'Ovis-Image', 'txt2img'],
+  ['anima', '', 'Image', 'Anima', 'txt2img'],
+  ['ernie-image', '', 'Image', 'ERNIE-Image', 'txt2img'],
+  ['boogu-image', '', 'Image', 'Boogu Image', 'txt2img'],
+  ['boogu-image-edit', '', 'Image Edit', 'Boogu Image Edit', 'img2img, edit'],
+  ['krea2', '', 'Image', 'Krea2', 'txt2img'],
+  ['mage-flow', '', 'Image', 'Mage-Flow', 'txt2img'],
+  ['mage-flow-edit', '', 'Image Edit', 'Mage-Flow Edit', 'img2img, edit'],
+  ['sefi-image', '', 'Image', 'SeFi-Image', 'txt2img'],
+  ['hidream-o1', '', 'Image', 'HiDream-O1-Image', 'txt2img'],
+  ['ideogram4', '', 'Image', 'Ideogram4', 'txt2img'],
+  ['wan21', '1.3B', 'Wan Video', 'Wan 2.1 T2V 1.3B', 'video'],
+  ['wan21-t2v-14b', '14B', 'Wan Video', 'Wan 2.1 T2V 14B', 'video'],
+  ['wan21-i2v-14b', '14B', 'Wan Video', 'Wan 2.1 I2V 14B 480P', 'video (首帧 -i)'],
+  ['wan22', '5B', 'Wan Video', 'Wan 2.2 TI2V 5B', 'video (首帧 -i)'],
+  ['wan22-t2v-a14b', '14B×2', 'Wan Video', 'Wan 2.2 T2V A14B', 'video'],
+  ['wan22-i2v-a14b', '14B×2', 'Wan Video', 'Wan 2.2 I2V A14B', 'video (首帧 -i)'],
+  ['ltx-video', '22B', 'Video', 'LTX Video', 'video (首帧 -i)'],
+  ['hunyuan-video', '8.3B', 'Video', 'HunyuanVideo 1.5 T2V 720P', 'video'],
+  ['hunyuan-i2v-720p', '8.3B', 'Video', 'HunyuanVideo 1.5 I2V 720P', 'video (首帧 -i)'],
+  ['hunyuan-t2v-480p', '8.3B', 'Video', 'HunyuanVideo 1.5 T2V 480P', 'video'],
+  ['minimax-h3', '', 'Video', 'MiniMax-H3', 'video (首帧 -i)'],
+  ['minimax-ref2va', '', 'Video', 'MiniMax-H3 Ref2VA', 'video (参考图 -r)'],
+  ['lingbot-video', '1.3B', 'Video', 'LingBot Video', 'video (首帧 -i)'],
 ]
 
 const PARAMS: [string, string, string, keyof T & string][] = [
@@ -243,12 +251,13 @@ export default function ApiPage({ t }: { t: T }) {
       <p>{t.apiModelsHelp}</p>
       <table className="api-table api-table-models">
         <thead>
-          <tr><th>{t.apiColKey}</th><th>{t.apiColFamily}</th><th>{t.apiColName}</th><th>{t.apiColCaps}</th></tr>
+          <tr><th>{t.apiColKey}</th><th>{t.paramsLabel}</th><th>{t.apiColFamily}</th><th>{t.apiColName}</th><th>{t.apiColCaps}</th></tr>
         </thead>
         <tbody>
-          {MODEL_KEYS.map(([key, family, name, caps]) => (
+          {MODEL_KEYS.map(([key, params, family, name, caps]) => (
             <tr key={key}>
               <td><code>{key}</code></td>
+              <td>{params || '—'}</td>
               <td>{family}</td>
               <td>{name}</td>
               <td><span className={caps.includes('video') ? 'api-cap api-cap-video' : 'api-cap'}>{caps}</span></td>

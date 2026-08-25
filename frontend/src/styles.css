@@ -408,3 +408,13 @@ pre { background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 14px; ov
   .model-card-header, .model-actions { flex-direction: column; align-items: stretch; }
   .thumb-strip { grid-template-columns: repeat(4, 1fr); }
 }
+
+/* ---------- ApiPage 详细指南 ---------- */
+.api-guide-code { cursor: pointer; }
+.api-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0 4px; }
+.api-table th { text-align: left; padding: 8px 10px; border-bottom: 2px solid var(--border, #2a2f3a); color: var(--text2, #8b93a7); font-weight: 600; white-space: nowrap; }
+.api-table td { padding: 7px 10px; border-bottom: 1px solid var(--border, #2a2f3a); vertical-align: top; }
+.api-table td code, .api-table td .api-cap { background: var(--surface2, #1b2029); border: 1px solid var(--border, #2a2f3a); border-radius: 4px; padding: 1px 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; }
+.api-table-models td:nth-child(2), .api-table-models td:nth-child(3) { white-space: nowrap; }
+.api-cap-video { opacity: .7; }
+.api-note { font-size: 12.5px; color: var(--text2, #8b93a7); line-height: 1.7; margin: 8px 0 0; }

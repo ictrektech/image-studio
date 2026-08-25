@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, Database, Download, DownloadCloud, ImageIcon, Loader2, RefreshCw, RotateCcw, Sparkles, Square, Trash2, UserCircle2, Wand2 } from 'lucide-react'
+import { CheckCircle2, Database, Download, DownloadCloud, AlertTriangle, ImageIcon, Loader2, RefreshCw, RotateCcw, Sparkles, Square, Trash2, UserCircle2, Wand2 } from 'lucide-react'
 import { api, GeneratePayload, JobRecord, ModelInfo, SessionInfo } from '../api/client'
 import { messages } from '../i18n'
 
@@ -217,6 +217,9 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
             </div>
             {!modelReady && (
               <>
+                {selectedModel.status === 'failed' && selectedModel.error && (
+                  <code className="model-brief-error">⚠ {selectedModel.error}</code>
+                )}
                 <button
                   className="secondary-action model-brief-download"
                   disabled={modelDownloading}
@@ -285,6 +288,12 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
         <div className={`preview-canvas ${selectedOutputUrl ? 'has-output' : ''}`}>
           {selectedOutputUrl ? (
             <img src={selectedOutputUrl} alt="Generated output" />
+          ) : selectedJob?.status === 'failed' ? (
+            <div className="empty-preview error-preview">
+              <AlertTriangle size={42} />
+              <strong>{t.generationFailed}</strong>
+              <code className="job-error-detail">{selectedJob.error || t.modelActionFailed}</code>
+            </div>
           ) : (
             <div className="empty-preview">
               <ImageIcon size={42} />
@@ -325,6 +334,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
                     <span>{job.width} x {job.height} · {timeOf(job.created_at)}</span>
                   </div>
                   <p>{job.prompt}</p>
+                  {job.status === 'failed' && job.error && <span className="turn-error">⚠ {job.error.slice(0, 140)}{job.error.length > 140 ? '…' : ''}</span>}
                   {lineage && <span className="turn-lineage">↳ {lineage}</span>}
                   <div className="turn-actions">
                     {output && <button className="quiet-button" onClick={() => reuseOutput(job, output)}><Wand2 size={14} />{t.continueThread}</button>}

@@ -115,6 +115,7 @@ const zh = {
   confirmDelete: '确认删除这张图片和对应任务？',
   serviceUnavailable: '服务暂不可用',
   submitFailed: '生成任务提交失败',
+  generationFailed: '生成失败',
 }
 
 const en: typeof zh = {
@@ -232,6 +233,7 @@ const en: typeof zh = {
   confirmDelete: 'Delete this image and its job?',
   serviceUnavailable: 'Service unavailable',
   submitFailed: 'Failed to submit generation job',
+  generationFailed: 'Generation failed',
 }
 
 export const messages = { 'zh-CN': zh, en }

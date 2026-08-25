@@ -135,7 +135,17 @@ def build_sd_args(job: JobRecord, output: Path) -> list[str]:
 
 def run_sd_cpp(job: JobRecord, output: Path) -> None:
     args = build_sd_args(job, output)
-    subprocess.run(args, check=True, timeout=settings.default_timeout_seconds)
+    result = subprocess.run(
+        args,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=settings.default_timeout_seconds,
+    )
+    if result.returncode != 0:
+        stderr_tail = (result.stderr or "").strip().splitlines()[-6:]
+        detail = " | ".join(line.strip() for line in stderr_tail if line.strip())
+        raise RuntimeError(f"sd-cli 退出码 {result.returncode}: {detail or '无错误输出'}")
 
 
 def init_image_path(job: JobRecord) -> Path | None:

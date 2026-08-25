@@ -108,14 +108,17 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
     "sd-turbo": _runtime(defaults={"steps": 4, "cfg_scale": 1.0, "sampler": "euler_a"}),
     "sdxl": _runtime(defaults={"steps": 30, "cfg_scale": 7.0, "sampler": "euler_a"}),
     "sdxl-turbo": _runtime(defaults={"steps": 4, "cfg_scale": 1.0, "sampler": "euler_a"}),
-    "sd3": _runtime(extra_args=["--clip-on-cpu"], defaults={"steps": 28, "cfg_scale": 4.5, "sampler": "euler"}),
+    "sd3": _runtime(
+        extra_args=["--clip-on-cpu", "--vae-tiling"],
+        defaults={"steps": 28, "cfg_scale": 4.5, "sampler": "euler"},
+    ),
     "sd35": _runtime(
         roles={
             "clip_l": "text_encoders/clip_l.safetensors",
             "clip_g": "text_encoders/clip_g.safetensors",
             "t5xxl": "text_encoders/t5xxl_fp16.safetensors",
         },
-        extra_args=["--clip-on-cpu"],
+        extra_args=["--clip-on-cpu", "--vae-tiling"],
         defaults={"steps": 28, "cfg_scale": 4.5, "sampler": "euler"},
     ),
     "flux-schnell": _runtime(

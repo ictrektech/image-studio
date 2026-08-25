@@ -1,7 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Database, Download, ImageIcon, RefreshCw, RotateCcw, Sparkles, Trash2, UserCircle2, Wand2 } from 'lucide-react'
+import { CheckCircle2, Database, Download, DownloadCloud, ImageIcon, Loader2, RefreshCw, RotateCcw, Sparkles, Trash2, UserCircle2, Wand2 } from 'lucide-react'
 import { api, GeneratePayload, JobRecord, ModelInfo, SessionInfo } from '../api/client'
 import { messages } from '../i18n'
+
+function formatSize(bytes?: number) {
+  if (!bytes) return '-'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let value = bytes
+  let idx = 0
+  while (value >= 1024 && idx < units.length - 1) {
+    value /= 1024
+    idx += 1
+  }
+  return `${value.toFixed(idx === 0 ? 0 : 2)} ${units[idx]}`
+}
 
 const initialPayload: GeneratePayload = {
   prompt: 'a cozy mountain cabin at dusk, warm lights, snowy pine trees, cinematic lighting, ultra detailed',
@@ -126,6 +138,17 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
     setPayload({ ...payload, init_job_id: '', init_filename: '' })
   }
 
+  const downloadModel = async () => {
+    if (!selectedModel || selectedModel.status === 'ready' || selectedModel.status === 'downloading') return
+    try {
+      await api.pullModel(selectedModel.key)
+      onRefresh()
+    } catch { /* 模型管理页有完整反馈，这里静默刷新即可 */ }
+  }
+
+  const modelDownloading = selectedModel?.status === 'downloading'
+  const modelProgress = modelDownloading ? Math.round((selectedModel?.progress ?? 0) * 100) : 0
+
   const deleteSelectedJob = async () => {
     if (!selectedJob) return
     await deleteJob(selectedJob)
@@ -168,6 +191,37 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
           <span>{modelSupportsImages ? (modelReady ? t.modelReady : t.modelMissing) : t.chooseModelHint}</span>
           <code>{selectedModel?.resolved_path || selectedModel?.access_path || '-'}</code>
         </div>
+        {selectedModel && (
+          <div className={`model-brief-card ${modelReady ? 'ready' : modelDownloading ? 'downloading' : 'pending'}`}>
+            <div className="model-brief-meta">
+              <div><span>{t.status}</span>
+                <code className="model-brief-status">
+                  {modelReady && <CheckCircle2 size={13} />}
+                  {modelDownloading && <Loader2 size={13} className="spin" />}
+                  {modelReady ? t.modelReady : modelDownloading ? `${t.modelDownloading} ${modelProgress}%` : selectedModel.status === 'failed' ? t.modelFailed : t.modelMissing}
+                </code>
+              </div>
+              <div><span>{t.source}</span><code>{selectedModel.source}</code></div>
+              <div><span>{t.family}</span><code>{selectedModel.family}</code></div>
+              <div><span>{t.capabilities}</span><code>{selectedModel.capabilities.join(', ')}</code></div>
+              <div><span>{t.modelId}</span><code>{selectedModel.model_id}</code></div>
+              <div><span>{t.size}</span><code>{modelReady ? formatSize(selectedModel.size) : modelDownloading ? formatSize(selectedModel.downloaded_bytes ?? undefined) : '-'}</code></div>
+            </div>
+            {!modelReady && (
+              <>
+                <button
+                  className="secondary-action model-brief-download"
+                  disabled={modelDownloading}
+                  onClick={downloadModel}
+                >
+                  {modelDownloading ? <Loader2 size={14} className="spin" /> : <DownloadCloud size={14} />}
+                  {modelDownloading ? `${t.modelDownloading} ${modelProgress}%` : t.downloadModel}
+                </button>
+                {modelDownloading && <progress className="model-brief-progress" max="100" value={modelProgress} />}
+              </>
+            )}
+          </div>
+        )}
         {(!modelReady || !modelSupportsImages) && (
           <button className="secondary-action model-jump-action" onClick={onOpenModels}>
             <Database size={15} />{t.openModelManagement}

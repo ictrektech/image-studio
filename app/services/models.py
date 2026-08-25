@@ -1215,7 +1215,10 @@ def model_info(item: dict[str, Any]) -> ModelInfo:
 def runtime_paths_for(key: str) -> dict[str, Path]:
     """按 runtime 角色解析辅助文件（VAE / 文本编码器等）的实际路径。
 
-    角色值是仓库内相对路径，依次在模型各来源的 current 目录下查找。
+    角色值是仓库内相对路径。优先在各来源的 current 目录下查找；若未命中
+    （current 只指向某一 revision 的 snapshot，而历史下载可能把部分文件
+    下到了 main/其他 revision 目录），回退扫描该仓库所有 snapshot 目录，
+    命中即用，避免"同仓库多文件分散到不同 snapshot 导致辅助文件缺失"。
     """
     item = get_model_def(key)
     roles: dict[str, Path] = {}
@@ -1223,11 +1226,22 @@ def runtime_paths_for(key: str) -> dict[str, Path]:
     for role, rel in (item["runtime"].get("roles") or {}).items():
         found = None
         for spec in item["sources"]:
-            base = settings.modelhub_root / "export" / spec["source"] / spec["model_id"] / "current"
-            candidate = base / rel
+            repo_root = settings.modelhub_root / "export" / spec["source"] / spec["model_id"]
+            # 1) 优先 current
+            candidate = repo_root / "current" / rel
             if candidate.exists():
                 found = candidate
                 break
+            # 2) 回退：扫描所有 snapshot 目录（current 可能只指向部分文件所在 revision）
+            snapshots_dir = repo_root / "snapshots"
+            if snapshots_dir.is_dir():
+                for snap in sorted(snapshots_dir.iterdir(), reverse=True):
+                    candidate = snap / rel
+                    if candidate.exists():
+                        found = candidate
+                        break
+                if found:
+                    break
         if found:
             roles[role] = found
         else:

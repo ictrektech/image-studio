@@ -24,6 +24,16 @@ from app.config import settings  # noqa: E402
 
 logger = logging.getLogger("image-studio.hf-downloader")
 
+# HF endpoint 候选列表：默认 hf-mirror 优先，失败自动切 huggingface.co；
+# 可用 IMAGE_STUDIO_HF_ENDPOINTS 配置更多镜像（逗号分隔）。hf-mirror 偶发
+# "Server disconnected" 不应让整次下载卡死或停掉。
+_HF_ENDPOINTS: list[str] = [
+    e.strip() for e in os.getenv(
+        "IMAGE_STUDIO_HF_ENDPOINTS",
+        "https://hf-mirror.com,https://huggingface.co",
+    ).split(",") if e.strip()
+]
+
 _tasks: dict[str, dict[str, Any]] = {}
 # 每个模型 key 当前活跃的桥接（用于新下载接管时立即关闭旧记录，
 # 避免旧循环在文件边界退出前与新模式同时刷新任务记录）
@@ -110,7 +120,11 @@ async def _run(key: str, sources: list[dict[str, Any]]) -> None:
             if state.get("cancel"):
                 cancelled = True
                 break
-            revision = await asyncio.to_thread(_latest_revision, repo_id)
+            # 同一仓库的所有文件必须下到同一个 snapshot 目录，否则 current
+            # 链接只指向其中一个 revision，其余文件会找不到。优先复用仓库
+            # 已有的 snapshot 目录（之前下载可能已建），避免新解析的 revision
+            # 与旧目录漂移（_latest_revision 在 endpoint 间可能返回不同值）。
+            revision = _existing_snapshot_revision(repo_id) or await asyncio.to_thread(_latest_revision, repo_id)
             target = snapshot_dir({"source": "hf", "model_id": repo_id}) / revision
             for filename in files:
                 if state.get("cancel"):
@@ -226,66 +240,119 @@ class _TaskBridge:
 
 
 def _expected_bytes_per_repo(specs: list[tuple[str, list[str]]]) -> dict[str, int]:
-    """按仓库汇总远端文件大小。"""
-    api = HfApi()
+    """按仓库汇总远端文件大小。
+
+    遍历 _HF_ENDPOINTS 依次重试，任一 endpoint 成功即停止；全部失败才
+    返回 0（此时下载进度无法按百分比计算，但不会阻断下载本身）。
+    """
     totals: dict[str, int] = {}
     for repo_id, files in specs:
         if not files:
             totals[repo_id] = 0
             continue
         total = 0
-        try:
-            for entry in api.list_repo_tree(repo_id, recursive=True):
-                size = getattr(entry, "size", None)
-                if size and any(fnmatch.fnmatch(entry.path, pattern) for pattern in files):
-                    total += size
-        except Exception as exc:
-            logger.warning("获取 %s 文件大小失败: %s", repo_id, exc)
+        for ep in _HF_ENDPOINTS:
+            try:
+                api = HfApi(endpoint=ep)
+                for entry in api.list_repo_tree(repo_id, recursive=True):
+                    size = getattr(entry, "size", None)
+                    if size and any(fnmatch.fnmatch(entry.path, pattern) for pattern in files):
+                        total += size
+                break  # 本仓库成功拿到大小，不再尝试下一个 endpoint
+            except Exception as exc:
+                logger.warning("获取 %s 文件大小失败 (%s): %s", repo_id, ep, exc)
+                continue
+        if total == 0:
+            logger.warning("所有 endpoint 均未能获取 %s 文件大小，进度将按已下载量显示", repo_id)
         totals[repo_id] = total
     return totals
 
 
 def _download_file(repo_id: str, filename: str, target_dir: Path) -> str:
-    return hf_hub_download(
-        repo_id=repo_id,
-        filename=filename,
-        local_dir=str(target_dir),
-    )
+    """下载单个文件，失败时在多个 endpoint 间重试（共 3 轮）。
+
+    hf_hub_download 读取全局 HF_ENDPOINT，这里在重试时切换它；下载是顺序
+    执行的（max_concurrency=1），切换全局环境变量的竞态可忽略。断点续传
+    由 hf_hub_download 的 .incomplete 机制保证，重试不会从头来。
+    """
+    last_exc: Exception | None = None
+    for attempt in range(3):
+        for ep in _HF_ENDPOINTS:
+            try:
+                os.environ["HF_ENDPOINT"] = ep
+                return hf_hub_download(
+                    repo_id=repo_id,
+                    filename=filename,
+                    local_dir=str(target_dir),
+                )
+            except Exception as exc:
+                last_exc = exc
+                logger.warning("下载 %s/%s 失败 (%s, 第 %d 轮): %s", repo_id, filename, ep, attempt + 1, exc)
+                continue
+    assert last_exc is not None
+    raise last_exc
 
 
 def _latest_revision(repo_id: str) -> str:
     """取远端当前 commit 作为 snapshot 目录名，与 HF 缓存约定一致；失败退回 main。"""
-    try:
-        info = HfApi().model_info(repo_id)
-        return info.sha or "main"
-    except Exception as exc:
-        logger.warning("获取 %s 版本信息失败，使用 main: %s", repo_id, exc)
-        return "main"
-
-
-def _expected_bytes(specs: list[tuple[str, list[str]]]) -> int:
-    """按文件清单汇总远端文件大小；失败返回 0（进度退化为纯字节数展示）。"""
-    api = HfApi()
-    total = 0
-    for repo_id, files in specs:
-        if not files:
-            continue
+    for ep in _HF_ENDPOINTS:
         try:
-            for entry in api.list_repo_tree(repo_id, recursive=True):
-                size = getattr(entry, "size", None)
-                if size and any(fnmatch.fnmatch(entry.path, pattern) for pattern in files):
-                    total += size
+            info = HfApi(endpoint=ep).model_info(repo_id)
+            return info.sha or "main"
         except Exception as exc:
-            logger.warning("获取 %s 文件大小失败: %s", repo_id, exc)
-    return total
+            logger.warning("获取 %s 版本信息失败 (%s)，尝试下一个 endpoint: %s", repo_id, ep, exc)
+            continue
+    return "main"
+
+
+def _existing_snapshot_revision(repo_id: str) -> str | None:
+    """返回该仓库已存在的 snapshot 目录名（优先 current 指向的，其次任意非空）。
+
+    用于复用历史下载的 revision 目录，避免 _latest_revision 在 endpoint 间
+    漂移导致同一仓库多文件分散到不同 snapshot。
+    """
+    _MODEL_EXTS = {".safetensors", ".ckpt", ".pt", ".pth", ".gguf"}
+    root = snapshot_dir({"source": "hf", "model_id": repo_id})
+    if not root.is_dir():
+        return None
+    # 优先 current 指向的 revision
+    current_link = root.parent / "current"
+    try:
+        if current_link.is_symlink():
+            target = current_link.resolve()
+            if target.is_dir():
+                return target.name
+    except OSError:
+        pass
+    # 任意已存在且含实际模型文件的 snapshot 目录
+    for snap in sorted(root.iterdir(), reverse=True):
+        if not snap.is_dir():
+            continue
+        for f in snap.rglob("*"):
+            if f.is_file() and f.suffix.lower() in _MODEL_EXTS:
+                return snap.name
+    return None
 
 
 async def _heartbeat(key: str, specs: list[tuple[str, list[str]]], per_repo_totals: dict[str, int], bridge: _TaskBridge) -> None:
     state = _tasks.get(key)
     if not state:
         return
+    last_total_retry = 0.0
     while True:
         await asyncio.sleep(2)
+        # 一开始没拿到远端文件大小（endpoint 抖动）时定期重试补全，
+        # 否则 total_bytes 恒为 0、progress 永远停在 0%。
+        if state.get("total_bytes", 0) == 0 and time.monotonic() - last_total_retry > 30:
+            last_total_retry = time.monotonic()
+            try:
+                fetched = await asyncio.to_thread(_expected_bytes_per_repo, specs)
+                if any(fetched.values()):
+                    per_repo_totals.update(fetched)
+                    state["total_bytes"] = sum(fetched.values())
+                    logger.info("补全下载总大小: %s = %d 字节", key, state["total_bytes"])
+            except Exception as exc:
+                logger.warning("重试获取下载总大小失败: %s", exc)
         downloaded_total = 0
         for repo_id, _ in specs:
             downloaded = await asyncio.to_thread(_dir_bytes, snapshot_dir({"source": "hf", "model_id": repo_id}))

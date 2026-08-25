@@ -564,3 +564,15 @@ pre { background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 14px; ov
 .param-group-title { font-size: 12px; font-weight: 760; color: var(--text); margin-bottom: 6px; }
 .param-group label { margin: 8px 0 4px; }
 .video-params .video-duration { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; }
+.page-stack { display: flex; flex-direction: column; gap: 14px; }
+.current-job-bar {
+  display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.035); font-size: 12px; flex-wrap: wrap;
+}
+.current-job-label { font-weight: 760; color: var(--text); white-space: nowrap; }
+.current-job-bar progress { flex: 1; min-width: 120px; }
+.current-job-pct { font-weight: 700; color: var(--accent-strong); white-space: nowrap; }
+.current-job-prompt { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40%; }
+.side-param-block .control-row { margin-top: 10px; }
+.side-param-block .control-row:first-of-type { margin-top: 0; }

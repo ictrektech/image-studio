@@ -212,8 +212,19 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
   const sortedJobs = useMemo(() => [...jobs].reverse(), [jobs])
 
   return (
+    <div className="page-stack">
+      {jobs[0] && (
+        <div className="current-job-bar">
+          <span className="current-job-label">{t.currentJob}</span>
+          <span className={`job-status ${jobs[0].status}`}>{jobs[0].status}</span>
+          <code>{jobs[0].job_id}</code>
+          <progress max="1" value={jobs[0].progress} />
+          <span className="current-job-pct">{Math.round(jobs[0].progress * 100)}%</span>
+          <span className="current-job-prompt">{jobs[0].prompt.slice(0, 60)}{jobs[0].prompt.length > 60 ? '…' : ''}</span>
+        </div>
+      )}
     <div className="workspace-grid chat-workspace">
-      {/* 左栏：模型 */}
+      {/* 左栏：模型 + 图片生成参数 */}
       <section className="panel side-panel studio-panel">
         <div className="panel-heading">
           <div className="panel-title">{t.modelPanelTitle}</div>
@@ -272,6 +283,32 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
             <Database size={15} />{t.openModelManagement}
           </button>
         )}
+
+        <div className={`side-param-block${isVideoModel ? ' param-ignored' : ''}`}>
+          <div className="section-label">{t.imageParamsTitle}{isVideoModel && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</div>
+          <div className="control-row two">
+            <div><label>{t.width}</label><input type="number" value={payload.width} onChange={e => setPayload({ ...payload, width: Number(e.target.value) })} /></div>
+            <div><label>{t.height}</label><input type="number" value={payload.height} onChange={e => setPayload({ ...payload, height: Number(e.target.value) })} /></div>
+          </div>
+          <div className="control-row two">
+            <div><label>{t.steps}</label><input type="number" value={payload.steps} onChange={e => setPayload({ ...payload, steps: Number(e.target.value) })} /></div>
+            <div><label>{t.cfgScale}</label><input type="number" step="0.5" value={payload.cfg_scale} onChange={e => setPayload({ ...payload, cfg_scale: Number(e.target.value) })} /></div>
+          </div>
+          <div className="control-row two">
+            <div><label>{t.sampler}</label><select value={payload.sampler} onChange={e => setPayload({ ...payload, sampler: e.target.value })}><option value="euler_a">Euler A</option><option value="euler">Euler</option><option value="heun">Heun</option><option value="dpm++2m">DPM++ 2M</option></select></div>
+            <div><label>{t.seed}</label><input type="number" title={t.randomSeedHint} value={payload.seed} onChange={e => setPayload({ ...payload, seed: Number(e.target.value) })} /></div>
+          </div>
+          <div className="control-row two">
+            <div>
+              <label>{t.strength}{!(isImg2Img && supportsStrength) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label>
+              <input type="number" min="0" max="1" step="0.05" value={payload.strength} onChange={e => setPayload({ ...payload, strength: Number(e.target.value) })} />
+            </div>
+            <div>
+              <label>{t.batch}{isVideoModel && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label>
+              <input type="number" min="1" max="4" value={payload.batch_count} onChange={e => setPayload({ ...payload, batch_count: Number(e.target.value) })} />
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* 中间：聊天主窗口 */}
@@ -455,10 +492,10 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
         </div>
       </section>
 
-      {/* 右栏：参数 */}
+      {/* 右栏：视频生成参数 */}
       <aside className="panel detail-panel studio-panel">
         <div className="panel-heading">
-          <div className="panel-title">{t.paramsPanelTitle}</div>
+          <div className="panel-title">{t.videoParamsTitle}{!isVideoModel && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</div>
           <button className="quiet-button" onClick={() => setPayload(initialPayload)} title={t.reset}><RotateCcw size={15} /></button>
         </div>
         <div className={`inline-status ${isImg2Img ? 'ready' : ''}`}>
@@ -466,46 +503,14 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
           <span>{isVideoModel ? t.videoModelHint : isImg2Img ? (isEditModel ? t.imageEditHint : t.sourceImageHint) : t.previewHint}</span>
           {isImg2Img && <code>{payload.init_input_id || `${payload.init_job_id}/${payload.init_filename}`}</code>}
         </div>
-        <div className="control-row two">
-          <div><label>{t.width}</label><input type="number" value={payload.width} onChange={e => setPayload({ ...payload, width: Number(e.target.value) })} /></div>
-          <div><label>{t.height}</label><input type="number" value={payload.height} onChange={e => setPayload({ ...payload, height: Number(e.target.value) })} /></div>
-        </div>
-        <div className="control-row two">
-          <div><label>{t.steps}</label><input type="number" value={payload.steps} onChange={e => setPayload({ ...payload, steps: Number(e.target.value) })} /></div>
-          <div><label>{t.cfgScale}</label><input type="number" step="0.5" value={payload.cfg_scale} onChange={e => setPayload({ ...payload, cfg_scale: Number(e.target.value) })} /></div>
-        </div>
-        <div className="control-row two">
-          <div><label>{t.sampler}</label><select value={payload.sampler} onChange={e => setPayload({ ...payload, sampler: e.target.value })}><option value="euler_a">Euler A</option><option value="euler">Euler</option><option value="heun">Heun</option><option value="dpm++2m">DPM++ 2M</option></select></div>
-          <div><label>{t.seed}</label><input type="number" title={t.randomSeedHint} value={payload.seed} onChange={e => setPayload({ ...payload, seed: Number(e.target.value) })} /></div>
-        </div>
-        <div className="param-groups">
-          <div className={`param-group${isVideoModel ? ' param-ignored' : ''}`}>
-            <div className="param-group-title">{t.imageParamsTitle}{isVideoModel && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</div>
-            <label>{t.strength}{!(isImg2Img && supportsStrength) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label>
-            <input type="number" min="0" max="1" step="0.05" value={payload.strength} onChange={e => setPayload({ ...payload, strength: Number(e.target.value) })} />
-            <label>{t.batch}</label>
-            <input type="number" min="1" max="4" value={payload.batch_count} onChange={e => setPayload({ ...payload, batch_count: Number(e.target.value) })} />
+        <div className={`side-param-block${isVideoModel ? '' : ' param-ignored'}`}>
+          <div className="control-row two">
+            <div><label>{t.videoFrames}</label><input type="number" min="2" max="240" value={payload.video_frames} onChange={e => setPayload({ ...payload, video_frames: Number(e.target.value) })} /></div>
+            <div><label>{t.videoFps}</label><input type="number" min="1" max="60" value={payload.fps} onChange={e => setPayload({ ...payload, fps: Number(e.target.value) })} /></div>
           </div>
-          <div className={`param-group${isVideoModel ? '' : ' param-ignored'}`}>
-            <div className="param-group-title">{t.videoParamsTitle}{!isVideoModel && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</div>
-            <label>{t.videoFrames}</label>
-            <input type="number" min="2" max="240" value={payload.video_frames} onChange={e => setPayload({ ...payload, video_frames: Number(e.target.value) })} />
-            <label>{t.videoFps}</label>
-            <input type="number" min="1" max="60" value={payload.fps} onChange={e => setPayload({ ...payload, fps: Number(e.target.value) })} />
-            {videoDuration && <span className="video-duration">{t.videoDurationHint} {videoDuration} {t.videoSeconds}</span>}
-          </div>
+          {videoDuration && <span className="video-duration">{t.videoDurationHint} {videoDuration} {t.videoSeconds}</span>}
         </div>
         <p className="api-note">{t.paramsIgnoredHint}</p>
-        <div className="side-divider" />
-        <div className="panel-title small-title">{t.currentJob}</div>
-        {jobs[0] ? (
-          <>
-            <div className="kv"><span>{t.jobId}</span><code>{jobs[0].job_id}</code></div>
-            <div className="kv"><span>{t.progress}</span><code>{Math.round(jobs[0].progress * 100)}%</code></div>
-            <progress max="1" value={jobs[0].progress} />
-            <div className="kv"><span>{t.modelPath}</span><code>{jobs[0].model_path}</code></div>
-          </>
-        ) : <div className="empty-small">{t.noJobs}</div>}
       </aside>
 
       {playingUrl && (
@@ -516,6 +521,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
           </div>
         </div>
       )}
+    </div>
     </div>
   )
 }

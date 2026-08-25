@@ -34,14 +34,19 @@ Main endpoints:
 | `GET` | `/api/v1/me` | Current session user key (who the token belongs to) |
 | `GET` | `/api/v1/settings` | Current VOS user's app settings |
 | `PUT` | `/api/v1/settings` | Save current VOS user's language preference |
-| `POST` | `/api/v1/generate` | Create a generation job |
+| `POST` | `/api/v1/generate` | Create a generation job (non-blocking, returns job record) |
 | `GET` | `/api/v1/jobs` | List current user's jobs |
 | `GET` | `/api/v1/jobs/{job_id}` | Read one job |
 | `DELETE` | `/api/v1/jobs/{job_id}` | Delete one job and its generated files |
 | `GET` | `/api/v1/outputs` | List generated files for current user |
 | `GET` | `/api/v1/outputs/{job_id}/{filename}` | Download one generated file |
+| `POST` | `/api/v1/inputs` | Upload an img2img / edit reference image (png/jpg/jpeg/webp, ≤20MB), returns `input_id` |
+| `GET` | `/api/v1/inputs` | List current user's uploaded reference images |
+| `GET` | `/api/v1/inputs/{input_id}` | Download one uploaded reference image |
+| `DELETE` | `/api/v1/inputs/{input_id}` | Delete one uploaded reference image |
 | `GET` | `/api/v1/models` | List managed model definitions and state |
 | `POST` | `/api/v1/models/{key}/pull` | Trigger Model Hub pull or HF direct download |
+| `POST` | `/api/v1/models/{key}/stop` | Stop an in-flight download (resumable) |
 | `POST` | `/api/v1/models/{key}/sync` | Ask Model Hub to sync local model registry |
 
 ### Authentication and user isolation

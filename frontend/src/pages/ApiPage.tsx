@@ -59,13 +59,20 @@ const PARAMS: [string, string, string, keyof T & string][] = [
   ['batch_count', 'int · 1~4', '1', 'apiP_batch'],
   ['init_job_id', 'string', '""', 'apiP_init_job'],
   ['init_filename', 'string', '""', 'apiP_init_file'],
+  ['init_input_id', 'string', '""', 'apiP_init_input'],
 ]
 
-const FLOW_EXAMPLE = `# 1) 创建生成任务（校验后立即返回，不阻塞）
+const FLOW_EXAMPLE = `# 0)（可选，img2img / edit 模型）先上传参考图，拿到 input_id
+curl -X POST https://<vos-host>/api/com.ictrek.image-studio/api/v1/inputs \\
+  -H "Authorization: Bearer <token>" -F "file=@ref.png"
+# → {"input_id":"in_20260825_...","url":"/api/v1/inputs/in_20260825_..."}
+
+# 1) 创建生成任务（校验后立即返回，不阻塞；引用上传图用 init_input_id，
+#    引用历史输出用 init_job_id + init_filename，二者给其一即可）
 curl -X POST https://<vos-host>/api/com.ictrek.image-studio/api/v1/generate \\
   -H "Authorization: Bearer <token>" \\
   -H "Content-Type: application/json" \\
-  -d '{"prompt":"a quiet tea house by the lake","model_key":"sdxl","width":1024,"height":1024}'
+  -d '{"prompt":"a quiet tea house by the lake","model_key":"sdxl","width":1024,"height":1024,"init_input_id":"in_20260825_...","strength":0.7}'
 # → {"job_id":"j_ab12...","status":"queued",...}
 
 # 2) 轮询任务直到 succeeded / failed
@@ -134,6 +141,7 @@ export default function ApiPage({ t }: { t: T }) {
         <div><span>{t.outputFile}</span><code>GET /api/v1/outputs/&lt;job_id&gt;/&lt;filename&gt;</code></div>
         <div><span>Outputs</span><code>GET /api/v1/outputs</code></div>
         <div><span>Pull</span><code>POST /api/v1/models/&lt;key&gt;/pull?force=</code> <code>POST …/stop</code></div>
+        <div><span>Upload input</span><code>POST /api/v1/inputs</code> <code>GET /api/v1/inputs</code></div>
         <div><span>{t.modelList}</span><code>GET /api/v1/models</code></div>
         <div><span>{t.sessionUser}</span><code>GET /api/v1/me</code></div>
         <div><span>{t.healthCheck}</span><code>GET /health</code></div>

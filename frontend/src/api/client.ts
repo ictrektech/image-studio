@@ -47,6 +47,7 @@ export interface GeneratePayload {
   model_key: string
   init_job_id: string
   init_filename: string
+  init_input_id: string
   width: number
   height: number
   steps: number
@@ -67,7 +68,15 @@ export interface JobRecord extends GeneratePayload {
   error: string
   created_at: string
   updated_at: string
-  metadata?: { init_job_id?: string; init_filename?: string }
+  metadata?: { init_job_id?: string; init_filename?: string; init_input_id?: string }
+}
+
+export interface InputItem {
+  input_id: string
+  filename: string
+  size: number
+  created_at: string
+  url: string
 }
 
 export interface SessionInfo {
@@ -132,5 +141,29 @@ export const api = {
     const token = getCachedVOSBearerToken()
     const suffix = token ? `?access_token=${encodeURIComponent(token)}` : ''
     return `${API_BASE}/api/v1/outputs/${jobId}/${filename}${suffix}`
+  },
+  listInputs: () => request<InputItem[]>('/api/v1/inputs'),
+  uploadInput: async (file: File) => {
+    const token = await getVOSBearerToken().catch(() => null)
+    const resp = await fetch(`${API_BASE}/api/v1/inputs`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: (() => {
+        const form = new FormData()
+        form.append('file', file)
+        return form
+      })(),
+    })
+    if (!resp.ok) {
+      const text = await resp.text()
+      throw new Error(text || `${resp.status} ${resp.statusText}`)
+    }
+    return resp.json() as Promise<InputItem>
+  },
+  deleteInput: (inputId: string) => request<{ deleted: boolean }>(`/api/v1/inputs/${inputId}`, { method: 'DELETE' }),
+  inputUrl: (inputId: string) => {
+    const token = getCachedVOSBearerToken()
+    const suffix = token ? `?access_token=${encodeURIComponent(token)}` : ''
+    return `${API_BASE}/api/v1/inputs/${inputId}${suffix}`
   },
 }

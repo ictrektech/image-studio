@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import json
 import shutil
+import uuid
 from datetime import datetime
 from pathlib import Path
 
 from app.config import settings
 from app.models import JobRecord
+
+INPUT_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+MAX_INPUT_BYTES = 20 * 1024 * 1024
 
 
 def ensure_storage() -> None:
@@ -93,3 +97,58 @@ def save_settings(user_key: str, data: dict) -> dict:
         current["language"] = language
     settings_path(user_key).write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
     return current
+
+
+def inputs_dir(user_key: str) -> Path:
+    path = user_dir(user_key) / "inputs"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def save_input(user_key: str, filename: str, data: bytes) -> dict:
+    """保存上传的参考图，返回列表条目。扩展名白名单外的文件抛 ValueError。"""
+    suffix = Path(filename).suffix.lower()
+    if suffix not in INPUT_EXTENSIONS:
+        raise ValueError(f"unsupported image type: {suffix or '(none)'}, expect png/jpg/jpeg/webp")
+    if len(data) > MAX_INPUT_BYTES:
+        raise ValueError("image too large (max 20MB)")
+    input_id = f"in_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+    stored = inputs_dir(user_key) / f"{input_id}{suffix}"
+    stored.write_bytes(data)
+    return {
+        "input_id": input_id,
+        "filename": filename,
+        "size": len(data),
+        "created_at": datetime.utcnow().isoformat(),
+        "url": f"/api/v1/inputs/{input_id}",
+    }
+
+
+def list_inputs(user_key: str) -> list[dict]:
+    result = []
+    for path in sorted(inputs_dir(user_key).glob("in_*.*"), reverse=True):
+        stat = path.stat()
+        result.append({
+            "input_id": path.stem,
+            "filename": path.name,
+            "size": stat.st_size,
+            "created_at": datetime.utcfromtimestamp(stat.st_mtime).isoformat(),
+            "url": f"/api/v1/inputs/{path.stem}",
+        })
+    return result
+
+
+def input_path(user_key: str, input_id: str) -> Path | None:
+    if not input_id.startswith("in_") or "/" in input_id or "\\" in input_id:
+        return None
+    for path in inputs_dir(user_key).glob(f"{input_id}.*"):
+        return path
+    return None
+
+
+def delete_input(user_key: str, input_id: str) -> bool:
+    path = input_path(user_key, input_id)
+    if not path:
+        return False
+    path.unlink()
+    return True

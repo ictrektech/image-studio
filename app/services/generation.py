@@ -11,7 +11,7 @@ from pathlib import Path
 from app.config import settings
 from app.models import GenerateRequest, JobRecord
 from app.services.models import get_model_def, model_path_for, runtime_paths_for
-from app.services.storage import job_dir, save_job, user_dir
+from app.services.storage import input_path, job_dir, save_job, user_dir
 
 _semaphore = asyncio.Semaphore(settings.max_concurrency)
 
@@ -61,6 +61,7 @@ async def create_job(user_key: str, request: GenerateRequest) -> JobRecord:
         metadata={
             "init_job_id": request.init_job_id,
             "init_filename": request.init_filename,
+            "init_input_id": request.init_input_id,
         },
         created_at=now,
         updated_at=now,
@@ -149,6 +150,12 @@ def run_sd_cpp(job: JobRecord, output: Path) -> None:
 
 
 def init_image_path(job: JobRecord) -> Path | None:
+    init_input_id = str(job.metadata.get("init_input_id") or "").strip()
+    if init_input_id:
+        path = input_path(job.user_key, init_input_id)
+        if not path:
+            raise FileNotFoundError(f"init image not found: {init_input_id}")
+        return path
     init_job_id = str(job.metadata.get("init_job_id") or "").strip()
     init_filename = str(job.metadata.get("init_filename") or "").strip()
     if not init_job_id or not init_filename:

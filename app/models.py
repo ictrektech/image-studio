@@ -12,6 +12,7 @@ class GenerateRequest(BaseModel):
     model_key: str = "sd15"
     init_job_id: str = ""
     init_filename: str = ""
+    init_input_id: str = ""
     width: int = Field(default=768, ge=256, le=2048)
     height: int = Field(default=768, ge=256, le=2048)
     steps: int = Field(default=30, ge=1, le=150)

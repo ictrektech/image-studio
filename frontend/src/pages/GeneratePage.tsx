@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CheckCircle2, Database, Download, DownloadCloud, AlertTriangle, ImageIcon, Loader2, RefreshCw, RotateCcw, Sparkles, Square, Trash2, UserCircle2, Wand2, X } from 'lucide-react'
+import { CheckCircle2, Database, Download, DownloadCloud, AlertTriangle, ImageIcon, Loader2, Play, RefreshCw, RotateCcw, Sparkles, Square, Trash2, UserCircle2, Wand2, X } from 'lucide-react'
 import { api, GeneratePayload, InputItem, JobRecord, ModelInfo, SessionInfo } from '../api/client'
 import { messages } from '../i18n'
 
@@ -14,6 +14,8 @@ function formatSize(bytes?: number) {
   }
   return `${value.toFixed(idx === 0 ? 0 : 2)} ${units[idx]}`
 }
+
+const isVideoFile = (name: string) => /\.(mp4|webm|mov)$/i.test(name)
 
 const initialPayload: GeneratePayload = {
   prompt: 'a cozy mountain cabin at dusk, warm lights, snowy pine trees, cinematic lighting, ultra detailed',
@@ -30,6 +32,8 @@ const initialPayload: GeneratePayload = {
   sampler: 'euler_a',
   seed: -1,
   batch_count: 1,
+  video_frames: 33,
+  fps: 24,
 }
 
 export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { models: ModelInfo[]; onRefresh: () => void; onOpenModels: () => void; t: typeof messages['zh-CN'] }) {
@@ -41,17 +45,23 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [playingUrl, setPlayingUrl] = useState('')
   const messagesRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-  const imageModels = useMemo(() => models.filter(model => model.capabilities.includes('txt2img') || model.capabilities.includes('img2img')), [models])
+  const imageModels = useMemo(() => models.filter(model =>
+    model.capabilities.includes('txt2img') || model.capabilities.includes('img2img') || model.capabilities.includes('video')), [models])
   const selectedModel = models.find(model => model.key === payload.model_key)
   const modelReady = selectedModel?.status === 'ready'
-  const modelSupportsImages = Boolean(selectedModel?.capabilities.includes('txt2img') || selectedModel?.capabilities.includes('img2img'))
+  const isVideoModel = selectedModel?.runtime?.mode === 'video'
+  const modelUsable = Boolean(selectedModel?.capabilities.includes('txt2img') || selectedModel?.capabilities.includes('img2img')) || isVideoModel
+  const supportsInit = !isVideoModel || Boolean(selectedModel?.runtime?.ref_flag)
   const isEditModel = selectedModel?.runtime?.ref_flag === '-r'
-  const supportsStrength = !isEditModel
+  const supportsStrength = !isEditModel && !isVideoModel
+  const negativeIgnored = selectedModel?.runtime?.negative === false
   const hasRunning = jobs.some(job => job.status === 'queued' || job.status === 'running')
   const isImg2Img = Boolean((payload.init_job_id && payload.init_filename) || payload.init_input_id)
+  const videoDuration = payload.fps > 0 && payload.video_frames > 0 ? (payload.video_frames / payload.fps).toFixed(1) : ''
   const initPreviewUrl = payload.init_input_id
     ? api.inputUrl(payload.init_input_id)
     : payload.init_job_id && payload.init_filename
@@ -71,6 +81,8 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
       steps: defaults.steps ?? payload.steps,
       cfg_scale: defaults.cfg_scale ?? payload.cfg_scale,
       sampler: defaults.sampler ?? payload.sampler,
+      video_frames: defaults.video_frames ?? payload.video_frames,
+      fps: defaults.fps ?? payload.fps,
     })
   }
 
@@ -212,7 +224,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
         </select>
         <div className={`inline-status ${modelReady ? 'ready' : 'missing'}`}>
           <strong>{selectedModel?.name || t.noModelsConfigured}</strong>
-          <span>{modelSupportsImages ? (modelReady ? t.modelReady : t.modelMissing) : t.chooseModelHint}</span>
+          <span>{modelUsable ? (modelReady ? t.modelReady : t.modelMissing) : t.chooseModelHint}</span>
           <code>{selectedModel?.resolved_path || selectedModel?.access_path || '-'}</code>
         </div>
         {selectedModel && (
@@ -254,7 +266,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
             )}
           </div>
         )}
-        {(!modelReady || !modelSupportsImages) && (
+        {(!modelReady || !modelUsable) && (
           <button className="secondary-action model-jump-action" onClick={onOpenModels}>
             <Database size={15} />{t.openModelManagement}
           </button>
@@ -299,7 +311,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
                   <div className="chat-bubble">
                     <div className="chat-msg-meta">
                       <span>#{round} {t.meLabel} · {timeOf(job.created_at)}</span>
-                      <span>{modelName(job.model_key)} · {job.width}×{job.height} · {job.steps} steps · cfg {job.cfg_scale} · {job.sampler}{job.seed >= 0 ? ` · seed ${job.seed}` : ''}</span>
+                      <span>{modelName(job.model_key)} · {job.width}×{job.height} · {job.steps} steps · cfg {job.cfg_scale} · {job.sampler}{job.seed >= 0 ? ` · seed ${job.seed}` : ''}{job.video_frames > 1 ? ` · ${job.video_frames}f${job.fps ? `@${job.fps}` : ''}` : ''}</span>
                       {lineage && <span>↳ {lineage}</span>}
                     </div>
                     {initThumb && <img className="chat-msg-init" src={initThumb} alt="" />}
@@ -310,9 +322,19 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
                 <div className="chat-msg assistant-msg">
                   <div className={`chat-bubble ${job.status === 'failed' ? 'failed' : ''}`}>
                     <div className="chat-msg-meta"><span>{modelName(job.model_key)}</span></div>
-                    {job.status === 'succeeded' && job.outputs.map(output => (
-                      <img className="chat-msg-image" key={output} src={api.outputUrl(job.job_id, output)} alt={job.prompt} onClick={() => reuseOutput(job, output)} title={t.continueThread} />
-                    ))}
+                    {job.status === 'succeeded' && job.outputs.map(output => {
+                      const url = api.outputUrl(job.job_id, output)
+                      if (isVideoFile(output)) {
+                        return (
+                          <div className="chat-msg-video" key={output} onClick={() => setPlayingUrl(url)} title={t.videoPlayHint}>
+                            <video src={url} preload="metadata" muted />
+                            <span className="chat-msg-video-play"><Play size={22} /></span>
+                            <span className="chat-msg-video-tag">{t.videoBadge}</span>
+                          </div>
+                        )
+                      }
+                      return <img className="chat-msg-image" key={output} src={url} alt={job.prompt} onClick={() => reuseOutput(job, output)} title={t.continueThread} />
+                    })}
                     {(job.status === 'queued' || job.status === 'running') && (
                       <div className="chat-msg-running">
                         <Loader2 size={16} className="spin" />
@@ -327,7 +349,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
                       </div>
                     )}
                     <div className="chat-msg-actions">
-                      {job.outputs[0] && <button className="quiet-button" onClick={() => reuseOutput(job, job.outputs[0])}><Wand2 size={14} />{t.continueThread}</button>}
+                      {job.outputs[0] && !isVideoFile(job.outputs[0]) && <button className="quiet-button" onClick={() => reuseOutput(job, job.outputs[0])}><Wand2 size={14} />{t.continueThread}</button>}
                       {job.outputs[0] && <a className="quiet-button" href={api.outputUrl(job.job_id, job.outputs[0])} download><Download size={14} />{t.downloadOutput}</a>}
                       <button className="quiet-button danger-action" onClick={() => deleteJob(job)}><Trash2 size={14} />{t.deleteOutput}</button>
                     </div>
@@ -346,7 +368,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
             </div>
             <div className="img-picker-section">{t.recentOutputs}</div>
             <div className="img-picker-grid">
-              {jobs.slice(0, 10).map(job => job.outputs.map(output => (
+              {jobs.slice(0, 10).flatMap(job => job.outputs.filter(o => !isVideoFile(o)).map(output => (
                 <button key={job.job_id + output} className="img-picker-item" onClick={() => reuseOutput(job, output)}>
                   <img src={api.outputUrl(job.job_id, output)} alt="" />
                   <span>#{roundOf.get(job.job_id)}</span>
@@ -370,6 +392,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
         )}
 
         <div className="chat-composer">
+          {supportsInit && (
           <div className="composer-image">
             {initPreviewUrl ? (
               <div className="img-slot filled">
@@ -398,6 +421,10 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
               }}
             />
           </div>
+          )}
+          {isVideoModel && !supportsInit && (
+            <div className="composer-video-hint">{t.videoNoRefHint}</div>
+          )}
           <div className="composer-columns">
             <div className="composer-col">
               <label>{t.positivePrompt}</label>
@@ -409,17 +436,18 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
               />
             </div>
             <div className="composer-col">
-              <label>{t.negativePrompt}</label>
+              <label>{t.negativePrompt}{negativeIgnored && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label>
               <textarea
                 value={payload.negative_prompt}
                 onChange={e => setPayload({ ...payload, negative_prompt: e.target.value })}
                 rows={4}
+                placeholder={negativeIgnored ? t.negativeIgnoredHint : ''}
               />
             </div>
           </div>
           <div className="composer-send">
             {error && <div className="notice error">{error}</div>}
-            <button className="primary-action generate-action" disabled={submitting || !modelReady || !modelSupportsImages} onClick={submit}>
+            <button className="primary-action generate-action" disabled={submitting || !modelReady || !modelUsable} onClick={submit}>
               {submitting ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />}{submitting ? t.submitting : t.submit}
             </button>
           </div>
@@ -433,30 +461,43 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
           <button className="quiet-button" onClick={() => setPayload(initialPayload)} title={t.reset}><RotateCcw size={15} /></button>
         </div>
         <div className={`inline-status ${isImg2Img ? 'ready' : ''}`}>
-          <strong>{isImg2Img ? (isEditModel ? t.imageEdit : t.imageToImage) : t.textToImage}</strong>
-          <span>{isImg2Img ? (isEditModel ? t.imageEditHint : t.sourceImageHint) : t.previewHint}</span>
+          <strong>{isVideoModel ? (isImg2Img ? t.img2Video : t.text2Video) : isImg2Img ? (isEditModel ? t.imageEdit : t.imageToImage) : t.textToImage}</strong>
+          <span>{isVideoModel ? t.videoModelHint : isImg2Img ? (isEditModel ? t.imageEditHint : t.sourceImageHint) : t.previewHint}</span>
           {isImg2Img && <code>{payload.init_input_id || `${payload.init_job_id}/${payload.init_filename}`}</code>}
         </div>
         <div className="control-row two">
           <div><label>{t.width}</label><input type="number" value={payload.width} onChange={e => setPayload({ ...payload, width: Number(e.target.value) })} /></div>
           <div><label>{t.height}</label><input type="number" value={payload.height} onChange={e => setPayload({ ...payload, height: Number(e.target.value) })} /></div>
         </div>
+        <div className={`video-params${isVideoModel ? '' : ' param-ignored'}`}>
+          <div className="section-label">{t.videoParamsTitle}{!isVideoModel && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</div>
+          <div className="control-row two">
+            <div><label>{t.videoFrames}</label><input type="number" min="2" max="240" value={payload.video_frames} onChange={e => setPayload({ ...payload, video_frames: Number(e.target.value) })} /></div>
+            <div><label>{t.videoFps}</label><input type="number" min="1" max="60" value={payload.fps} onChange={e => setPayload({ ...payload, fps: Number(e.target.value) })} /></div>
+          </div>
+          {videoDuration && <span className="video-duration">{t.videoDurationHint} {videoDuration} {t.videoSeconds}</span>}
+        </div>
         <div className="control-row two">
           <div><label>{t.steps}</label><input type="number" value={payload.steps} onChange={e => setPayload({ ...payload, steps: Number(e.target.value) })} /></div>
           <div><label>{t.cfgScale}</label><input type="number" step="0.5" value={payload.cfg_scale} onChange={e => setPayload({ ...payload, cfg_scale: Number(e.target.value) })} /></div>
         </div>
-        {isImg2Img && supportsStrength && (
-          <div className="control-row">
-            <div><label>{t.strength}</label><input type="number" min="0" max="1" step="0.05" value={payload.strength} onChange={e => setPayload({ ...payload, strength: Number(e.target.value) })} /></div>
+        <div className={`control-row${isImg2Img && supportsStrength ? '' : ' param-ignored'}`}>
+          <div>
+            <label>{t.strength}{!(isImg2Img && supportsStrength) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label>
+            <input type="number" min="0" max="1" step="0.05" value={payload.strength} onChange={e => setPayload({ ...payload, strength: Number(e.target.value) })} />
           </div>
-        )}
+        </div>
         <div className="control-row two">
           <div><label>{t.sampler}</label><select value={payload.sampler} onChange={e => setPayload({ ...payload, sampler: e.target.value })}><option value="euler_a">Euler A</option><option value="euler">Euler</option><option value="heun">Heun</option><option value="dpm++2m">DPM++ 2M</option></select></div>
           <div><label>{t.seed}</label><input type="number" title={t.randomSeedHint} value={payload.seed} onChange={e => setPayload({ ...payload, seed: Number(e.target.value) })} /></div>
         </div>
-        <div className="control-row">
-          <div><label>{t.batch}</label><input type="number" min="1" max="4" value={payload.batch_count} onChange={e => setPayload({ ...payload, batch_count: Number(e.target.value) })} /></div>
+        <div className={`control-row${isVideoModel ? ' param-ignored' : ''}`}>
+          <div>
+            <label>{t.batch}{isVideoModel && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label>
+            <input type="number" min="1" max="4" value={payload.batch_count} onChange={e => setPayload({ ...payload, batch_count: Number(e.target.value) })} />
+          </div>
         </div>
+        <p className="api-note">{t.paramsIgnoredHint}</p>
         <div className="side-divider" />
         <div className="panel-title small-title">{t.currentJob}</div>
         {jobs[0] ? (
@@ -468,6 +509,15 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
           </>
         ) : <div className="empty-small">{t.noJobs}</div>}
       </aside>
+
+      {playingUrl && (
+        <div className="video-modal" role="presentation" onClick={() => setPlayingUrl('')}>
+          <div className="video-modal-box" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+            <button className="video-modal-close" onClick={() => setPlayingUrl('')} title={t.closeVideo}><X size={18} /></button>
+            <video src={playingUrl} controls autoPlay playsInline />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

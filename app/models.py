@@ -21,6 +21,9 @@ class GenerateRequest(BaseModel):
     sampler: str = "euler_a"
     seed: int = -1
     batch_count: int = Field(default=1, ge=1, le=4)
+    # 视频参数：0 表示使用模型家族默认值（仅视频家族生效）
+    video_frames: int = Field(default=0, ge=0, le=240)
+    fps: int = Field(default=0, ge=0, le=60)
 
 
 class JobRecord(BaseModel):
@@ -39,6 +42,8 @@ class JobRecord(BaseModel):
     sampler: str
     seed: int
     batch_count: int
+    video_frames: int = 0
+    fps: int = 0
     progress: float = 0
     outputs: list[str] = []
     error: str = ""

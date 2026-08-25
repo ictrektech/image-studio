@@ -57,6 +57,8 @@ const PARAMS: [string, string, string, keyof T & string][] = [
   ['sampler', 'euler_a | euler | heun | dpm++2m', 'euler_a', 'apiP_sampler'],
   ['seed', 'int', '-1', 'apiP_seed'],
   ['batch_count', 'int · 1~4', '1', 'apiP_batch'],
+  ['video_frames', 'int · 0~240', '0 (家族默认)', 'apiP_video_frames'],
+  ['fps', 'int · 0~60', '0 (家族默认)', 'apiP_video_fps'],
   ['init_job_id', 'string', '""', 'apiP_init_job'],
   ['init_filename', 'string', '""', 'apiP_init_file'],
   ['init_input_id', 'string', '""', 'apiP_init_input'],

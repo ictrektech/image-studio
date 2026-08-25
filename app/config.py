@@ -18,6 +18,8 @@ class Settings:
     sd_cpp_bin = os.getenv("SD_CPP_BIN", "sd-cli")
     sd_cpp_extra_args = os.getenv("SD_CPP_EXTRA_ARGS", "")
     default_timeout_seconds = int(os.getenv("IMAGE_STUDIO_GENERATE_TIMEOUT_SECONDS", "900"))
+    # 视频生成远慢于出图，单独放宽超时（默认 1 小时）
+    video_timeout_seconds = int(os.getenv("IMAGE_STUDIO_VIDEO_TIMEOUT_SECONDS", "3600"))
     max_concurrency = int(os.getenv("IMAGE_STUDIO_MAX_CONCURRENCY", "1"))
     mock_when_runtime_missing = os.getenv("IMAGE_STUDIO_MOCK_WHEN_RUNTIME_MISSING", "true").lower() == "true"
 

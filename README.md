@@ -99,7 +99,6 @@ Image Studio reads Model Hub's registry and task list to display pull
 progress for Model Hub-managed models (SD 1.5, Mage-Flow).
 
 All models resolve through the same shared-root convention:
-
 ```text
 /modelhub/export/<ms|hf>/<org>/<repo>/current/
 ```
@@ -107,6 +106,20 @@ All models resolve through the same shared-root convention:
 When a model is ready, Image Studio resolves the largest compatible model file
 under that directory (`.safetensors`, `.ckpt`, `.pt`, `.pth`, or `.gguf`) and
 passes it to `sd-cli`.
+
+## Video Generation
+
+Video families (`wan21`, `wan22`, `ltx-video`, `hunyuan-video`, `minimax-h3`,
+`lingbot-video`) generate through the same job pipeline: the backend appends
+`-M vid_gen` plus `--video-frames` / `--fps` from the request (0 = family
+default from the sd.cpp docs) and produces a single `output.mp4`. Families
+whose runtime declares a reference flag (Wan 2.2 TI2V, LTX, MiniMax, LingBot)
+accept a first-frame image via the same `init_input_id` / `init_job_id`
+mechanism; `--strength` is not applied for video. Video jobs use a separate,
+much longer timeout (`IMAGE_STUDIO_VIDEO_TIMEOUT_SECONDS`, default 3600).
+Parameters that do not apply to the selected family (e.g. `batch_count` for
+video, `negative_prompt` for families without uncond support) are silently
+ignored when assembling the sd-cli command line.
 
 Notes:
 

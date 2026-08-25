@@ -56,6 +56,8 @@ export interface GeneratePayload {
   sampler: string
   seed: number
   batch_count: number
+  video_frames: number
+  fps: number
 }
 
 export interface JobRecord extends GeneratePayload {

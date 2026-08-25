@@ -30,10 +30,17 @@ export default function JobsPage({ t }: { t: typeof messages['zh-CN'] }) {
       <div className="job-list">
         {jobs.map(job => {
           const output = job.outputs[0]
+          const isVideo = output ? /\.(mp4|webm|mov)$/i.test(output) : false
           return (
             <div className="job-row rich" key={job.job_id}>
               <div className="job-thumb">
-                {output ? <img src={api.outputUrl(job.job_id, output)} alt="" /> : <span>{job.status}</span>}
+                {output && isVideo ? (
+                  <video src={api.outputUrl(job.job_id, output)} preload="metadata" muted />
+                ) : output ? (
+                  <img src={api.outputUrl(job.job_id, output)} alt="" />
+                ) : (
+                  <span>{job.status}</span>
+                )}
               </div>
               <span className={`job-status ${job.status}`}>{job.status}</span>
               <code>{job.job_id}</code>

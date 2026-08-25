@@ -285,6 +285,78 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
         defaults={"width": 512, "height": 512, "steps": 50, "cfg_scale": 6.0, "sampler": "euler"},
     ),
     "sefi-image": _runtime(defaults={"steps": 50, "cfg_scale": 4.0, "sampler": "euler"}),
+    # 视频家族：sd-cli 需要 -M vid_gen（generation.py 统一附加），角色路径为仓库内相对路径。
+    # 默认参数来自 sd.cpp docs/{wan,ltx2,hunyuan_video,minimax_h3,lingbot_video}.md 的示例。
+    "wan21": _runtime(
+        mode="video",
+        model_flag="--diffusion-model",
+        roles={
+            "vae": "split_files/vae/wan_2.1_vae.safetensors",
+            "t5xxl": "split_files/text_encoders/umt5_xxl_fp16.safetensors",
+        },
+        extra_args=[*_FA_ARGS, "--flow-shift", "3.0", "-v"],
+        defaults={"width": 832, "height": 480, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
+    ),
+    "wan22": _runtime(  # TI2V 5B 支持 -i 首帧参考（不加 --strength）
+        mode="video",
+        model_flag="--diffusion-model",
+        ref_flag="-i",
+        roles={
+            "vae": "split_files/vae/wan2.2_vae.safetensors",
+            "t5xxl": "split_files/text_encoders/umt5_xxl_fp16.safetensors",
+        },
+        extra_args=[*_FA_ARGS, "--flow-shift", "3.0", "-v"],
+        defaults={"width": 480, "height": 832, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
+    ),
+    "ltx-video": _runtime(
+        mode="video",
+        model_flag="--diffusion-model",
+        ref_flag="-i",
+        roles={
+            "vae": "vae/ltx-2.3-22b-dev_video_vae.safetensors",
+            "audio_vae": "vae/ltx-2.3-22b-dev_audio_vae.safetensors",
+            "llm": "gemma-3-12b-it-UD-Q4_K_XL.gguf",
+            "embeddings_connectors": "text_encoders/ltx-2.3-22b-dev_embeddings_connectors.safetensors",
+        },
+        extra_args=[*_FA_ARGS, "-v"],
+        defaults={"width": 1280, "height": 720, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
+    ),
+    "hunyuan-video": _runtime(
+        mode="video",
+        model_flag="--diffusion-model",
+        roles={
+            "vae": "split_files/vae/hunyuanvideo15_vae_fp16.safetensors",
+            "llm": "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
+            "t5xxl": "split_files/text_encoders/byt5_small_glyphxl_fp16.safetensors",
+        },
+        extra_args=["--diffusion-fa", "--offload-to-cpu", "--vae-tiling", "-v"],
+        defaults={"width": 1280, "height": 720, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
+        negative=False,
+    ),
+    "minimax-h3": _runtime(
+        mode="video",
+        model_flag="--diffusion-model",
+        ref_flag="-i",
+        roles={
+            "vae": "vae/minimax_h3_video_vae_fp16.safetensors",
+            "audio_vae": "vae/minimax_h3_audio_vae_fp32.safetensors",
+            "llm": "qwen3vl_32b_minimax_h3-Q4_K_M.gguf",
+        },
+        extra_args=["--diffusion-fa", "--offload-to-cpu", "--rng", "cpu", "-v"],
+        defaults={"width": 864, "height": 480, "steps": 20, "cfg_scale": 1.0, "sampler": "euler", "video_frames": 56, "fps": 24},
+        negative=False,
+    ),
+    "lingbot-video": _runtime(
+        mode="video",
+        model_flag="--diffusion-model",
+        ref_flag="-i",
+        roles={
+            "vae": "split_files/vae/wan_2.1_vae.safetensors",
+            "llm": "Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+        },
+        extra_args=[*_FA_ARGS, "-v"],
+        defaults={"width": 832, "height": 480, "steps": 20, "cfg_scale": 3.0, "sampler": "euler", "video_frames": 33, "fps": 24},
+    ),
 }
 
 

@@ -18,12 +18,14 @@ _semaphore = asyncio.Semaphore(settings.max_concurrency)
 # sd.cpp 旗标与 runtime 角色的对应关系
 ROLE_FLAGS = {
     "vae": "--vae",
+    "audio_vae": "--audio-vae",
     "clip_l": "--clip_l",
     "clip_g": "--clip_g",
     "t5xxl": "--t5xxl",
     "llm": "--llm",
     "llm_vision": "--llm_vision",
     "clip_vision": "--clip_vision",
+    "embeddings_connectors": "--embeddings-connectors",
     "uncond": "--uncond-diffusion-model",
 }
 
@@ -38,8 +40,8 @@ SAMPLER_MAP = {
 
 async def create_job(user_key: str, request: GenerateRequest) -> JobRecord:
     runtime = get_model_def(request.model_key)["runtime"]
-    if runtime.get("mode") == "video":
-        raise ValueError("视频模型暂不支持网页生成，请先选择图像模型")
+    video_mode = runtime.get("mode") == "video"
+    defaults = runtime.get("defaults") or {}
     model_path = model_path_for(request.model_key)
     now = datetime.utcnow()
     job = JobRecord(
@@ -58,6 +60,8 @@ async def create_job(user_key: str, request: GenerateRequest) -> JobRecord:
         sampler=request.sampler,
         seed=request.seed,
         batch_count=request.batch_count,
+        video_frames=request.video_frames or int(defaults.get("video_frames", 0) or 0),
+        fps=request.fps or int(defaults.get("fps", 0) or 0),
         metadata={
             "init_job_id": request.init_job_id,
             "init_filename": request.init_filename,
@@ -66,6 +70,9 @@ async def create_job(user_key: str, request: GenerateRequest) -> JobRecord:
         created_at=now,
         updated_at=now,
     )
+    if video_mode and job.video_frames <= 1:
+        # sd-cli 以 --video-frames > 1 区分视频生成，缺省时强制使用家族默认
+        job.video_frames = int(defaults.get("video_frames", 33) or 33)
     save_job(job)
     asyncio.create_task(run_job(job))
     return job
@@ -77,15 +84,34 @@ async def run_job(job: JobRecord) -> None:
         job.progress = 0.1
         save_job(job)
         try:
+            video_mode = get_model_def(job.model_key)["runtime"].get("mode") == "video"
             output_dir = job_dir(job.user_key, job.job_id)
-            output = output_dir / "output.png"
-            if shutil.which(settings.sd_cpp_bin):
-                await asyncio.to_thread(run_sd_cpp, job, output)
-            elif settings.mock_when_runtime_missing:
-                await asyncio.to_thread(write_mock_svg_as_png_named, job, output)
-            else:
+            has_bin = bool(shutil.which(settings.sd_cpp_bin))
+            if not has_bin and not settings.mock_when_runtime_missing:
                 raise RuntimeError(f"sd.cpp binary not found: {settings.sd_cpp_bin}")
-            job.outputs = [output.name]
+
+            def run_once(output: Path, seed_offset: int = 0) -> None:
+                if has_bin:
+                    run_sd_cpp(job, output, seed_offset=seed_offset)
+                else:
+                    write_mock_svg_as_png_named(job, output)
+
+            if video_mode:
+                # 视频任务固定单输出；batch/strength 等不适用的参数已在装配时忽略
+                output = output_dir / "output.mp4"
+                await asyncio.to_thread(run_once, output)
+                job.outputs = [output.name]
+            else:
+                names = (
+                    ["output.png"]
+                    if job.batch_count <= 1
+                    else [f"output_{i:02d}.png" for i in range(1, job.batch_count + 1)]
+                )
+                for i, name in enumerate(names):
+                    await asyncio.to_thread(run_once, output_dir / name, i)
+                    job.outputs = [*job.outputs, name]
+                    job.progress = 0.1 + 0.9 * (i + 1) / len(names)
+                    save_job(job)
             job.progress = 1
             job.status = "succeeded"
         except Exception as exc:
@@ -94,17 +120,20 @@ async def run_job(job: JobRecord) -> None:
         save_job(job)
 
 
-def build_sd_args(job: JobRecord, output: Path) -> list[str]:
+def build_sd_args(job: JobRecord, output: Path, seed_offset: int = 0) -> list[str]:
     """按模型家族的 runtime 规格装配 sd-cli 参数。"""
     item = get_model_def(job.model_key)
     runtime = item["runtime"]
+    video_mode = runtime.get("mode") == "video"
     role_paths = runtime_paths_for(job.model_key)
 
-    args = [
-        settings.sd_cpp_bin,
+    args = [settings.sd_cpp_bin]
+    if video_mode:
+        args.extend(["-M", "vid_gen"])
+    args.extend([
         runtime.get("model_flag", "-m"),
         job.model_path,
-    ]
+    ])
     for role, flag in ROLE_FLAGS.items():
         if role in role_paths:
             args.extend([flag, str(role_paths[role])])
@@ -116,32 +145,41 @@ def build_sd_args(job: JobRecord, output: Path) -> list[str]:
     args.extend(["--steps", str(job.steps)])
     args.extend(["--cfg-scale", str(job.cfg_scale)])
     args.extend(["--sampling-method", SAMPLER_MAP.get(job.sampler, job.sampler)])
+    if video_mode:
+        if job.video_frames > 1:
+            args.extend(["--video-frames", str(job.video_frames)])
+        if job.fps > 0:
+            args.extend(["--fps", str(job.fps)])
 
     init_image = init_image_path(job)
     if init_image:
         ref_flag = runtime.get("ref_flag", "-i")
         args.extend([ref_flag, str(init_image)])
-        if ref_flag == "-i":
+        # 视频家族的 -i 是首帧参考，不使用 --strength
+        if ref_flag == "-i" and not video_mode:
             args.extend(["--strength", str(job.strength)])
 
     if job.negative_prompt and runtime.get("negative", True):
         args.extend(["-n", job.negative_prompt])
     if job.seed >= 0:
-        args.extend(["--seed", str(job.seed)])
+        # batch 时固定 seed 逐张 +i，保持可复现的同时避免完全相同的图
+        args.extend(["--seed", str(job.seed + seed_offset)])
     args.extend(runtime.get("extra_args") or [])
     if settings.sd_cpp_extra_args:
         args.extend(shlex.split(settings.sd_cpp_extra_args))
     return args
 
 
-def run_sd_cpp(job: JobRecord, output: Path) -> None:
-    args = build_sd_args(job, output)
+def run_sd_cpp(job: JobRecord, output: Path, seed_offset: int = 0) -> None:
+    args = build_sd_args(job, output, seed_offset=seed_offset)
+    video_mode = get_model_def(job.model_key)["runtime"].get("mode") == "video"
+    timeout = settings.video_timeout_seconds if video_mode else settings.default_timeout_seconds
     result = subprocess.run(
         args,
         check=False,
         capture_output=True,
         text=True,
-        timeout=settings.default_timeout_seconds,
+        timeout=timeout,
     )
     if result.returncode != 0:
         stderr_tail = (result.stderr or "").strip().splitlines()[-6:]

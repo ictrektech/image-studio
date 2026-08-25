@@ -62,31 +62,77 @@ const PARAMS: [string, string, string, keyof T & string][] = [
   ['init_input_id', 'string', '""', 'apiP_init_input'],
 ]
 
-const FLOW_EXAMPLE = `# 0)（可选，img2img / edit 模型）先上传参考图，拿到 input_id
-curl -X POST https://<vos-host>/api/com.ictrek.image-studio/api/v1/inputs \\
-  -H "Authorization: Bearer <token>" -F "file=@ref.png"
-# → {"input_id":"in_20260825_...","url":"/api/v1/inputs/in_20260825_..."}
+const SETUP_EXAMPLE = `BASE='https://<vos-host>/api/com.ictrek.image-studio'
+AUTH='Authorization: Bearer <token>'`
 
-# 1) 创建生成任务（校验后立即返回，不阻塞；引用上传图用 init_input_id，
-#    引用历史输出用 init_job_id + init_filename，二者给其一即可）
-curl -X POST https://<vos-host>/api/com.ictrek.image-studio/api/v1/generate \\
-  -H "Authorization: Bearer <token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{"prompt":"a quiet tea house by the lake","model_key":"sdxl","width":1024,"height":1024,"init_input_id":"in_20260825_...","strength":0.7}'
+const RECIPE_A = `# 1) 创建任务（立即返回 job_id，不阻塞）
+curl -X POST $BASE/api/v1/generate -H "$AUTH" -H 'Content-Type: application/json' \\
+  -d '{"prompt":"a quiet tea house by the lake","model_key":"sdxl","width":1024,"height":1024}'
 # → {"job_id":"j_ab12...","status":"queued",...}
 
-# 2) 轮询任务直到 succeeded / failed
-curl https://<vos-host>/api/com.ictrek.image-studio/api/v1/jobs/j_ab12... \\
-  -H "Authorization: Bearer <token>"
-# → {"status":"running","progress":0.42,...}
-# → {"status":"succeeded","outputs":["output.png"],...}
+# 2) 轮询直到 succeeded / failed（脚本化等待）
+JOB=j_ab12...
+while [ "$(curl -s $BASE/api/v1/jobs/$JOB -H "$AUTH" | jq -r .status)" = "running" ] \\
+   || [ "$(curl -s $BASE/api/v1/jobs/$JOB -H "$AUTH" | jq -r .status)" = "queued" ]; do sleep 3; done
+curl -s $BASE/api/v1/jobs/$JOB -H "$AUTH" | jq '{status,progress,outputs,error}'
 
-# 3) 下载图片（也可在浏览器用 access_token 查询参数）
-curl -o output.png "https://<vos-host>/api/com.ictrek.image-studio/api/v1/outputs/j_ab12.../output.png?access_token=<token>"
+# 3) 下载图片（浏览器场景可用 access_token 查询参数）
+curl -o output.png "$BASE/api/v1/outputs/$JOB/output.png?access_token=<token>"`
 
-# 4) 列出该账户全部图片（含 url 字段，url 即下载直链）
-curl https://<vos-host>/api/com.ictrek.image-studio/api/v1/outputs \\
-  -H "Authorization: Bearer <token>"`
+const RECIPE_B = `# 1) 上传参考图（png/jpg/jpeg/webp，≤20MB，按账户隔离）
+curl -X POST $BASE/api/v1/inputs -H "$AUTH" -F 'file=@ref.png'
+# → {"input_id":"in_20260825_...","url":"/api/v1/inputs/in_20260825_..."}
+
+# 2) 用支持参考图的模型生成（引用上传图用 init_input_id）
+curl -X POST $BASE/api/v1/generate -H "$AUTH" -H 'Content-Type: application/json' \\
+  -d '{"prompt":"make it a snowy night","model_key":"qwen-image-edit",
+       "init_input_id":"in_20260825_...","strength":0.8,"width":1024,"height":1024}'
+
+# 3) 轮询 + 下载同流程 A；查看已上传的参考图：
+curl $BASE/api/v1/inputs -H "$AUTH"`
+
+const RECIPE_C = `# 把上一轮的输出作为下一轮输入（网页「继续此图」的 API 形式），
+# init_job_id + init_filename 取自上一个 succeeded 任务的 job_id 和 outputs[0]
+curl -X POST $BASE/api/v1/generate -H "$AUTH" -H 'Content-Type: application/json' \\
+  -d '{"prompt":"add warm lights in the windows","model_key":"flux-kontext",
+       "init_job_id":"j_ab12...","init_filename":"output.png"}'
+
+# 可跨模型迭代：SDXL 生成 → Qwen-Image-Edit 修改 → 再交给下一个 edit 模型……`
+
+const RECIPE_D = `# 1) 模型未下载时，generate 会返回 409「模型文件未就绪」；先触发下载（后台执行）
+curl -X POST $BASE/api/v1/models/sd35/pull -H "$AUTH"
+
+# 2) 轮询直到 status 变为 ready（progress 为下载进度）
+watch -n 10 "curl -s $BASE/api/v1/models -H \\"$AUTH\\" \\
+  | jq '.[] | select(.key==\\"sd35\\") | {status,progress,downloaded_bytes,total_bytes}'"
+
+# 3) ready 后即可按流程 A 生成；所有可用 key（含未下载）见 GET /api/v1/models`
+
+const RECIPE_E = `# 批量：一次任务出 4 张，outputs 为多个文件名，逐个下载
+curl -X POST $BASE/api/v1/generate -H "$AUTH" -H 'Content-Type: application/json' \\
+  -d '{"prompt":"portrait of a fox","model_key":"sd15","batch_count":4}'
+# → outputs: ["output.png", ...]（每个文件一个下载 URL）
+
+# 复现：固定 seed + 相同参数 → 每次得到同一张图；seed 省略或 -1 为随机
+curl -X POST $BASE/api/v1/generate -H "$AUTH" -H 'Content-Type: application/json' \\
+  -d '{"prompt":"portrait of a fox","model_key":"sd15","seed":42,"steps":30,
+       "cfg_scale":7,"sampler":"euler_a","width":512,"height":512}'`
+
+const RECIPE_F = `# 任务：列表 / 详情 / 删除（删除任务同时删除其图片文件）
+curl $BASE/api/v1/jobs -H "$AUTH"
+curl $BASE/api/v1/jobs/j_ab12... -H "$AUTH"
+curl -X DELETE $BASE/api/v1/jobs/j_ab12... -H "$AUTH"
+
+# 图片：一次列出该账户全部图片（含下载直链 url 与所属 prompt）
+curl $BASE/api/v1/outputs -H "$AUTH" | jq '.[] | {job_id,filename,url,prompt}'
+
+# 参考图：列表 / 下载 / 删除
+curl $BASE/api/v1/inputs -H "$AUTH"
+curl -o ref.png "$BASE/api/v1/inputs/in_20260825_...?access_token=<token>"
+curl -X DELETE $BASE/api/v1/inputs/in_20260825_... -H "$AUTH"
+
+# 确认当前 token 归属（排障第一步）
+curl $BASE/api/v1/me -H "$AUTH"`
 
 const PULL_EXAMPLE = `# 触发下载（后台异步执行，接口立即返回）
 curl -X POST https://<vos-host>/api/com.ictrek.image-studio/api/v1/models/flux-schnell/pull \\
@@ -149,8 +195,29 @@ export default function ApiPage({ t }: { t: T }) {
 
       <div className="auth-section-label" style={{ marginTop: 20 }}>{t.apiFlowTitle}</div>
       <p>{t.apiFlowHelp}</p>
-      <GuideCode>{FLOW_EXAMPLE}</GuideCode>
       <p className="api-note">{t.apiStatusNote}</p>
+      <GuideCode>{SETUP_EXAMPLE}</GuideCode>
+      <p className="api-note">{t.apiSetupNote}</p>
+
+      <h4 className="api-recipe-title">{t.apiRecipeA}</h4>
+      <GuideCode>{RECIPE_A}</GuideCode>
+      <h4 className="api-recipe-title">{t.apiRecipeB}</h4>
+      <p className="api-note">{t.apiRecipeBNote}</p>
+      <GuideCode>{RECIPE_B}</GuideCode>
+      <h4 className="api-recipe-title">{t.apiRecipeC}</h4>
+      <p className="api-note">{t.apiRecipeCNote}</p>
+      <GuideCode>{RECIPE_C}</GuideCode>
+      <h4 className="api-recipe-title">{t.apiRecipeD}</h4>
+      <p className="api-note">{t.apiRecipeDNote}</p>
+      <GuideCode>{RECIPE_D}</GuideCode>
+      <h4 className="api-recipe-title">{t.apiRecipeE}</h4>
+      <p className="api-note">{t.apiRecipeENote}</p>
+      <GuideCode>{RECIPE_E}</GuideCode>
+      <h4 className="api-recipe-title">{t.apiRecipeF}</h4>
+      <GuideCode>{RECIPE_F}</GuideCode>
+
+      <h4 className="api-recipe-title">{t.apiErrorsTitle}</h4>
+      <pre className="api-err-list">{t.apiErrList}</pre>
 
       <div className="auth-section-label" style={{ marginTop: 20 }}>{t.apiParamsTitle}</div>
       <p>{t.apiParamsHelp}</p>

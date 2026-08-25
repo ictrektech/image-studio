@@ -48,6 +48,12 @@ const TOKEN_CACHE_KEY = 'image_studio_vos_token'
 
 let tokenPromise: Promise<string | null> | null = null
 let memoryToken: { access_token: string; expires_at: number } | null = null
+// 防止"授权确认"弹窗风暴：限制授权流程的触发频率，并在 token 失效后的
+// 冷却期内跳过宿主注入的 token（它可能就是过期来源）。
+let lastAuthorizeAt = 0
+let directTokensBypassUntil = 0
+const AUTHORIZE_MIN_INTERVAL_MS = 30_000
+const DIRECT_TOKEN_BYPASS_MS = 60_000
 
 export async function getVOSBearerToken(): Promise<string | null> {
   if (tokenPromise) return tokenPromise
@@ -66,6 +72,7 @@ export function getCachedVOSBearerToken(): string | null {
 
 export function clearCachedVOSBearerToken() {
   memoryToken = null
+  directTokensBypassUntil = Date.now() + DIRECT_TOKEN_BYPASS_MS
   try {
     sessionStorage.removeItem(TOKEN_CACHE_KEY)
     localStorage.removeItem(TOKEN_CACHE_KEY)
@@ -75,10 +82,13 @@ export function clearCachedVOSBearerToken() {
 }
 
 async function resolveVOSBearerToken(): Promise<string | null> {
-  const injected = tokenFromInjectedContext() || tokenFromLocalStorage()
-  if (injected) {
-    rememberToken({ access_token: injected, expires_in: 3600 })
-    return injected
+  const bypassDirect = Date.now() < directTokensBypassUntil
+  if (!bypassDirect) {
+    const injected = tokenFromInjectedContext() || tokenFromLocalStorage()
+    if (injected) {
+      rememberToken({ access_token: injected, expires_in: 3600 })
+      return injected
+    }
   }
 
   const cached = readCachedToken()
@@ -90,7 +100,14 @@ async function resolveVOSBearerToken(): Promise<string | null> {
     return fastpath.access_token
   }
 
-  return tokenFromInjectedContext() || tokenFromLocalStorage()
+  if (!bypassDirect) {
+    const injected = tokenFromInjectedContext() || tokenFromLocalStorage()
+    if (injected) {
+      rememberToken({ access_token: injected, expires_in: 3600 })
+      return injected
+    }
+  }
+  return null
 }
 
 function readCachedToken(): string | null {
@@ -133,6 +150,11 @@ function rememberToken(token: VOSTokenSet) {
 }
 
 async function requestFastpathToken(): Promise<VOSTokenSet | null> {
+  // 限频：授权流程会弹出"授权确认"窗口，token 失效风暴时不反复打扰用户，
+  // 冷却期内直接返回 null（调用方展示错误，稍后重试）。
+  if (Date.now() - lastAuthorizeAt < AUTHORIZE_MIN_INTERVAL_MS) return null
+  lastAuthorizeAt = Date.now()
+
   const oauth2 = await waitForOAuth2()
   if (!oauth2) return null
 

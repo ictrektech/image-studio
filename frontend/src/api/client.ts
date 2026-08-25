@@ -90,19 +90,23 @@ export interface UserSettings {
   language: 'zh-CN' | 'en'
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function requestOnce<T>(path: string, init?: RequestInit): Promise<Response> {
   const token = await getVOSBearerToken().catch(() => null)
   const headers = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(init?.headers || {}),
   }
-  const resp = await fetch(`${API_BASE}${path}`, {
-    headers,
-    ...init,
-  })
-  if (resp.status === 401 || resp.status === 403) {
+  return fetch(`${API_BASE}${path}`, { headers, ...init })
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let resp = await requestOnce<T>(path, init)
+  // 401 = token 失效：清缓存并换新 token 重试一次；403 是权限问题，
+  // 清缓存只会引发重复授权弹窗，不做处理。
+  if (resp.status === 401) {
     clearCachedVOSBearerToken()
+    resp = await requestOnce<T>(path, init)
   }
   if (!resp.ok) {
     const text = await resp.text()

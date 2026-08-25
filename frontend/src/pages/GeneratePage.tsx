@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, Database, Download, DownloadCloud, ImageIcon, Loader2, RefreshCw, RotateCcw, Sparkles, Trash2, UserCircle2, Wand2 } from 'lucide-react'
+import { CheckCircle2, Database, Download, DownloadCloud, ImageIcon, Loader2, RefreshCw, RotateCcw, Sparkles, Square, Trash2, UserCircle2, Wand2 } from 'lucide-react'
 import { api, GeneratePayload, JobRecord, ModelInfo, SessionInfo } from '../api/client'
 import { messages } from '../i18n'
 
@@ -139,11 +139,19 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
   }
 
   const downloadModel = async () => {
-    if (!selectedModel || selectedModel.status === 'ready' || selectedModel.status === 'downloading') return
+    if (!selectedModel || selectedModel.status === 'downloading') return
     try {
       await api.pullModel(selectedModel.key)
       onRefresh()
     } catch { /* 模型管理页有完整反馈，这里静默刷新即可 */ }
+  }
+
+  const stopModelDownload = async () => {
+    if (!selectedModel || selectedModel.status !== 'downloading') return
+    try {
+      await api.stopModel(selectedModel.key)
+      onRefresh()
+    } catch { /* 同上 */ }
   }
 
   const modelDownloading = selectedModel?.status === 'downloading'
@@ -217,6 +225,11 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
                   {modelDownloading ? <Loader2 size={14} className="spin" /> : <DownloadCloud size={14} />}
                   {modelDownloading ? `${t.modelDownloading} ${modelProgress}%` : t.downloadModel}
                 </button>
+                {modelDownloading && (
+                  <button className="secondary-action model-brief-download" onClick={stopModelDownload}>
+                    <Square size={14} />{t.stopDownload}
+                  </button>
+                )}
                 {modelDownloading && <progress className="model-brief-progress" max="100" value={modelProgress} />}
               </>
             )}

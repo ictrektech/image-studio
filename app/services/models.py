@@ -929,11 +929,11 @@ def _is_model_file(path: Path) -> bool:
     return path.suffix.lower() in {".safetensors", ".ckpt", ".pt", ".pth", ".gguf"}
 
 
-async def pull_model(key: str) -> dict[str, Any]:
+async def pull_model(key: str, force: bool = False) -> dict[str, Any]:
     item = get_model_def(key)
     primary = item["sources"][0]
     if primary["source"] == "ms":
-        payload = {"source": "ms", "model_id": primary["model_id"], "name": item["name"]}
+        payload = {"source": "ms", "model_id": primary["model_id"], "name": item["name"], "force": force}
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(f"{settings.model_hub_api_url}/api/v1/models/pull", json=payload)
             if resp.status_code == 409:
@@ -943,12 +943,18 @@ async def pull_model(key: str) -> dict[str, Any]:
     file_entries = [name for spec in item["sources"] if spec["source"] == "hf" for name in (spec.get("files") or [])]
     if not file_entries:
         raise ValueError("该模型未配置下载文件清单（gated 仓库需要先在 HuggingFace 接受协议并配置 HF_TOKEN）")
-    started = await hf_downloader.start_download(key, item["sources"])
+    started = await hf_downloader.start_download(key, item["sources"], force=force)
     return {
         "status": "started" if started else "active",
         "model_id": primary["model_id"],
         "files": [f"{spec['model_id']}/{name}" for spec in item["sources"] if spec["source"] == "hf" for name in (spec.get("files") or [])],
     }
+
+
+async def stop_model(key: str) -> dict[str, Any]:
+    get_model_def(key)
+    stopped = hf_downloader.request_cancel(key)
+    return {"status": "cancelled" if stopped else "not_running", "model_id": get_model_def(key)["model_id"]}
 
 
 async def sync_model_hub() -> dict[str, Any]:
@@ -991,12 +997,17 @@ async def fetch_model_hub_states() -> dict[str, dict[str, Any]]:
 
 
 def merge_model_hub_state(hub_state: dict[str, Any] | None, info: dict[str, Any]) -> None:
-    """把 Model Hub 侧状态合并进模型信息（仅当本地文件未就绪时才展示下载中/失败）。"""
-    if not hub_state or info["status"] == "ready":
+    """把 Model Hub 侧状态合并进模型信息。
+
+    只回显 ms 源（由 Model Hub 执行下载）的拉取进度；hf 源由本应用自己
+    下载，重启后 Model Hub 里遗留的 pulling 状态不代表仍在下载，避免
+    幽灵"下载中"。
+    """
+    if not hub_state or info["status"] == "ready" or info["source"] != "ms":
         return
-    status = hub_state.get("status")
     if info["status"] == "downloading":
         return
+    status = hub_state.get("status")
     if status in ("pulling", "PULLING"):
         info["status"] = "downloading"
         progress = hub_state.get("progress")

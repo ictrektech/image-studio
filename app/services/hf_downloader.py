@@ -45,10 +45,16 @@ def snapshot_dir(spec: dict[str, Any]) -> Path:
     return settings.modelhub_root / "export" / spec["source"] / Path(*parts) / "snapshots"
 
 
-async def start_download(key: str, sources: list[dict[str, Any]]) -> bool:
-    """为模型启动后台 HF 直连下载；已在下载中时返回 False。"""
+async def start_download(key: str, sources: list[dict[str, Any]], force: bool = False) -> bool:
+    """为模型启动后台 HF 直连下载；已在下载中且未强制时返回 False。
+
+    force=True 用于"重新下载"：先请求取消旧任务（旧线程会在当前文件
+    边界退出），再立即启动新任务接管状态。
+    """
     if is_downloading(key):
-        return False
+        if not force:
+            return False
+        request_cancel(key)
     _tasks[key] = {
         "status": "running",
         "progress": 0.0,
@@ -56,9 +62,23 @@ async def start_download(key: str, sources: list[dict[str, Any]]) -> bool:
         "total_bytes": 0,
         "current_file": "",
         "error": "",
+        "cancel": False,
         "started_at": time.time(),
     }
     asyncio.create_task(_run(key, sources))
+    return True
+
+
+def request_cancel(key: str) -> bool:
+    """请求停止下载：立即生效于状态展示，实际线程在当前文件写完后退出。
+
+    已落盘的部分文件保留，之后重新下载会断点续传。
+    """
+    state = _tasks.get(key)
+    if not state or state.get("status") != "running":
+        return False
+    state["cancel"] = True
+    state["status"] = "cancelled"
     return True
 
 
@@ -66,22 +86,38 @@ async def _run(key: str, sources: list[dict[str, Any]]) -> None:
     state = _tasks[key]
     specs = [(spec["model_id"], list(spec.get("files") or [])) for spec in sources if spec["source"] == "hf"]
     bridge = _TaskBridge(specs)
+    # 先启动进度上报（立刻进入 DOWNLOADING），文件清单/总大小后台并行获取，
+    # 避免清单查询期间任务停留在"等待中"。
+    per_repo_totals: dict[str, int] = {}
+    heartbeat = asyncio.create_task(_heartbeat(key, specs, per_repo_totals, bridge))
     try:
-        per_repo_totals = await asyncio.to_thread(_expected_bytes_per_repo, specs)
-        total_bytes = sum(per_repo_totals.values())
-        state["total_bytes"] = total_bytes
-        logger.info("HF 下载开始: %s, 共 %d 个文件, 预计 %d 字节", key, sum(len(f) for _, f in specs), total_bytes)
+        fetched = await asyncio.to_thread(_expected_bytes_per_repo, specs)
+        per_repo_totals.update(fetched)
+        state["total_bytes"] = sum(fetched.values())
+        logger.info("HF 下载开始: %s, 共 %d 个文件, 预计 %d 字节", key, sum(len(f) for _, f in specs), state["total_bytes"])
 
-        heartbeat = asyncio.create_task(_heartbeat(key, specs, per_repo_totals, bridge))
-        try:
-            for repo_id, files in specs:
-                revision = await asyncio.to_thread(_latest_revision, repo_id)
-                target = snapshot_dir({"source": "hf", "model_id": repo_id}) / revision
-                for filename in files:
-                    state["current_file"] = f"{repo_id}/{filename}"
-                    await asyncio.to_thread(_download_file, repo_id, filename, target)
-        finally:
-            heartbeat.cancel()
+        cancelled = False
+        for repo_id, files in specs:
+            if state.get("cancel"):
+                cancelled = True
+                break
+            revision = await asyncio.to_thread(_latest_revision, repo_id)
+            target = snapshot_dir({"source": "hf", "model_id": repo_id}) / revision
+            for filename in files:
+                if state.get("cancel"):
+                    cancelled = True
+                    break
+                state["current_file"] = f"{repo_id}/{filename}"
+                await asyncio.to_thread(_download_file, repo_id, filename, target)
+            if cancelled:
+                break
+        heartbeat.cancel()
+
+        if cancelled:
+            bridge.fail("已手动停止，可随时重新下载（支持断点续传）")
+            state["current_file"] = ""
+            logger.info("HF 下载已手动停止: %s", key)
+            return
 
         state["progress"] = 1.0
         state["current_file"] = ""
@@ -94,6 +130,8 @@ async def _run(key: str, sources: list[dict[str, Any]]) -> None:
         state["error"] = str(exc)
         bridge.fail(str(exc))
         logger.error("HF 下载失败: %s, error=%s", key, exc)
+    finally:
+        heartbeat.cancel()
 
 
 class _TaskBridge:

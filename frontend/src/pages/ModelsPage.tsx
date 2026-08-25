@@ -1,4 +1,4 @@
-import { CheckCircle2, DownloadCloud, Loader2, RefreshCw, RotateCw, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { CheckCircle2, DownloadCloud, Loader2, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck, Square } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api, ModelInfo } from '../api/client'
 import { messages } from '../i18n'
@@ -39,13 +39,15 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
     return () => clearInterval(timer)
   }, [downloading, onRefresh])
 
-  const run = async (key: string, action: 'pull' | 'sync') => {
+  const run = async (key: string, action: 'pull' | 'pull-force' | 'stop' | 'sync') => {
     setBusy(`${key}:${action}`)
     setMessage('')
     try {
       if (action === 'pull') await api.pullModel(key)
+      else if (action === 'pull-force') await api.pullModel(key, true)
+      else if (action === 'stop') await api.stopModel(key)
       else await api.syncModel(key)
-      setMessage(action === 'pull' ? t.pullSubmitted : t.syncSubmitted)
+      setMessage(action === 'pull' ? t.pullSubmitted : action === 'pull-force' ? t.pullSubmitted : action === 'stop' ? t.stopSubmitted : t.syncSubmitted)
       onRefresh()
     } catch (e: any) {
       setMessage(e.message || t.modelActionFailed)
@@ -119,12 +121,30 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
                     {ready ? <CheckCircle2 size={15} /> : <DownloadCloud size={15} />}
                     {ready ? t.downloaded : downloading ? `${t.modelDownloading} ${percent(model)}%` : t.downloadModel}
                   </button>
+                  {downloading && (
+                    <button
+                      className="secondary-action compact-action"
+                      disabled={Boolean(busy)}
+                      onClick={() => run(model.key, 'stop')}
+                    >
+                      <Square size={15} />{t.stopDownload}
+                    </button>
+                  )}
+                  {(downloading || ready || failed) && (
+                    <button
+                      className="secondary-action compact-action"
+                      disabled={Boolean(busy)}
+                      onClick={() => run(model.key, 'pull-force')}
+                    >
+                      <RotateCcw size={15} />{t.redownload}
+                    </button>
+                  )}
                   <button
                     className="secondary-action compact-action"
                     disabled={Boolean(busy)}
                     onClick={() => run(model.key, 'sync')}
                   >
-                    <RotateCw size={15} />{t.syncModel}
+                    <RefreshCw size={15} />{t.syncModel}
                   </button>
                 </div>
               </article>

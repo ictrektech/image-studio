@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Database, Download, ImageIcon, RefreshCw, RotateCcw, Sparkles, Trash2, Wand2 } from 'lucide-react'
-import { api, GeneratePayload, JobRecord, ModelInfo } from '../api/client'
+import { Database, Download, ImageIcon, RefreshCw, RotateCcw, Sparkles, Trash2, UserCircle2, Wand2 } from 'lucide-react'
+import { api, GeneratePayload, JobRecord, ModelInfo, SessionInfo } from '../api/client'
 import { messages } from '../i18n'
 
 const initialPayload: GeneratePayload = {
@@ -23,6 +23,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
   const [payload, setPayload] = useState<GeneratePayload>(initialPayload)
   const [jobs, setJobs] = useState<JobRecord[]>([])
   const [selectedJobId, setSelectedJobId] = useState<string>('')
+  const [session, setSession] = useState<SessionInfo | null>(null)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -61,6 +62,30 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
   useEffect(() => {
     loadJobs().catch(() => undefined)
   }, [])
+
+  useEffect(() => {
+    api.me().then(setSession).catch(() => undefined)
+  }, [])
+
+  const roundOf = useMemo(() => {
+    const map = new Map<string, number>()
+    jobs.forEach((job, index) => map.set(job.job_id, jobs.length - index))
+    return map
+  }, [jobs])
+
+  const timeOf = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    } catch {
+      return ''
+    }
+  }
+
+  const lineageOf = (job: JobRecord) => {
+    const parent = job.metadata?.init_job_id
+    if (!parent || !roundOf.has(parent)) return ''
+    return `${t.basedOnRound} ${roundOf.get(parent)} ${t.turnWord}`
+  }
 
   useEffect(() => {
     if (!hasRunning) return
@@ -201,6 +226,17 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
             </div>
           )}
         </div>
+        <div className="session-strip">
+          <div className="session-user">
+            <UserCircle2 size={18} />
+            <div>
+              <strong>{t.mySession}</strong>
+              <code>{session ? session.user_key : '...'}</code>
+              {session && !session.authenticated && <span className="tag-anonymous">{t.anonymousSession}</span>}
+            </div>
+          </div>
+          <span className="session-count">{jobs.length} {t.imageCount} · {t.sessionIsolationHint}</span>
+        </div>
         <div className="history-heading">
           <span>{t.conversation}</span>
           <small>{jobs.length} {t.imageCount}</small>
@@ -209,6 +245,8 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
           {jobs.slice(0, 8).map(job => {
             const output = job.outputs[0]
             const outputUrl = output ? api.outputUrl(job.job_id, output) : ''
+            const round = roundOf.get(job.job_id)
+            const lineage = lineageOf(job)
             return (
               <article className={`turn-card ${job.job_id === selectedJob?.job_id ? 'active' : ''}`} key={job.job_id}>
                 <button className="turn-thumb" onClick={() => setSelectedJobId(job.job_id)}>
@@ -216,10 +254,11 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
                 </button>
                 <div className="turn-body">
                   <div className="turn-meta">
-                    <strong>{job.job_id === jobs[0]?.job_id ? t.latestTurn : job.status}</strong>
-                    <span>{job.width} x {job.height}</span>
+                    <strong>#{round} {job.job_id === jobs[0]?.job_id ? t.latestTurn : job.status}</strong>
+                    <span>{job.width} x {job.height} · {timeOf(job.created_at)}</span>
                   </div>
                   <p>{job.prompt}</p>
+                  {lineage && <span className="turn-lineage">↳ {lineage}</span>}
                   <div className="turn-actions">
                     {output && <button className="quiet-button" onClick={() => reuseOutput(job, output)}><Wand2 size={14} />{t.continueThread}</button>}
                     {outputUrl && <a className="quiet-button" href={outputUrl} download><Download size={14} />{t.downloadOutput}</a>}

@@ -7,7 +7,7 @@ from app.config import settings as app_settings
 from app.models import GenerateRequest
 from app.services.generation import create_job
 from app.services.models import get_model, list_model_defs_with_hub_state, pull_model, sync_model_hub
-from app.services.session import current_user_key
+from app.services.session import bearer_token, current_user_key
 from app.services.storage import delete_job, job_dir, list_jobs, load_job, load_settings, save_settings
 
 router = APIRouter(prefix="/api/v1")
@@ -25,6 +25,12 @@ async def about():
         "sd_cpp_bin": app_settings.sd_cpp_bin,
         "max_concurrency": app_settings.max_concurrency,
     }
+
+
+@router.get("/me")
+async def me(request: Request):
+    user_key = await current_user_key(request)
+    return {"user_key": user_key, "authenticated": bool(bearer_token(request))}
 
 
 @router.get("/settings")

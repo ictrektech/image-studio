@@ -31,6 +31,7 @@ Main endpoints:
 | --- | --- | --- |
 | `GET` | `/health` | Service health |
 | `GET` | `/api/v1/about` | Runtime and path information |
+| `GET` | `/api/v1/me` | Current session user key (who the token belongs to) |
 | `GET` | `/api/v1/settings` | Current VOS user's app settings |
 | `PUT` | `/api/v1/settings` | Save current VOS user's language preference |
 | `POST` | `/api/v1/generate` | Create a generation job |
@@ -40,8 +41,25 @@ Main endpoints:
 | `GET` | `/api/v1/outputs` | List generated files for current user |
 | `GET` | `/api/v1/outputs/{job_id}/{filename}` | Download one generated file |
 | `GET` | `/api/v1/models` | List managed model definitions and state |
-| `POST` | `/api/v1/models/{key}/pull` | Trigger Model Hub pull |
+| `POST` | `/api/v1/models/{key}/pull` | Trigger Model Hub pull or HF direct download |
 | `POST` | `/api/v1/models/{key}/sync` | Ask Model Hub to sync local model registry |
+
+### Authentication and user isolation
+
+Every request is resolved to a VOS user and all jobs, outputs, and settings
+are stored under that user's key:
+
+- **Inside VOS (recommended):** same-account apps call through the VOS
+  gateway with the logged-in user's `Authorization: Bearer <token>`. The
+  backend verifies the token through VOS OIDC/userinfo and attributes the
+  data to that account automatically.
+- **Outside VOS:** obtain an access token for the target VOS account, then
+  call `https://<vos-host>/api/com.ictrek.image-studio/...` with the same
+  `Authorization` header. The token's account owns whatever it creates.
+  Output files also accept `?access_token=` for browser/image-tag usage.
+- **No token:** the request falls into an anonymous bucket derived from the
+  origin fingerprint; data is tied to no account and should only be used
+  for quick tests.
 
 ## Model Sources And Model Hub Integration
 

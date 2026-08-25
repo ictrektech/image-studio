@@ -67,6 +67,12 @@ export interface JobRecord extends GeneratePayload {
   error: string
   created_at: string
   updated_at: string
+  metadata?: { init_job_id?: string; init_filename?: string }
+}
+
+export interface SessionInfo {
+  user_key: string
+  authenticated: boolean
 }
 
 export interface AboutInfo {
@@ -107,6 +113,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   about: () => request<AboutInfo>('/api/v1/about'),
+  me: () => request<SessionInfo>('/api/v1/me'),
   settings: () => request<UserSettings>('/api/v1/settings'),
   updateSettings: (payload: UserSettings) => request<UserSettings>('/api/v1/settings', { method: 'PUT', body: JSON.stringify(payload) }),
   listModels: () => request<ModelInfo[]>('/api/v1/models'),

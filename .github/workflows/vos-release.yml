@@ -89,24 +89,8 @@ jobs:
           VERSION="${GITHUB_REF_NAME#vos-image-studio-v}"
           PACKAGE="ictrek.app/dist/image_studio_${VERSION}_pull.tar"
           base="${APP_STORE%/}"
-          base="${base%/store}"
-          base="${base%/api/apps/publish}"
-          base="${base%/api/apps/validate}"
 
-          validate_response="$(curl -kfsS -F "package=@${PACKAGE}" "${base}/api/apps/validate")"
-          RESPONSE="$validate_response" python3 - <<'PY'
-          import json
-          import os
-          import sys
-
-          payload = json.loads(os.environ["RESPONSE"])
-          if payload.get("code") != 0:
-              print(payload, file=sys.stderr)
-              raise SystemExit("App Store package validation failed")
-          print(f"Validated {payload.get('data', {}).get('app_id')}@{payload.get('data', {}).get('version')}")
-          PY
-
-          publish_response="$(curl -kfsS -F "package=@${PACKAGE}" -F "force=true" "${base}/api/apps/publish")"
+          publish_response="$(curl -kfsS -F "package=@${PACKAGE}" -F "force=true" "${base}/api/appstore/apps")"
           RESPONSE="$publish_response" python3 - <<'PY'
           import json
           import os

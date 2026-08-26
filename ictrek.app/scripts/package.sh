@@ -229,11 +229,32 @@ latest_image() {
   local sheet_id="$2"
   local component="$3"
   local repository="$4"
-  local column tag
+  local column tag sheet_repository
   column="$(find_component_column_letter "$token" "$sheet_id" "$component")" || return 1
+  sheet_repository="$(find_component_repository "$token" "$sheet_id" "$column")" || return 1
+  [[ -n "$sheet_repository" ]] && repository="$sheet_repository"
   tag="$(find_latest_tag "$token" "$sheet_id" "$column")" || return 1
   [[ -n "$tag" ]] || return 1
   echo "${repository}:${tag}"
+}
+
+find_component_repository() {
+  local token="$1"
+  local sheet_id="$2"
+  local column="$3"
+  local resp
+  resp="$(get_range_values "$token" "${sheet_id}!${column}2:${column}2")"
+  python3 - "$resp" <<'PYJSON'
+import json
+import sys
+data = json.loads(sys.argv[1])
+if data.get("code") != 0:
+    raise SystemExit(f"read repository failed: {data}")
+values = data.get("data", {}).get("valueRange", {}).get("values", [])
+if not values or not values[0] or not str(values[0][0]).strip():
+    raise SystemExit("component repository missing from row2")
+print(str(values[0][0]).strip())
+PYJSON
 }
 
 load_feishu_auth() {
@@ -304,6 +325,7 @@ verify_package() {
   local package_listing
   local package_text
   local manifest_text
+  local configs_text
   local routers_text
   local compose_text
   local sidebar_route
@@ -331,6 +353,13 @@ verify_package() {
   fi
   if ! printf '%s\n' "$manifest_text" | grep -q '^[[:space:]]*icon:[[:space:]]*icon.png[[:space:]]*$'; then
     die "manifest.yml must declare icon.png"
+  fi
+  configs_text="$(tar xOf "$app_tarball" configs.yml)"
+  if ! printf '%s\n' "$configs_text" | grep -Fq '  - name: MODEL_HUB_SHARED_MODELS_PATH'; then
+    die "configs.yml must expose MODEL_HUB_SHARED_MODELS_PATH"
+  fi
+  if ! printf '%s\n' "$configs_text" | grep -Fq 'hints: [com.ictrek.model.storage]'; then
+    die "MODEL_HUB_SHARED_MODELS_PATH must declare com.ictrek.model.storage hint"
   fi
   compose_text="$(tar xOf "$app_tarball" docker-compose.yml)"
   if printf '%s\n' "$compose_text" | grep -q '\${[^}]*_IMAGE[^}]*}'; then

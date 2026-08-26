@@ -100,10 +100,10 @@ services:
   image-studio-frontend-amd-cuda:
     <<: *image-studio-frontend-base
     profiles: ["amd-cuda"]
-    image: ${IMAGE_STUDIO_FRONTEND_AMD_CUDA_IMAGE}
+    image: ${IMAGE_STUDIO_FRONTEND_AMD_IMAGE}
     environment:
       <<: *image-studio-frontend-env
-      FRONTEND_IMAGE: ${IMAGE_STUDIO_FRONTEND_AMD_CUDA_IMAGE}
+      FRONTEND_IMAGE: ${IMAGE_STUDIO_FRONTEND_AMD_IMAGE}
       BACKEND_IMAGE: ${IMAGE_STUDIO_BACKEND_AMD_CUDA_IMAGE}
     pull_policy: always
     depends_on:
@@ -146,10 +146,10 @@ services:
   image-studio-frontend-arm-cuda:
     <<: *image-studio-frontend-base
     profiles: ["arm-cuda"]
-    image: ${IMAGE_STUDIO_FRONTEND_ARM_CUDA_IMAGE}
+    image: ${IMAGE_STUDIO_FRONTEND_ARM_IMAGE}
     environment:
       <<: *image-studio-frontend-env
-      FRONTEND_IMAGE: ${IMAGE_STUDIO_FRONTEND_ARM_CUDA_IMAGE}
+      FRONTEND_IMAGE: ${IMAGE_STUDIO_FRONTEND_ARM_IMAGE}
       BACKEND_IMAGE: ${IMAGE_STUDIO_BACKEND_ARM_CUDA_IMAGE}
     pull_policy: always
     depends_on:
@@ -170,10 +170,10 @@ services:
   image-studio-frontend-l4t:
     <<: *image-studio-frontend-base
     profiles: ["l4t"]
-    image: ${IMAGE_STUDIO_FRONTEND_L4T_IMAGE}
+    image: ${IMAGE_STUDIO_FRONTEND_ARM_IMAGE}
     environment:
       <<: *image-studio-frontend-env
-      FRONTEND_IMAGE: ${IMAGE_STUDIO_FRONTEND_L4T_IMAGE}
+      FRONTEND_IMAGE: ${IMAGE_STUDIO_FRONTEND_ARM_IMAGE}
       BACKEND_IMAGE: ${IMAGE_STUDIO_BACKEND_L4T_IMAGE}
     pull_policy: always
     depends_on:
@@ -194,10 +194,10 @@ services:
   image-studio-frontend-thor:
     <<: *image-studio-frontend-base
     profiles: ["thor"]
-    image: ${IMAGE_STUDIO_FRONTEND_THOR_IMAGE}
+    image: ${IMAGE_STUDIO_FRONTEND_ARM_IMAGE}
     environment:
       <<: *image-studio-frontend-env
-      FRONTEND_IMAGE: ${IMAGE_STUDIO_FRONTEND_THOR_IMAGE}
+      FRONTEND_IMAGE: ${IMAGE_STUDIO_FRONTEND_ARM_IMAGE}
       BACKEND_IMAGE: ${IMAGE_STUDIO_BACKEND_THOR_IMAGE}
     pull_policy: always
     depends_on:

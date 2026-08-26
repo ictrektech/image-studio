@@ -28,8 +28,11 @@ PROFILES=(
   "thor|thor_spark"
 )
 COMPONENTS=(
-  "IMAGE_STUDIO_FRONTEND|image-studio-frontend|swr.cn-southwest-2.myhuaweicloud.com/ictrek/image-studio-frontend"
   "IMAGE_STUDIO_BACKEND|image-studio-backend|swr.cn-southwest-2.myhuaweicloud.com/ictrek/image-studio-backend"
+)
+FRONTEND_ARCHES=(
+  "amd|AMD_with_mxn100,AMD_with_cuda"
+  "arm|ARM_without_cuda,ARM_with_cuda,l4t,thor_spark,SOPHON_bm1688"
 )
 
 usage() {
@@ -448,6 +451,21 @@ mkdir -p "$STAGE_DIR"
 
 ENV_FILE="${STAGE_DIR}/.env"
 : > "$ENV_FILE"
+for frontend_spec in "${FRONTEND_ARCHES[@]}"; do
+  IFS='|' read -r frontend_arch sheet_titles <<< "$frontend_spec"
+  image=""
+  IFS=',' read -ra candidate_sheets <<< "$sheet_titles"
+  for candidate_sheet in "${candidate_sheets[@]}"; do
+    sheet_id="$(get_sheet_id_by_title "$FEISHU_TOKEN" "$candidate_sheet")"
+    if image="$(latest_image "$FEISHU_TOKEN" "$sheet_id" "image-studio-frontend" "swr.cn-southwest-2.myhuaweicloud.com/ictrek/image-studio-frontend")"; then
+      log "frontend $frontend_arch ($candidate_sheet) -> $image"
+      break
+    fi
+  done
+  [[ -n "$image" ]] || die "failed to resolve frontend image for architecture=$frontend_arch"
+  printf 'IMAGE_STUDIO_FRONTEND_%s_IMAGE=%s\n' "$(env_key "$frontend_arch")" "$image" >> "$ENV_FILE"
+done
+
 for profile_spec in "${PROFILES[@]}"; do
   IFS='|' read -r profile sheet_title <<< "$profile_spec"
   sheet_title="${sheet_title:-$profile}"

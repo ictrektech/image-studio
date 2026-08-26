@@ -400,8 +400,11 @@ Usage:
   ./docker/build_image.sh --sheet thor_spark
   ./docker/build_image.sh --component backend|frontend
 
-Tag prefixes are profile-specific:
+Backend tag prefixes are profile-specific:
   amd, amd_cu128, arm, arm_cu128, l4t, thor
+
+Frontend tags are architecture-specific and shared across sheets:
+  amd, arm
 EOF
       exit 0
       ;;
@@ -454,6 +457,25 @@ log "Host architecture: ${HOST_ARCH}"
 log "Sheets: ${TARGET_SHEETS[*]}"
 log "Components: ${COMPONENTS[*]}"
 
+if contains "frontend" "${COMPONENTS[@]}"; then
+  FRONTEND_TAG="${HOST_ARCH}_${TAG_OVERRIDE:-$DATE}"
+  FRONTEND_IMAGE="${FRONTEND_REPOSITORY}:${FRONTEND_TAG}"
+  log "Building shared ${HOST_ARCH} frontend image: ${FRONTEND_IMAGE}"
+  docker buildx build \
+    --builder default \
+    --load \
+    --provenance=false \
+    --sbom=false \
+    --build-arg "NODE_BASE_IMAGE=${REGISTRY}/node:${HOST_ARCH}_22-alpine" \
+    --build-arg "NGINX_BASE_IMAGE=${REGISTRY}/nginx:${HOST_ARCH}_alpine" \
+    -t "image-studio-frontend:${FRONTEND_TAG}" \
+    -t "${FRONTEND_IMAGE}" \
+    -f frontend/Dockerfile \
+    frontend
+  docker push "${FRONTEND_IMAGE}"
+  log "Image pushed: ${FRONTEND_IMAGE}"
+fi
+
 for sheet in "${TARGET_SHEETS[@]}"; do
   spec="$(sheet_spec "$sheet")"
   IFS='|' read -r PROFILE TAG_PREFIX BACKEND_DOCKERFILE NODE_TAG NGINX_TAG <<< "$spec"
@@ -494,19 +516,7 @@ for sheet in "${TARGET_SHEETS[@]}"; do
           .
         ;;
       frontend)
-        IMAGE="${FRONTEND_REPOSITORY}:${TAG}"
-        log "Building frontend image: ${IMAGE}"
-        docker buildx build \
-          --builder default \
-          --load \
-          --provenance=false \
-          --sbom=false \
-          --build-arg "NODE_BASE_IMAGE=${REGISTRY}/node:${NODE_TAG}" \
-          --build-arg "NGINX_BASE_IMAGE=${REGISTRY}/nginx:${NGINX_TAG}" \
-          -t "image-studio-frontend:${TAG}" \
-          -t "${IMAGE}" \
-          -f frontend/Dockerfile \
-          frontend
+        continue
         ;;
     esac
     docker push "${IMAGE}"
@@ -543,14 +553,18 @@ for sheet in "${TARGET_SHEETS[@]}"; do
         frontend)
           COMPONENT_NAME="$FRONTEND_COMPONENT_NAME"
           REPOSITORY="$FRONTEND_REPOSITORY"
+          COMPONENT_TAG="$FRONTEND_TAG"
           ;;
       esac
+      if [[ "$component" == "backend" ]]; then
+        COMPONENT_TAG="$TAG"
+      fi
       FEISHU_TOKEN="$(get_feishu_token "$FEISHU_APP_ID" "$FEISHU_APP_SECRET")"
       COMPONENT_COL="$(find_component_column_letter "$FEISHU_TOKEN" "$FEISHU_SPREADSHEET_TOKEN" "$SHEET_ID" "$COMPONENT_NAME")"
       write_cell "$FEISHU_TOKEN" "$FEISHU_SPREADSHEET_TOKEN" "$SHEET_ID" "${COMPONENT_COL}1" "$COMPONENT_NAME"
       write_cell "$FEISHU_TOKEN" "$FEISHU_SPREADSHEET_TOKEN" "$SHEET_ID" "${COMPONENT_COL}2" "$REPOSITORY"
-      write_cell "$FEISHU_TOKEN" "$FEISHU_SPREADSHEET_TOKEN" "$SHEET_ID" "${COMPONENT_COL}${DATE_ROW}" "$TAG"
-      log "Feishu updated: ${update_sheet}!${COMPONENT_COL}${DATE_ROW} = ${TAG}"
+      write_cell "$FEISHU_TOKEN" "$FEISHU_SPREADSHEET_TOKEN" "$SHEET_ID" "${COMPONENT_COL}${DATE_ROW}" "$COMPONENT_TAG"
+      log "Feishu updated: ${update_sheet}!${COMPONENT_COL}${DATE_ROW} = ${COMPONENT_TAG}"
     done
   done
 done

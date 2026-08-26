@@ -187,6 +187,10 @@ Build script entrypoint:
 ./docker/build_image.sh --sheet thor_spark
 ```
 
+Backend tags remain profile-specific. The frontend is architecture-only: one
+`amd_<date>` image is written to every selected AMD sheet, and one `arm_<date>`
+image is written to every selected ARM, L4T, Thor, and SOPHON sheet.
+
 ## VOS Package
 
 ```bash

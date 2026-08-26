@@ -94,6 +94,7 @@ services:
     environment:
       <<: *image-studio-backend-env
       IMAGE_STUDIO_PROFILE: amd
+      IMAGE_STUDIO_BACKEND_IMAGE: ${IMAGE_STUDIO_BACKEND_AMD_IMAGE}
     pull_policy: always
 
   image-studio-frontend-amd-cuda:
@@ -115,6 +116,7 @@ services:
     environment:
       <<: *image-studio-backend-env
       IMAGE_STUDIO_PROFILE: amd-cuda
+      IMAGE_STUDIO_BACKEND_IMAGE: ${IMAGE_STUDIO_BACKEND_AMD_CUDA_IMAGE}
       NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
       NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
     pull_policy: always
@@ -138,6 +140,7 @@ services:
     environment:
       <<: *image-studio-backend-env
       IMAGE_STUDIO_PROFILE: arm
+      IMAGE_STUDIO_BACKEND_IMAGE: ${IMAGE_STUDIO_BACKEND_ARM_IMAGE}
     pull_policy: always
 
   image-studio-frontend-arm-cuda:
@@ -159,6 +162,7 @@ services:
     environment:
       <<: *image-studio-backend-env
       IMAGE_STUDIO_PROFILE: arm-cuda
+      IMAGE_STUDIO_BACKEND_IMAGE: ${IMAGE_STUDIO_BACKEND_ARM_CUDA_IMAGE}
       NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
       NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
     pull_policy: always
@@ -182,6 +186,7 @@ services:
     environment:
       <<: *image-studio-backend-env
       IMAGE_STUDIO_PROFILE: l4t
+      IMAGE_STUDIO_BACKEND_IMAGE: ${IMAGE_STUDIO_BACKEND_L4T_IMAGE}
       NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
       NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
     pull_policy: always
@@ -205,6 +210,7 @@ services:
     environment:
       <<: *image-studio-backend-env
       IMAGE_STUDIO_PROFILE: thor
+      IMAGE_STUDIO_BACKEND_IMAGE: ${IMAGE_STUDIO_BACKEND_THOR_IMAGE}
       NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
       NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
     pull_policy: always

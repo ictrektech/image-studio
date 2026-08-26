@@ -8,6 +8,7 @@ class Settings:
     app_id = "com.ictrek.image-studio"
     service_name = "Image Studio"
     app_version = os.getenv("IMAGE_STUDIO_APP_VERSION", "0.0.0")
+    backend_image = os.getenv("IMAGE_STUDIO_BACKEND_IMAGE", "")
     profile = os.getenv("IMAGE_STUDIO_PROFILE", "local")
     data_dir = Path(os.getenv("IMAGE_STUDIO_DATA_DIR", "/data")).resolve()
     modelhub_root = Path(os.getenv("MODEL_HUB_SHARED_MODELS_PATH", "/modelhub")).resolve()

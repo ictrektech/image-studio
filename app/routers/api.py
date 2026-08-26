@@ -29,6 +29,7 @@ async def about():
     return {
         "app_id": app_settings.app_id,
         "app_version": app_settings.app_version,
+        "backend_image": app_settings.backend_image,
         "profile": app_settings.profile,
         "data_dir": str(app_settings.data_dir),
         "modelhub_root": str(app_settings.modelhub_root),

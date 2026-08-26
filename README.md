@@ -197,3 +197,7 @@ cd ictrek.app
 The package is written to `ictrek.app/dist/image_studio_<version>_pull.tar`.
 For formal releases, use `ictrek.app/scripts/update_version.sh`; GitHub Actions
 is the authoritative package builder and VOS App Store publisher.
+
+The top-right **About** dialog reports the VOS app version, frontend and backend
+image references, and the active deployment profile. These values are injected
+by the VOS package at container startup, so they match the installed profile.

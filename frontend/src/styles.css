@@ -47,6 +47,11 @@ code, pre { font-family: "SF Mono", Menlo, Consolas, monospace; }
   height: 34px; padding: 0 12px; border: 1px solid var(--border); border-radius: 7px;
   display: flex; align-items: center; gap: 8px; background: var(--surface); font-size: 12px; color: #334155;
 }
+.about-button {
+  height: 34px; padding: 0 12px; border: 1px solid var(--border); border-radius: 7px;
+  display: inline-flex; align-items: center; gap: 8px; background: var(--surface); color: #334155; font-size: 12px;
+}
+.about-button:hover { border-color: var(--border-strong); background: var(--surface-soft); }
 .language-select {
   width: 110px;
   height: 34px;
@@ -67,6 +72,28 @@ code, pre { font-family: "SF Mono", Menlo, Consolas, monospace; }
   padding: 0 2px; font-size: 13px; font-weight: 650; border-bottom: 2px solid transparent;
 }
 .tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+.about-modal {
+  position: fixed; inset: 0; z-index: 300; padding: 24px; background: rgba(15, 23, 42, 0.42);
+  display: flex; align-items: center; justify-content: center;
+}
+.about-modal-box {
+  width: min(520px, 100%); border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.24); padding: 20px;
+}
+.about-modal-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.about-modal-heading > div { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.about-modal-heading img { width: 44px; height: 44px; border-radius: 10px; }
+.about-modal-heading h2 { margin: 0; font-size: 18px; }
+.about-modal-heading p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+.about-modal-heading > button {
+  width: 32px; height: 32px; flex: 0 0 auto; border: 0; border-radius: 7px; background: transparent; color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.about-modal-heading > button:hover { background: var(--surface-soft); color: var(--text); }
+.about-versions { margin: 20px 0 0; display: grid; gap: 10px; }
+.about-versions > div { padding: 11px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-soft); }
+.about-versions dt { color: var(--muted); font-size: 11px; font-weight: 700; }
+.about-versions dd { margin: 5px 0 0; color: var(--text); font: 12px/1.5 "SF Mono", Menlo, Consolas, monospace; overflow-wrap: anywhere; }
 main { padding: 16px 18px 24px; }
 
 .workspace-grid {

@@ -90,6 +90,7 @@ export interface SessionInfo {
 export interface AboutInfo {
   app_id: string
   app_version: string
+  backend_image: string
   profile: string
   data_dir: string
   modelhub_root: string

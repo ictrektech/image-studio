@@ -1343,11 +1343,11 @@ async def fetch_model_hub_states() -> dict[str, dict[str, Any]]:
 def merge_model_hub_state(hub_state: dict[str, Any] | None, info: dict[str, Any]) -> None:
     """把 Model Hub 侧状态合并进模型信息。
 
-    只回显 ms 源（由 Model Hub 执行下载）的拉取进度；hf 源由本应用自己
-    下载，重启后 Model Hub 里遗留的 pulling 状态不代表仍在下载，避免
-    幽灵"下载中"。
+    ready 判定不能只看主模型文件是否已落盘。多文件模型下载时，主模型
+    可能先完成，但 VAE / 文本编码器仍在拉取；只要 Model Hub 仍标记
+    pulling，就先视作 downloading，避免提交必然失败的生成任务。
     """
-    if not hub_state or info["status"] == "ready" or info["source"] != "ms":
+    if not hub_state:
         return
     if info["status"] == "downloading":
         return
@@ -1356,7 +1356,7 @@ def merge_model_hub_state(hub_state: dict[str, Any] | None, info: dict[str, Any]
         info["status"] = "downloading"
         progress = hub_state.get("progress")
         info["progress"] = float(progress) if isinstance(progress, (int, float)) else None
-    elif status in ("failed", "FAILED"):
+    elif status in ("failed", "FAILED") and info["status"] != "ready":
         info["status"] = "failed"
         info["error"] = hub_state.get("error") or ""
 
@@ -1367,12 +1367,23 @@ async def list_model_defs_with_hub_state() -> list[ModelInfo]:
     result = []
     for item in MODEL_DEFS:
         info = model_info(item)
-        if info.status != "ready":
-            payload = info.model_dump()
-            merge_model_hub_state(hub_states.get(info.model_id), payload)
-            info = ModelInfo(**payload)
+        payload = info.model_dump()
+        merge_model_hub_state(hub_states.get(info.model_id), payload)
+        info = ModelInfo(**payload)
         result.append(info)
     return result
+
+
+async def assert_model_hub_ready(key: str) -> None:
+    item = get_model_def(key)
+    hub_states = await fetch_model_hub_states()
+    for spec in item["sources"]:
+        state = hub_states.get(spec["model_id"])
+        if not state:
+            continue
+        status = state.get("status")
+        if status in ("pulling", "PULLING"):
+            raise FileNotFoundError(f"Model Hub 仍在下载: {spec['model_id']}")
 
 
 def model_path_for(key: str) -> Path:

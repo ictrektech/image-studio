@@ -10,7 +10,7 @@ from pathlib import Path
 
 from app.config import settings
 from app.models import GenerateRequest, JobRecord
-from app.services.models import get_model_def, model_path_for, runtime_paths_for
+from app.services.models import assert_model_hub_ready, get_model_def, model_path_for, runtime_paths_for
 from app.services.storage import input_path, job_dir, save_job, user_dir
 
 _semaphore = asyncio.Semaphore(settings.max_concurrency)
@@ -43,6 +43,7 @@ async def create_job(user_key: str, request: GenerateRequest) -> JobRecord:
     runtime = get_model_def(request.model_key)["runtime"]
     video_mode = runtime.get("mode") == "video"
     defaults = runtime.get("defaults") or {}
+    await assert_model_hub_ready(request.model_key)
     model_path = model_path_for(request.model_key)
     now = datetime.utcnow()
     job = JobRecord(

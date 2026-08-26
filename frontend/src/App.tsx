@@ -106,7 +106,7 @@ export default function App() {
             <dl className="about-versions">
               <div><dt>{t.vosAppVersion}</dt><dd>{about?.app_version || window.__APP_VERSION__ || t.unavailable}</dd></div>
               <div><dt>{t.frontendImage}</dt><dd>{window.__FRONTEND_IMAGE__ || t.unavailable}</dd></div>
-              <div><dt>{t.backendImage}</dt><dd>{about?.backend_image || t.unavailable}</dd></div>
+              <div><dt>{t.backendImage}</dt><dd>{window.__BACKEND_IMAGE__ || t.unavailable}</dd></div>
               <div><dt>{t.deploymentProfile}</dt><dd>{about?.profile || t.unavailable}</dd></div>
             </dl>
           </section>

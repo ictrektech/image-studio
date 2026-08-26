@@ -16,8 +16,8 @@ configs:
       zh-CN: Model Hub 共享模型目录
       en: Model Hub Shared Models Path
     description:
-      zh-CN: Model Hub 的宿主机共享模型根目录。Image Studio 读取其中的模型，并把 HuggingFace 直连下载的模型按 Model Hub 兼容布局写入该目录。
-      en: Host shared model root managed by Model Hub. Image Studio reads models from it and writes HuggingFace direct-download models into the same Model Hub compatible layout.
+      zh-CN: Model Hub 的共享模型根目录。安装时应选择与 Model Hub 相同的 NAS 公共目录；Image Studio 读取其中的模型，并把 HuggingFace 直连下载的模型按 Model Hub 兼容布局写入该目录。
+      en: Shared model root managed by Model Hub. Select the same NAS public directory as Model Hub at install time. Image Studio reads models from it and writes HuggingFace direct-download models into the same Model Hub compatible layout.
     default: /data/vos_workspace/model_hub
     hints: [com.ictrek.model.storage]
 

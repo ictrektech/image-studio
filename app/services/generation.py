@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import shlex
 import shutil
-import subprocess
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -11,9 +10,11 @@ from pathlib import Path
 from app.config import settings
 from app.models import GenerateRequest, JobRecord
 from app.services.models import assert_model_hub_ready, get_model_def, model_path_for, runtime_paths_for
-from app.services.storage import input_path, job_dir, save_job, user_dir
+from app.services.storage import input_path, job_dir, load_job, save_job, user_dir
 
 _semaphore = asyncio.Semaphore(settings.max_concurrency)
+_job_tasks: dict[tuple[str, str], asyncio.Task] = {}
+_job_processes: dict[tuple[str, str], asyncio.subprocess.Process] = {}
 
 # sd.cpp 旗标与 runtime 角色的对应关系
 ROLE_FLAGS = {
@@ -76,32 +77,55 @@ async def create_job(user_key: str, request: GenerateRequest) -> JobRecord:
         # sd-cli 以 --video-frames > 1 区分视频生成，缺省时强制使用家族默认
         job.video_frames = int(defaults.get("video_frames", 33) or 33)
     save_job(job)
-    asyncio.create_task(run_job(job))
+    task_key = (job.user_key, job.job_id)
+    task = asyncio.create_task(run_job(job))
+    _job_tasks[task_key] = task
+    task.add_done_callback(lambda _: _job_tasks.pop(task_key, None))
     return job
 
 
-async def run_job(job: JobRecord) -> None:
-    async with _semaphore:
-        job.status = "running"
-        job.progress = 0.1
-        save_job(job)
+async def cancel_job(user_key: str, job_id: str) -> bool:
+    task_key = (user_key, job_id)
+    cancelled = False
+    task = _job_tasks.get(task_key)
+    if task and not task.done():
+        task.cancel()
+        cancelled = True
         try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    process = _job_processes.get(task_key)
+    if process and process.returncode is None:
+        await _terminate_process(process)
+        cancelled = True
+    return cancelled
+
+
+async def run_job(job: JobRecord) -> None:
+    try:
+        async with _semaphore:
+            if load_job(job.user_key, job.job_id) is None:
+                return
+            job.status = "running"
+            job.progress = 0.1
+            save_job(job)
             video_mode = get_model_def(job.model_key)["runtime"].get("mode") == "video"
             output_dir = job_dir(job.user_key, job.job_id)
             has_bin = bool(shutil.which(settings.sd_cpp_bin))
             if not has_bin and not settings.mock_when_runtime_missing:
                 raise RuntimeError(f"sd.cpp binary not found: {settings.sd_cpp_bin}")
 
-            def run_once(output: Path, seed_offset: int = 0) -> None:
+            async def run_once(output: Path, seed_offset: int = 0) -> None:
                 if has_bin:
-                    run_sd_cpp(job, output, seed_offset=seed_offset)
+                    await run_sd_cpp(job, output, seed_offset=seed_offset)
                 else:
-                    write_mock_svg_as_png_named(job, output)
+                    await asyncio.to_thread(write_mock_svg_as_png_named, job, output)
 
             if video_mode:
                 # 视频任务固定单输出；batch/strength 等不适用的参数已在装配时忽略
                 output = output_dir / "output.mp4"
-                await asyncio.to_thread(run_once, output)
+                await run_once(output)
                 job.outputs = [output.name]
             else:
                 names = (
@@ -110,15 +134,22 @@ async def run_job(job: JobRecord) -> None:
                     else [f"output_{i:02d}.png" for i in range(1, job.batch_count + 1)]
                 )
                 for i, name in enumerate(names):
-                    await asyncio.to_thread(run_once, output_dir / name, i)
+                    if load_job(job.user_key, job.job_id) is None:
+                        return
+                    await run_once(output_dir / name, i)
                     job.outputs = [*job.outputs, name]
                     job.progress = 0.1 + 0.9 * (i + 1) / len(names)
                     save_job(job)
             job.progress = 1
             job.status = "succeeded"
-        except Exception as exc:
-            job.status = "failed"
-            job.error = str(exc)
+    except asyncio.CancelledError:
+        return
+    except Exception as exc:
+        if load_job(job.user_key, job.job_id) is None:
+            return
+        job.status = "failed"
+        job.error = str(exc)
+    if load_job(job.user_key, job.job_id) is not None:
         save_job(job)
 
 
@@ -172,21 +203,49 @@ def build_sd_args(job: JobRecord, output: Path, seed_offset: int = 0) -> list[st
     return args
 
 
-def run_sd_cpp(job: JobRecord, output: Path, seed_offset: int = 0) -> None:
+async def run_sd_cpp(job: JobRecord, output: Path, seed_offset: int = 0) -> None:
     args = build_sd_args(job, output, seed_offset=seed_offset)
     video_mode = get_model_def(job.model_key)["runtime"].get("mode") == "video"
     timeout = settings.video_timeout_seconds if video_mode else settings.default_timeout_seconds
-    result = subprocess.run(
-        args,
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
+    task_key = (job.user_key, job.job_id)
+    process = await asyncio.create_subprocess_exec(
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
     )
-    if result.returncode != 0:
-        stderr_tail = (result.stderr or "").strip().splitlines()[-6:]
+    _job_processes[task_key] = process
+    try:
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+    except asyncio.CancelledError:
+        await _terminate_process(process)
+        raise
+    except asyncio.TimeoutError as exc:
+        await _terminate_process(process)
+        raise RuntimeError(f"sd-cli 超时（{timeout}s）") from exc
+    finally:
+        _job_processes.pop(task_key, None)
+    if process.returncode != 0:
+        stderr_text = stderr.decode(errors="replace")
+        stderr_tail = stderr_text.strip().splitlines()[-6:]
         detail = " | ".join(line.strip() for line in stderr_tail if line.strip())
-        raise RuntimeError(f"sd-cli 退出码 {result.returncode}: {detail or '无错误输出'}")
+        raise RuntimeError(f"sd-cli 退出码 {process.returncode}: {detail or '无错误输出'}")
+
+
+async def _terminate_process(process: asyncio.subprocess.Process) -> None:
+    if process.returncode is not None:
+        return
+    try:
+        process.terminate()
+    except ProcessLookupError:
+        return
+    try:
+        await asyncio.wait_for(process.wait(), timeout=5)
+    except asyncio.TimeoutError:
+        try:
+            process.kill()
+        except ProcessLookupError:
+            return
+        await process.wait()
 
 
 def init_image_path(job: JobRecord) -> Path | None:

@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 
 from app.config import settings as app_settings
 from app.models import GenerateRequest
-from app.services.generation import create_job
+from app.services.generation import cancel_job, create_job
 from app.services.models import get_model, list_model_defs_with_hub_state, pull_model, stop_model, sync_model_hub
 from app.services.session import bearer_token, current_user_key
 from app.services.storage import (
@@ -83,7 +83,9 @@ async def job(request: Request, job_id: str):
 
 @router.delete("/jobs/{job_id}")
 async def delete_generation_job(request: Request, job_id: str):
-    deleted = delete_job(await current_user_key(request), job_id)
+    user_key = await current_user_key(request)
+    await cancel_job(user_key, job_id)
+    deleted = delete_job(user_key, job_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="job not found")
     return {"deleted": True, "job_id": job_id}

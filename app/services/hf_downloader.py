@@ -33,8 +33,12 @@ _HF_ENDPOINTS: list[str] = [
         "https://hf-mirror.com,https://huggingface.co",
     ).split(",") if e.strip()
 ]
+_RESTART_WAIT_SECONDS = int(os.getenv("IMAGE_STUDIO_RESTART_WAIT_SECONDS", "1800"))
 
 _tasks: dict[str, dict[str, Any]] = {}
+_workers: dict[str, asyncio.Task] = {}
+_restart_tasks: dict[str, asyncio.Task] = {}
+_repo_locks: dict[str, asyncio.Lock] = {}
 # 每个模型 key 当前活跃的桥接（用于新下载接管时立即关闭旧记录，
 # 避免旧循环在文件边界退出前与新模式同时刷新任务记录）
 _bridges: dict[str, "_TaskBridge"] = {}
@@ -46,7 +50,7 @@ def task_state(key: str) -> dict[str, Any] | None:
 
 def is_downloading(key: str) -> bool:
     state = _tasks.get(key)
-    return bool(state and state.get("status") == "running")
+    return bool(state and state.get("status") in {"running", "waiting"})
 
 
 def snapshot_dir(spec: dict[str, Any]) -> Path:
@@ -58,21 +62,42 @@ def snapshot_dir(spec: dict[str, Any]) -> Path:
     return settings.modelhub_root / "export" / spec["source"] / Path(*parts) / "snapshots"
 
 
-async def start_download(key: str, sources: list[dict[str, Any]], force: bool = False) -> bool:
-    """为模型启动后台 HF 直连下载；已在下载中且未强制时返回 False。
+async def start_download(key: str, sources: list[dict[str, Any]], force: bool = False) -> str:
+    """启动 HF 直连下载，返回 started / active / waiting。
 
-    force=True 用于"重新下载"：先请求取消旧任务（旧线程会在当前文件
-    边界退出），再立即启动新任务接管状态。
+    force=True 用于"重新下载"：复用已完成文件和断点数据；若旧线程仍在
+    当前大文件中，则先等待它安全退出，再启动新的下载，避免并发写同一路径。
     """
-    if is_downloading(key):
+    pending_restart = _restart_tasks.get(key)
+    if pending_restart is not None and not pending_restart.done():
+        return "waiting" if force else "active"
+    old_worker = _workers.get(key)
+    if old_worker is not None and not old_worker.done():
         if not force:
-            return False
+            return "active"
         request_cancel(key)
-    # 旧循环可能还在当前大文件的写入中（到文件边界才退出），先关闭它的
-    # 任务记录并停止其后续写入，避免两条记录并行刷新造成界面横跳。
-    old_bridge = _bridges.get(key)
-    if old_bridge is not None:
-        old_bridge.supersede()
+        state = _tasks.get(key)
+        if state is not None:
+            state["status"] = "waiting"
+            state["current_file"] = "等待旧下载安全停止"
+        old_bridge = _bridges.get(key)
+        if old_bridge is not None:
+            old_bridge.supersede()
+        restart = _restart_tasks.get(key)
+        if restart is None or restart.done():
+            restart = asyncio.create_task(_restart_after_worker(key, sources, old_worker))
+            _restart_tasks[key] = restart
+            restart.add_done_callback(
+                lambda done: _restart_tasks.pop(key, None)
+                if _restart_tasks.get(key) is done
+                else None
+            )
+        return "waiting"
+    _launch_download(key, sources, force=force)
+    return "started"
+
+
+def _launch_download(key: str, sources: list[dict[str, Any]], force: bool = False) -> None:
     _tasks[key] = {
         "status": "running",
         "progress": 0.0,
@@ -83,8 +108,35 @@ async def start_download(key: str, sources: list[dict[str, Any]], force: bool = 
         "cancel": False,
         "started_at": time.time(),
     }
-    asyncio.create_task(_run(key, sources))
-    return True
+    worker = asyncio.create_task(_run(key, sources, force=force))
+    _workers[key] = worker
+    worker.add_done_callback(
+        lambda done: _workers.pop(key, None)
+        if _workers.get(key) is done
+        else None
+    )
+
+
+async def _restart_after_worker(
+    key: str,
+    sources: list[dict[str, Any]],
+    old_worker: asyncio.Task,
+) -> None:
+    try:
+        await asyncio.wait_for(
+            asyncio.shield(old_worker),
+            timeout=_RESTART_WAIT_SECONDS,
+        )
+    except asyncio.CancelledError:
+        return
+    except asyncio.TimeoutError:
+        state = _tasks.get(key)
+        if state is not None and state.get("status") == "waiting":
+            state["status"] = "failed"
+            state["error"] = "等待旧下载安全停止超时，请稍后重试"
+            state["current_file"] = ""
+        return
+    _launch_download(key, sources, force=True)
 
 
 def request_cancel(key: str) -> bool:
@@ -92,15 +144,20 @@ def request_cancel(key: str) -> bool:
 
     已落盘的部分文件保留，之后重新下载会断点续传。
     """
+    cancelled = False
+    restart = _restart_tasks.pop(key, None)
+    if restart is not None and not restart.done():
+        restart.cancel()
+        cancelled = True
     state = _tasks.get(key)
-    if not state or state.get("status") != "running":
-        return False
-    state["cancel"] = True
-    state["status"] = "cancelled"
-    return True
+    if state and state.get("status") in {"running", "waiting"}:
+        state["cancel"] = True
+        state["status"] = "cancelled"
+        cancelled = True
+    return cancelled
 
 
-async def _run(key: str, sources: list[dict[str, Any]]) -> None:
+async def _run(key: str, sources: list[dict[str, Any]], force: bool = False) -> None:
     state = _tasks[key]
     specs = [(spec["model_id"], list(spec.get("files") or [])) for spec in sources if spec["source"] == "hf"]
     bridge = _TaskBridge(specs)
@@ -124,14 +181,27 @@ async def _run(key: str, sources: list[dict[str, Any]]) -> None:
             # 链接只指向其中一个 revision，其余文件会找不到。优先复用仓库
             # 已有的 snapshot 目录（之前下载可能已建），避免新解析的 revision
             # 与旧目录漂移（_latest_revision 在 endpoint 间可能返回不同值）。
-            revision = _existing_snapshot_revision(repo_id) or await asyncio.to_thread(_latest_revision, repo_id)
+            if force:
+                revision = await asyncio.to_thread(_latest_revision, repo_id)
+            else:
+                revision = _existing_snapshot_revision(repo_id) or await asyncio.to_thread(
+                    _latest_revision, repo_id
+                )
             target = snapshot_dir({"source": "hf", "model_id": repo_id}) / revision
-            for filename in files:
-                if state.get("cancel"):
-                    cancelled = True
-                    break
-                state["current_file"] = f"{repo_id}/{filename}"
-                await asyncio.to_thread(_download_file, repo_id, filename, target)
+            repo_lock = _repo_locks.setdefault(repo_id, asyncio.Lock())
+            async with repo_lock:
+                for filename in files:
+                    if state.get("cancel"):
+                        cancelled = True
+                        break
+                    state["current_file"] = f"{repo_id}/{filename}"
+                    await asyncio.to_thread(
+                        _download_file,
+                        repo_id,
+                        filename,
+                        target,
+                        force,
+                    )
             if cancelled:
                 break
         heartbeat.cancel()
@@ -268,7 +338,12 @@ def _expected_bytes_per_repo(specs: list[tuple[str, list[str]]]) -> dict[str, in
     return totals
 
 
-def _download_file(repo_id: str, filename: str, target_dir: Path) -> str:
+def _download_file(
+    repo_id: str,
+    filename: str,
+    target_dir: Path,
+    force: bool = False,
+) -> str:
     """下载单个文件，失败时在多个 endpoint 间重试（共 3 轮）。
 
     hf_hub_download 读取全局 HF_ENDPOINT，这里在重试时切换它；下载是顺序
@@ -284,6 +359,7 @@ def _download_file(repo_id: str, filename: str, target_dir: Path) -> str:
                     repo_id=repo_id,
                     filename=filename,
                     local_dir=str(target_dir),
+                    force_download=force,
                 )
             except Exception as exc:
                 last_exc = exc
@@ -403,8 +479,9 @@ def merge_state(key: str, info: dict[str, Any]) -> None:
     state = _tasks.get(key)
     if not state or state.get("status") == "done":
         return
-    if state["status"] == "running":
+    if state["status"] in {"running", "waiting"}:
         info["status"] = "downloading"
+        info.pop("error", None)
         info["progress"] = state.get("progress", 0.0)
         info["current_file"] = state.get("current_file", "")
         info["downloaded_bytes"] = state.get("downloaded_bytes", 0)

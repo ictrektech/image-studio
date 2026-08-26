@@ -16,6 +16,7 @@ MAX_INPUT_BYTES = 20 * 1024 * 1024
 def ensure_storage() -> None:
     settings.sessions_dir.mkdir(parents=True, exist_ok=True)
     settings.jobs_dir.mkdir(parents=True, exist_ok=True)
+    reconcile_orphaned_active_jobs()
 
 
 def user_dir(user_key: str) -> Path:
@@ -59,6 +60,22 @@ def list_jobs(user_key: str) -> list[JobRecord]:
         except Exception:
             continue
     return sorted(jobs, key=lambda job: job.created_at, reverse=True)
+
+
+def reconcile_orphaned_active_jobs() -> None:
+    if not settings.jobs_dir.exists():
+        return
+    for path in settings.jobs_dir.glob("*/*.json"):
+        try:
+            job = JobRecord.model_validate(json.loads(path.read_text(encoding="utf-8")))
+        except Exception:
+            continue
+        if job.status not in {"queued", "running"}:
+            continue
+        job.status = "failed"
+        job.progress = 0
+        job.error = "服务重启后已清理未完成任务，请重新提交。"
+        save_job(job)
 
 
 def delete_job(user_key: str, job_id: str) -> bool:

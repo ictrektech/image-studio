@@ -122,9 +122,26 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!resp.ok) {
     const text = await resp.text()
-    throw new Error(text || `${resp.status} ${resp.statusText}`)
+    throw new Error(errorMessage(resp, text))
   }
   return resp.json()
+}
+
+function errorMessage(resp: Response, text: string): string {
+  const trimmed = text.trim()
+  if (trimmed.startsWith('{')) {
+    try {
+      const data = JSON.parse(trimmed)
+      if (typeof data.detail === 'string') return data.detail
+      if (typeof data.error === 'string') return data.error
+    } catch {
+      // Fall through to plain response handling.
+    }
+  }
+  if (/^<!doctype html/i.test(trimmed) || /^<html[\s>]/i.test(trimmed)) {
+    return `${resp.status} ${resp.statusText || '请求失败'}`
+  }
+  return trimmed || `${resp.status} ${resp.statusText}`
 }
 
 export const api = {
@@ -159,7 +176,7 @@ export const api = {
     })
     if (!resp.ok) {
       const text = await resp.text()
-      throw new Error(text || `${resp.status} ${resp.statusText}`)
+      throw new Error(errorMessage(resp, text))
     }
     return resp.json() as Promise<InputItem>
   },

@@ -1189,6 +1189,7 @@ def model_info(item: dict[str, Any]) -> ModelInfo:
             break
 
     fallback = settings.modelhub_root / _relative_candidates(item)[0]
+    dirty_partial = _has_incomplete_markers(item)
     info = {
         "key": item["key"],
         "name": item["name"],
@@ -1205,11 +1206,26 @@ def model_info(item: dict[str, Any]) -> ModelInfo:
         "expected_files": item["expected_files"],
         "access_path": str(fallback),
         "resolved_path": str(resolved) if resolved else None,
-        "status": "ready" if resolved else "missing",
+        "status": "ready" if resolved else ("failed" if dirty_partial else "missing"),
         "size": size,
     }
+    if dirty_partial and not resolved:
+        info["error"] = "发现上次未完成下载残留，请重新下载以清理后重新拉取"
     hf_downloader.merge_state(item["key"], info)
     return ModelInfo(**info)
+
+
+def _has_incomplete_markers(item: dict[str, Any]) -> bool:
+    for spec in item["sources"]:
+        if spec.get("source") != "hf":
+            continue
+        repo_root = settings.modelhub_root / "export" / spec["source"] / spec["model_id"]
+        if not repo_root.exists():
+            continue
+        for path in repo_root.rglob("*"):
+            if path.is_file() and path.name.endswith((".incomplete", ".tmp")):
+                return True
+    return False
 
 
 def runtime_paths_for(key: str) -> dict[str, Path]:
@@ -1277,7 +1293,13 @@ async def pull_model(key: str, force: bool = False) -> dict[str, Any]:
     item = get_model_def(key)
     primary = item["sources"][0]
     if primary["source"] == "ms":
-        payload = {"source": "ms", "model_id": primary["model_id"], "name": item["name"], "force": force}
+        payload = {
+            "source": "ms",
+            "model_id": primary["model_id"],
+            "name": item["name"],
+            "force": force,
+            "files": primary.get("files"),
+        }
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(f"{settings.model_hub_api_url}/api/v1/models/pull", json=payload)
             if resp.status_code == 409:
@@ -1287,9 +1309,9 @@ async def pull_model(key: str, force: bool = False) -> dict[str, Any]:
     file_entries = [name for spec in item["sources"] if spec["source"] == "hf" for name in (spec.get("files") or [])]
     if not file_entries:
         raise ValueError("该模型未配置下载文件清单（gated 仓库需要先在 HuggingFace 接受协议并配置 HF_TOKEN）")
-    started = await hf_downloader.start_download(key, item["sources"], force=force)
+    status = await hf_downloader.start_download(key, item["sources"], force=force)
     return {
-        "status": "started" if started else "active",
+        "status": status,
         "model_id": primary["model_id"],
         "files": [f"{spec['model_id']}/{name}" for spec in item["sources"] if spec["source"] == "hf" for name in (spec.get("files") or [])],
     }

@@ -37,7 +37,7 @@ Main endpoints:
 | `POST` | `/api/v1/generate` | Create a generation job (non-blocking, returns job record) |
 | `GET` | `/api/v1/jobs` | List current user's jobs |
 | `GET` | `/api/v1/jobs/{job_id}` | Read one job |
-| `DELETE` | `/api/v1/jobs/{job_id}` | Delete one job and its generated files |
+| `DELETE` | `/api/v1/jobs/{job_id}` | Stop an active runtime, then delete the job and its generated files |
 | `GET` | `/api/v1/outputs` | List generated files for current user |
 | `GET` | `/api/v1/outputs/{job_id}/{filename}` | Download one generated file |
 | `POST` | `/api/v1/inputs` | Upload an img2img / edit reference image (png/jpg/jpeg/webp, ≤20MB), returns `input_id` |
@@ -92,6 +92,15 @@ stay in sync:
 <shared>/export/hf/<org>/<repo>/snapshots/<commit>/<repo-relative files>
 ```
 
+`force=true` re-downloads the selected files without deleting the repository
+root or its current snapshot. If an older worker is still writing a large
+file, Image Studio waits for it to stop at the file boundary before starting
+the replacement; downloads sharing one HF repository are serialized. This
+keeps shared encoders and the last ready snapshot available if a retry fails.
+The wait is bounded by `IMAGE_STUDIO_RESTART_WAIT_SECONDS` (default 1800);
+timeout is reported as a failed restart while the original worker remains
+tracked until it exits.
+
 After a download finishes, Image Studio calls `POST /api/v1/models/sync` on
 Model Hub, which registers the repo, refreshes the `current` symlink, and
 makes the model visible in the Model Hub UI. In the other direction,
@@ -120,6 +129,11 @@ much longer timeout (`IMAGE_STUDIO_VIDEO_TIMEOUT_SECONDS`, default 3600).
 Parameters that do not apply to the selected family (e.g. `batch_count` for
 video, `negative_prompt` for families without uncond support) are silently
 ignored when assembling the sd-cli command line.
+
+Deleting a running generation job first terminates and waits for its `sd-cli`
+process, then removes metadata and outputs. On service startup, persisted jobs
+left in `queued` or `running` by an earlier process are reconciled to `failed`
+with a retry message.
 
 Notes:
 

@@ -350,6 +350,19 @@ sheet_spec() {
   esac
 }
 
+is_l4t_host() {
+  local model release
+  model=""
+  release=""
+  if [[ -r /proc/device-tree/model ]]; then
+    model="$(tr -d '\0' </proc/device-tree/model)"
+  fi
+  if [[ -f /etc/nv_tegra_release ]]; then
+    release="$(cat /etc/nv_tegra_release)"
+  fi
+  [[ "$release" == *"R36"* ]] && [[ "$model" != *"Thor"* ]]
+}
+
 case "$(uname -m)" in
   x86_64|amd64)
     HOST_ARCH="amd"
@@ -422,6 +435,9 @@ for sheet in "${TARGET_SHEETS[@]}"; do
     contains "$sheet" "AMD_with_cuda" "AMD_with_mxn100" || die "sheet ${sheet} is not valid for tc232/amd"
   else
     contains "$sheet" "ARM_without_cuda" "SOPHON_bm1688" "ARM_with_cuda" "l4t" "thor_spark" || die "sheet ${sheet} is not valid for arm/thor hosts"
+    if [[ "$sheet" == "l4t" ]] && ! is_l4t_host; then
+      die "sheet l4t must be built on an L4T/Tegra host"
+    fi
   fi
   sheet_spec "$sheet" >/dev/null || die "unsupported sheet: $sheet"
 done

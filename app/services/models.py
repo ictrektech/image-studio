@@ -2,43 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
 from app.config import settings
 from app.models import ModelInfo
-from app.services import hf_downloader
 
 
 MODEL_FILE_PATTERNS = ("*.safetensors", "*.ckpt", "*.pt", "*.pth", "*.gguf")
-
-# 各模型家族通用的辅助仓库（sd.cpp 文档指定的 VAE / 文本编码器来源）
-_FLUX_VAE = {"source": "hf", "model_id": "black-forest-labs/FLUX.1-schnell", "files": ["ae.safetensors"]}
-_FLUX_TEXT = {
-    "source": "hf",
-    "model_id": "comfyanonymous/flux_text_encoders",
-    "files": ["clip_l.safetensors", "t5xxl_fp16.safetensors"],
-}
-_WAN21_VAE = {
-    "source": "hf",
-    "model_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-    "files": ["split_files/vae/wan_2.1_vae.safetensors"],
-}
-_QWEN25VL_7B_GGUF = {
-    "source": "hf",
-    "model_id": "mradermacher/Qwen2.5-VL-7B-Instruct-GGUF",
-    "files": ["Qwen2.5-VL-7B-Instruct-Q8_0.gguf"],
-}
-_QWEN3VL_4B_GGUF = {
-    "source": "hf",
-    "model_id": "Qwen/Qwen3-VL-4B-Instruct-GGUF",
-    "files": ["Qwen3VL-4B-Instruct-Q4_K_M.gguf", "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"],
-}
-_QWEN3VL_8B_GGUF = {
-    "source": "hf",
-    "model_id": "unsloth/Qwen3-VL-8B-Instruct-GGUF",
-    "files": ["Qwen3-VL-8B-Instruct-Q4_K_M.gguf", "mmproj-F16.gguf"],
-}
 
 
 def _runtime(
@@ -83,6 +55,11 @@ def _model(
         runtime = _runtime(mode="video")
     else:
         runtime = _runtime()
+    required_files: list[str] = []
+    for source in sources:
+        for filename in source.get("files") or []:
+            if filename not in required_files:
+                required_files.append(filename)
     return {
         "key": key,
         "name": name,
@@ -93,7 +70,7 @@ def _model(
         "family": family,
         "capabilities": capabilities,
         "description": description,
-        "expected_files": list(MODEL_FILE_PATTERNS),
+        "expected_files": required_files or list(MODEL_FILE_PATTERNS),
         "preferred": preferred,
         "runtime": runtime,
         "params": "",
@@ -461,682 +438,594 @@ MODEL_PARAMS: dict[str, str] = {
     "chroma": "6B", "chroma-radiance": "6B", "z-image": "6B",
 }
 
+MODEL_SCOPE_FILES: dict[str, list[str]] = {
+    "sd15": ["v1-5-pruned-emaonly.safetensors", "v1-inference.yaml"],
+    "sd2": ["v2-1_512-ema-pruned.safetensors"],
+    "sd-turbo": ["sd_turbo.safetensors"],
+    "sdxl": ["sd_xl_base_1.0.safetensors"],
+    "sdxl-turbo": ["sd_xl_turbo_1.0_fp16.safetensors"],
+    "sd3": ["sd3_medium_incl_clips_t5xxlfp8.safetensors"],
+    "sd35": [
+        "sd3.5_large_fp8_scaled.safetensors",
+        "text_encoders/clip_l.safetensors",
+        "text_encoders/clip_g.safetensors",
+        "text_encoders/t5xxl_fp16.safetensors",
+    ],
+    "sd35-medium": ["sd3.5_medium_incl_clips_t5xxlfp8scaled.safetensors"],
+    "flux-schnell": ["flux1-schnell-q8_0.gguf", "ae.safetensors", "clip_l.safetensors", "t5xxl_fp16.safetensors"],
+    "flux-dev": ["flux1-dev-q8_0.gguf", "ae.safetensors", "clip_l.safetensors", "t5xxl_fp16.safetensors"],
+    "flux-kontext": ["flux1-kontext-dev-Q8_0.gguf", "ae.safetensors", "clip_l.safetensors", "t5xxl_fp16.safetensors"],
+    "flux2": ["flux2-dev-Q4_K_S.gguf", "vae/flux2-vae.safetensors", "Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf"],
+    "qwen-image": [
+        "split_files/diffusion_models/qwen_image_fp8_e4m3fn.safetensors",
+        "split_files/vae/qwen_image_vae.safetensors",
+        "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
+    ],
+    "qwen-image-edit": [
+        "split_files/diffusion_models/qwen_image_edit_2509_fp8_e4m3fn.safetensors",
+        "split_files/vae/qwen_image_vae.safetensors",
+        "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
+    ],
+    "wan21": [
+        "split_files/diffusion_models/wan2.1_t2v_1.3B_fp16.safetensors",
+        "split_files/text_encoders/umt5_xxl_fp16.safetensors",
+        "split_files/vae/wan_2.1_vae.safetensors",
+    ],
+    "wan22": [
+        "split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors",
+        "split_files/text_encoders/umt5_xxl_fp16.safetensors",
+        "split_files/vae/wan2.2_vae.safetensors",
+    ],
+    "wan21-t2v-14b": [
+        "split_files/diffusion_models/wan2.1_t2v_14B_fp16.safetensors",
+        "split_files/text_encoders/umt5_xxl_fp16.safetensors",
+        "split_files/vae/wan_2.1_vae.safetensors",
+    ],
+    "wan21-i2v-14b": [
+        "split_files/diffusion_models/wan2.1_i2v_480p_14B_fp16.safetensors",
+        "split_files/text_encoders/umt5_xxl_fp16.safetensors",
+        "split_files/vae/wan_2.1_vae.safetensors",
+        "split_files/clip_vision/clip_vision_h.safetensors",
+    ],
+    "wan22-t2v-a14b": [
+        "split_files/diffusion_models/wan2.2_t2v_low_noise_14B_fp16.safetensors",
+        "split_files/diffusion_models/wan2.2_t2v_high_noise_14B_fp16.safetensors",
+        "split_files/text_encoders/umt5_xxl_fp16.safetensors",
+        "split_files/vae/wan2.2_vae.safetensors",
+    ],
+    "wan22-i2v-a14b": [
+        "split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp16.safetensors",
+        "split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp16.safetensors",
+        "split_files/text_encoders/umt5_xxl_fp16.safetensors",
+        "split_files/vae/wan2.2_vae.safetensors",
+    ],
+    "ltx-video": [
+        "ltx-2.3-22b-dev-UD-Q4_K_M.gguf",
+        "text_encoders/ltx-2.3-22b-dev_embeddings_connectors.safetensors",
+        "vae/ltx-2.3-22b-dev_video_vae.safetensors",
+        "vae/ltx-2.3-22b-dev_audio_vae.safetensors",
+        "gemma-3-12b-it-UD-Q4_K_XL.gguf",
+    ],
+    "hunyuan-video": [
+        "split_files/diffusion_models/hunyuanvideo1.5_720p_t2v_fp16.safetensors",
+        "split_files/vae/hunyuanvideo15_vae_fp16.safetensors",
+        "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
+        "split_files/text_encoders/byt5_small_glyphxl_fp16.safetensors",
+    ],
+    "hunyuan-i2v-720p": [
+        "split_files/diffusion_models/hunyuanvideo1.5_720p_i2v_fp16.safetensors",
+        "split_files/vae/hunyuanvideo15_vae_fp16.safetensors",
+        "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
+        "split_files/text_encoders/byt5_small_glyphxl_fp16.safetensors",
+    ],
+    "hunyuan-t2v-480p": [
+        "split_files/diffusion_models/hunyuanvideo1.5_480p_t2v_fp16.safetensors",
+        "split_files/vae/hunyuanvideo15_vae_fp16.safetensors",
+        "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
+        "split_files/text_encoders/byt5_small_glyphxl_fp16.safetensors",
+    ],
+    "minimax-h3": [
+        "minimax_h3_fl2va-Q4_K_M.gguf",
+        "qwen3vl_32b_minimax_h3-Q4_K_M.gguf",
+        "vae/minimax_h3_video_vae_fp16.safetensors",
+        "vae/minimax_h3_audio_vae_fp32.safetensors",
+    ],
+    "minimax-ref2va": [
+        "minimax_h3_ref2va_pruned-Q4_K_M.gguf",
+        "qwen3vl_32b_minimax_h3-Q4_K_M.gguf",
+        "vae/minimax_h3_video_vae_fp16.safetensors",
+        "vae/minimax_h3_audio_vae_fp32.safetensors",
+    ],
+    "lingbot-video": [
+        "transformer/diffusion_pytorch_model.safetensors",
+        "split_files/vae/wan_2.1_vae.safetensors",
+        "Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+        "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf",
+    ],
+    "lens": ["diffusion_models/lens_bf16.safetensors", "vae/flux2-vae.safetensors", "gpt-oss-20b-UD-Q8_K_XL.gguf"],
+    "chroma": ["chroma-unlocked-v40/chroma-unlocked-v40-Q8_0.gguf", "ae.safetensors", "t5xxl_fp16.safetensors"],
+    "chroma-radiance": ["Chroma1-Radiance-v0.4/Chroma1-Radiance-v0.4-Q8_0.gguf", "t5xxl_fp16.safetensors"],
+    "longcat-image": ["comfy/LongCat-Image-Q4_K_M.gguf", "ae.safetensors", "Qwen2.5-VL-7B-Instruct-Q8_0.gguf"],
+    "longcat-image-edit": ["LongCat-Image-Edit-Q4_K_M.gguf", "ae.safetensors", "Qwen2.5-VL-7B-Instruct-Q8_0.gguf"],
+    "z-image": [
+        "split_files/diffusion_models/z_image_bf16.safetensors",
+        "split_files/text_encoders/qwen_3_4b.safetensors",
+        "split_files/vae/ae.safetensors",
+    ],
+    "minit2i": ["minit2i-b-16/transformer/diffusion_pytorch_model.safetensors", "model.safetensors"],
+    "ovis-image": ["ovis_image-Q4_0.gguf", "split_files/text_encoders/ovis_2.5.safetensors", "ae.safetensors"],
+    "anima": [
+        "split_files/diffusion_models/anima-preview.safetensors",
+        "split_files/vae/qwen_image_vae.safetensors",
+        "split_files/text_encoders/qwen_3_06b_base.safetensors",
+    ],
+    "ernie-image": ["diffusion_models/ernie-image-turbo.safetensors", "vae/flux2-vae.safetensors", "text_encoders/ministral-3-3b.safetensors"],
+    "boogu-image": [
+        "diffusion_models/boogu_image_base_bf16.safetensors",
+        "vae/flux1_vae_bf16.safetensors",
+        "Qwen3-VL-8B-Instruct-Q4_K_M.gguf",
+        "mmproj-F16.gguf",
+    ],
+    "boogu-image-edit": [
+        "diffusion_models/boogu_image_edit_bf16.safetensors",
+        "vae/flux1_vae_bf16.safetensors",
+        "Qwen3-VL-8B-Instruct-Q4_K_M.gguf",
+        "mmproj-F16.gguf",
+    ],
+    "krea2": [
+        "BASE/Krea-2-Base-Q8_0.gguf",
+        "split_files/vae/wan_2.1_vae.safetensors",
+        "Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+        "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf",
+    ],
+    "mage-flow": [
+        "transformer/diffusion_pytorch_model.safetensors",
+        "vae/diffusion_pytorch_model.safetensors",
+        "Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+        "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf",
+        "model_index.json",
+        "scheduler/scheduler_config.json",
+        "transformer/config.json",
+        "vae/config.json",
+    ],
+    "mage-flow-edit": [
+        "transformer/diffusion_pytorch_model.safetensors",
+        "vae/diffusion_pytorch_model.safetensors",
+        "Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+        "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf",
+        "model_index.json",
+        "scheduler/scheduler_config.json",
+        "transformer/config.json",
+        "vae/config.json",
+    ],
+    "sefi-image": [
+        "transformer/diffusion_pytorch_model-00001-of-00006.safetensors",
+        "transformer/diffusion_pytorch_model-00002-of-00006.safetensors",
+        "transformer/diffusion_pytorch_model-00003-of-00006.safetensors",
+        "transformer/diffusion_pytorch_model-00004-of-00006.safetensors",
+        "transformer/diffusion_pytorch_model-00005-of-00006.safetensors",
+        "transformer/diffusion_pytorch_model-00006-of-00006.safetensors",
+        "transformer/diffusion_pytorch_model.safetensors.index.json",
+        "vae/diffusion_pytorch_model.safetensors",
+        "Qwen3-VL-4B-Instruct/model-00001-of-00002.safetensors",
+        "Qwen3-VL-4B-Instruct/model-00002-of-00002.safetensors",
+        "Qwen3-VL-4B-Instruct/model.safetensors.index.json",
+        "model_index.json",
+        "scheduler/scheduler_config.json",
+        "sefi_config.yaml",
+        "transformer/config.json",
+        "vae/config.json",
+        "Qwen3-VL-4B-Instruct/config.json",
+        "Qwen3-VL-4B-Instruct/generation_config.json",
+        "Qwen3-VL-4B-Instruct/merges.txt",
+        "Qwen3-VL-4B-Instruct/preprocessor_config.json",
+        "Qwen3-VL-4B-Instruct/tokenizer.json",
+        "Qwen3-VL-4B-Instruct/tokenizer_config.json",
+        "Qwen3-VL-4B-Instruct/video_preprocessor_config.json",
+        "Qwen3-VL-4B-Instruct/vocab.json",
+    ],
+    "hidream-o1": ["checkpoints/hidream_o1_image_dev_bf16.safetensors"],
+    "ideogram4": [
+        "transformer/diffusion_pytorch_model.safetensors",
+        "unconditional_transformer/diffusion_pytorch_model.safetensors",
+        "text_encoder/model.safetensors",
+        "vae/diffusion_pytorch_model.safetensors",
+    ],
+}
+
+MODEL_SIZES: dict[str, int] = {
+    "sd15": 4265148177, "sd2": 5214604494, "sd-turbo": 5214561328,
+    "sdxl": 6938078334, "sdxl-turbo": 6938081905,
+    "sd3": 10867168284, "sd35": 26358290218, "sd35-medium": 11638004202,
+    "flux-schnell": 23171010812, "flux-dev": 23211930108, "flux-kontext": 23083741820, "flux2": 33969264692,
+    "qwen-image": 37268856958, "qwen-image-edit": 37268920246,
+    "wan21": 14458518263, "wan22": 22775459193,
+    "wan21-t2v-14b": 40197975879, "wan21-i2v-14b": 45675811603,
+    "wan22-t2v-a14b": 69929991529, "wan22-i2v-a14b": 69931629929,
+    "ltx-video": 28067922278,
+    "hunyuan-video": 36197719646, "hunyuan-i2v-720p": 36197719646, "hunyuan-t2v-480p": 36197719646,
+    "minimax-h3": 42810976776, "minimax-ref2va": 35451792232,
+    "lingbot-video": 5997038614, "lens": 21740251708,
+    "chroma": 19858555236, "chroma-radiance": 20174442976,
+    "longcat-image": 12095697828, "longcat-image-edit": 12300981284,
+    "z-image": 20690152836, "minit2i": 4165203276,
+    "ovis-image": 9676436964, "anima": 5628159702,
+    "ernie-image": 24120876547,
+    "boogu-image": 26939709486, "boogu-image-edit": 26939709454,
+    "krea2": 16911005334,
+    "mage-flow": 11527847271, "mage-flow-edit": 11527847271,
+    "sefi-image": 19000701745,
+    "hidream-o1": 16365209824, "ideogram4": 27526985054,
+}
+
+
+def _ms_source(key: str) -> dict[str, Any]:
+    return {"source": "ms", "model_id": f"vivibit/image-studio-{key}", "files": MODEL_SCOPE_FILES[key]}
+
 MODEL_DEFS = [
     _model(
-        "sd15",
-        "Stable Diffusion v1.5 EMA",
-        "SD 1.x",
-        ["txt2img", "img2img"],
-        "SD 1.5 ema-only safetensors prepared for stable-diffusion.cpp.",
-        [
-            {
-                "source": "ms",
-                "model_id": "vivibit/stable-diffusion-v1-5",
-                "files": ["v1-5-pruned-emaonly.safetensors", "v1-inference.yaml"],
-            }
-        ],
+        'sd15',
+        'Stable Diffusion v1.5 EMA',
+        'SD 1.x',
+        ['txt2img', 'img2img'],
+        'SD 1.5 ema-only safetensors prepared for stable-diffusion.cpp.',
+        [_ms_source('sd15')],
         True,
     ),
     _model(
-        "sd2",
-        "Stable Diffusion 2.1",
-        "SD 2.x",
-        ["txt2img", "img2img"],
-        "Stable Diffusion 2.1-base 512 checkpoint supported by sd.cpp.",
-        [{"source": "hf", "model_id": "Manojb/stable-diffusion-2-1-base", "files": ["v2-1_512-ema-pruned.safetensors"]}],
+        'sd2',
+        'Stable Diffusion 2.1',
+        'SD 2.x',
+        ['txt2img', 'img2img'],
+        'Stable Diffusion 2.1-base 512 checkpoint supported by sd.cpp.',
+        [_ms_source('sd2')],
     ),
     _model(
-        "sd-turbo",
-        "SD Turbo",
-        "SD Turbo",
-        ["txt2img", "img2img"],
-        "Fast SD Turbo image generation family supported by sd.cpp.",
-        [{"source": "hf", "model_id": "stabilityai/sd-turbo", "files": ["sd_turbo.safetensors"]}],
+        'sd-turbo',
+        'SD Turbo',
+        'SD Turbo',
+        ['txt2img', 'img2img'],
+        'Fast SD Turbo image generation family supported by sd.cpp.',
+        [_ms_source('sd-turbo')],
     ),
     _model(
-        "sdxl",
-        "Stable Diffusion XL Base",
-        "SDXL",
-        ["txt2img", "img2img"],
-        "SDXL base image generation family supported by sd.cpp.",
-        [{"source": "hf", "model_id": "stabilityai/stable-diffusion-xl-base-1.0", "files": ["sd_xl_base_1.0.safetensors"]}],
+        'sdxl',
+        'Stable Diffusion XL Base',
+        'SDXL',
+        ['txt2img', 'img2img'],
+        'SDXL base image generation family supported by sd.cpp.',
+        [_ms_source('sdxl')],
         True,
     ),
     _model(
-        "sdxl-turbo",
-        "SDXL Turbo",
-        "SDXL Turbo",
-        ["txt2img", "img2img"],
-        "Fast SDXL Turbo generation family supported by sd.cpp.",
-        [{"source": "hf", "model_id": "stabilityai/sdxl-turbo", "files": ["sd_xl_turbo_1.0_fp16.safetensors"]}],
+        'sdxl-turbo',
+        'SDXL Turbo',
+        'SDXL Turbo',
+        ['txt2img', 'img2img'],
+        'Fast SDXL Turbo generation family supported by sd.cpp.',
+        [_ms_source('sdxl-turbo')],
     ),
     _model(
-        "sd3",
-        "Stable Diffusion 3",
-        "SD3",
-        ["txt2img"],
-        "Stable Diffusion 3 Medium all-in-one checkpoint (incl. clips + t5xxl fp8) supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "adamo1139/stable-diffusion-3-medium-ungated",
-                "files": ["sd3_medium_incl_clips_t5xxlfp8.safetensors"],
-            }
-        ],
+        'sd3',
+        'Stable Diffusion 3',
+        'SD3',
+        ['txt2img'],
+        'Stable Diffusion 3 Medium all-in-one checkpoint (incl. clips + t5xxl fp8) supported by sd.cpp.',
+        [_ms_source('sd3')],
     ),
     _model(
-        "sd35",
-        "Stable Diffusion 3.5 Large",
-        "SD3.5",
-        ["txt2img"],
-        "Stable Diffusion 3.5 Large fp8 checkpoint with clip_l/clip_g/t5xxl encoders supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/stable-diffusion-3.5-fp8",
-                "files": [
-                    "sd3.5_large_fp8_scaled.safetensors",
-                    "text_encoders/clip_l.safetensors",
-                    "text_encoders/clip_g.safetensors",
-                    "text_encoders/t5xxl_fp16.safetensors",
-                ],
-            }
-        ],
+        'sd35',
+        'Stable Diffusion 3.5 Large',
+        'SD3.5',
+        ['txt2img'],
+        'Stable Diffusion 3.5 Large fp8 checkpoint with clip_l/clip_g/t5xxl encoders supported by sd.cpp.',
+        [_ms_source('sd35')],
     ),
     _model(
-        "sd35-medium",
-        "Stable Diffusion 3.5 Medium",
-        "SD3.5",
-        ["txt2img"],
-        "Stable Diffusion 3.5 Medium fp8 checkpoint with built-in clip/t5xxl encoders supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/stable-diffusion-3.5-fp8",
-                "files": ["sd3.5_medium_incl_clips_t5xxlfp8scaled.safetensors"],
-            }
-        ],
+        'sd35-medium',
+        'Stable Diffusion 3.5 Medium',
+        'SD3.5',
+        ['txt2img'],
+        'Stable Diffusion 3.5 Medium fp8 checkpoint with built-in clip/t5xxl encoders supported by sd.cpp.',
+        [_ms_source('sd35-medium')],
     ),
     _model(
-        "flux-schnell",
-        "FLUX.1 Schnell",
-        "FLUX",
-        ["txt2img"],
-        "FLUX.1 Schnell q8_0 GGUF with flux VAE and clip_l/t5xxl encoders supported by sd.cpp.",
-        [
-            {"source": "hf", "model_id": "leejet/FLUX.1-schnell-gguf", "files": ["flux1-schnell-q8_0.gguf"]},
-            dict(_FLUX_VAE),
-            dict(_FLUX_TEXT),
-        ],
+        'flux-schnell',
+        'FLUX.1 Schnell',
+        'FLUX',
+        ['txt2img'],
+        'FLUX.1 Schnell q8_0 GGUF with flux VAE and clip_l/t5xxl encoders supported by sd.cpp.',
+        [_ms_source('flux-schnell')],
     ),
     _model(
-        "flux-dev",
-        "FLUX.1 Dev",
-        "FLUX",
-        ["txt2img"],
-        "FLUX.1 Dev q8_0 GGUF with flux VAE and clip_l/t5xxl encoders supported by sd.cpp.",
-        [
-            {"source": "hf", "model_id": "leejet/FLUX.1-dev-gguf", "files": ["flux1-dev-q8_0.gguf"]},
-            dict(_FLUX_VAE),
-            dict(_FLUX_TEXT),
-        ],
+        'flux-dev',
+        'FLUX.1 Dev',
+        'FLUX',
+        ['txt2img'],
+        'FLUX.1 Dev q8_0 GGUF with flux VAE and clip_l/t5xxl encoders supported by sd.cpp.',
+        [_ms_source('flux-dev')],
     ),
     _model(
-        "flux-kontext",
-        "FLUX.1 Kontext Dev",
-        "FLUX Edit",
-        ["img2img", "edit"],
-        "FLUX.1 Kontext Dev q8_0 GGUF image editing family supported by sd.cpp.",
-        [
-            {"source": "hf", "model_id": "QuantStack/FLUX.1-Kontext-dev-GGUF", "files": ["flux1-kontext-dev-Q8_0.gguf"]},
-            dict(_FLUX_VAE),
-            dict(_FLUX_TEXT),
-        ],
+        'flux-kontext',
+        'FLUX.1 Kontext Dev',
+        'FLUX Edit',
+        ['img2img', 'edit'],
+        'FLUX.1 Kontext Dev q8_0 GGUF image editing family supported by sd.cpp.',
+        [_ms_source('flux-kontext')],
     ),
     _model(
-        "flux2",
-        "FLUX.2",
-        "FLUX",
-        ["txt2img"],
-        "FLUX.2 dev Q4_K_S GGUF with flux2 VAE and Mistral-Small-24B text encoder supported by sd.cpp.",
-        [
-            {"source": "hf", "model_id": "city96/FLUX.2-dev-gguf", "files": ["flux2-dev-Q4_K_S.gguf"]},
-            {"source": "hf", "model_id": "Comfy-Org/ERNIE-Image", "files": ["vae/flux2-vae.safetensors"]},
-            {
-                "source": "hf",
-                "model_id": "unsloth/Mistral-Small-3.2-24B-Instruct-2506-GGUF",
-                "files": ["Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf"],
-            },
-        ],
+        'flux2',
+        'FLUX.2',
+        'FLUX',
+        ['txt2img'],
+        'FLUX.2 dev Q4_K_S GGUF with flux2 VAE and Mistral-Small-24B text encoder supported by sd.cpp.',
+        [_ms_source('flux2')],
     ),
     _model(
-        "qwen-image",
-        "Qwen Image",
-        "Qwen",
-        ["txt2img"],
-        "Qwen Image fp8 diffusion with qwen VAE and Qwen2.5-VL-7B text encoder supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/Qwen-Image_ComfyUI",
-                "files": [
-                    "split_files/diffusion_models/qwen_image_fp8_e4m3fn.safetensors",
-                    "split_files/vae/qwen_image_vae.safetensors",
-                    "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
-                ],
-            }
-        ],
+        'qwen-image',
+        'Qwen Image',
+        'Qwen',
+        ['txt2img'],
+        'Qwen Image fp8 diffusion with qwen VAE and Qwen2.5-VL-7B text encoder supported by sd.cpp.',
+        [_ms_source('qwen-image')],
     ),
     _model(
-        "qwen-image-edit",
-        "Qwen Image Edit",
-        "Qwen Edit",
-        ["img2img", "edit"],
-        "Qwen Image Edit 2509 fp8 diffusion with qwen VAE and Qwen2.5-VL-7B text encoder supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
-                "files": ["split_files/diffusion_models/qwen_image_edit_2509_fp8_e4m3fn.safetensors"],
-            },
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/Qwen-Image_ComfyUI",
-                "files": [
-                    "split_files/vae/qwen_image_vae.safetensors",
-                    "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
-                ],
-            },
-        ],
+        'qwen-image-edit',
+        'Qwen Image Edit',
+        'Qwen Edit',
+        ['img2img', 'edit'],
+        'Qwen Image Edit 2509 fp8 diffusion with qwen VAE and Qwen2.5-VL-7B text encoder supported by sd.cpp.',
+        [_ms_source('qwen-image-edit')],
     ),
     _model(
-        "wan21",
-        "Wan 2.1 T2V 1.3B",
-        "Wan Video",
-        ["video"],
-        "Wan 2.1 T2V 1.3B fp16 with umt5-xxl text encoder and wan 2.1 VAE supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-                "files": [
-                    "split_files/diffusion_models/wan2.1_t2v_1.3B_fp16.safetensors",
-                    "split_files/text_encoders/umt5_xxl_fp16.safetensors",
-                    "split_files/vae/wan_2.1_vae.safetensors",
-                ],
-            }
-        ],
+        'wan21',
+        'Wan 2.1 T2V 1.3B',
+        'Wan Video',
+        ['video'],
+        'Wan 2.1 T2V 1.3B fp16 with umt5-xxl text encoder and wan 2.1 VAE supported by sd.cpp.',
+        [_ms_source('wan21')],
     ),
     _model(
-        "wan22",
-        "Wan 2.2 TI2V 5B",
-        "Wan Video",
-        ["video"],
-        "Wan 2.2 TI2V 5B fp16 with umt5-xxl text encoder and wan 2.2 VAE supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-                "files": [
-                    "split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors",
-                    "split_files/text_encoders/umt5_xxl_fp16.safetensors",
-                    "split_files/vae/wan2.2_vae.safetensors",
-                ],
-            }
-        ],
+        'wan22',
+        'Wan 2.2 TI2V 5B',
+        'Wan Video',
+        ['video'],
+        'Wan 2.2 TI2V 5B fp16 with umt5-xxl text encoder and wan 2.2 VAE supported by sd.cpp.',
+        [_ms_source('wan22')],
     ),
     _model(
-        "wan21-t2v-14b",
-        "Wan 2.1 T2V 14B",
-        "Wan Video",
-        ["video"],
-        "Wan 2.1 T2V 14B fp16 with umt5-xxl text encoder and wan 2.1 VAE supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-                "files": [
-                    "split_files/diffusion_models/wan2.1_t2v_14B_fp16.safetensors",
-                    "split_files/text_encoders/umt5_xxl_fp16.safetensors",
-                    "split_files/vae/wan_2.1_vae.safetensors",
-                ],
-            }
-        ],
+        'wan21-t2v-14b',
+        'Wan 2.1 T2V 14B',
+        'Wan Video',
+        ['video'],
+        'Wan 2.1 T2V 14B fp16 with umt5-xxl text encoder and wan 2.1 VAE supported by sd.cpp.',
+        [_ms_source('wan21-t2v-14b')],
     ),
     _model(
-        "wan21-i2v-14b",
-        "Wan 2.1 I2V 14B 480P",
-        "Wan Video",
-        ["video"],
-        "Wan 2.1 I2V 14B 480p fp16 (first-frame image-to-video) with umt5-xxl, clip_vision_h and wan 2.1 VAE supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-                "files": [
-                    "split_files/diffusion_models/wan2.1_i2v_480p_14B_fp16.safetensors",
-                    "split_files/text_encoders/umt5_xxl_fp16.safetensors",
-                    "split_files/vae/wan_2.1_vae.safetensors",
-                    "split_files/clip_vision/clip_vision_h.safetensors",
-                ],
-            }
-        ],
+        'wan21-i2v-14b',
+        'Wan 2.1 I2V 14B 480P',
+        'Wan Video',
+        ['video'],
+        'Wan 2.1 I2V 14B 480p fp16 (first-frame image-to-video) with umt5-xxl, clip_vision_h and wan 2.1 VAE supported by sd.cpp.',
+        [_ms_source('wan21-i2v-14b')],
     ),
     _model(
-        "wan22-t2v-a14b",
-        "Wan 2.2 T2V A14B",
-        "Wan Video",
-        ["video"],
-        "Wan 2.2 T2V A14B dual low/high-noise 14B fp16 with umt5-xxl and wan 2.2 VAE supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-                "files": [
-                    "split_files/diffusion_models/wan2.2_t2v_low_noise_14B_fp16.safetensors",
-                    "split_files/diffusion_models/wan2.2_t2v_high_noise_14B_fp16.safetensors",
-                    "split_files/text_encoders/umt5_xxl_fp16.safetensors",
-                    "split_files/vae/wan2.2_vae.safetensors",
-                ],
-            }
-        ],
+        'wan22-t2v-a14b',
+        'Wan 2.2 T2V A14B',
+        'Wan Video',
+        ['video'],
+        'Wan 2.2 T2V A14B dual low/high-noise 14B fp16 with umt5-xxl and wan 2.2 VAE supported by sd.cpp.',
+        [_ms_source('wan22-t2v-a14b')],
     ),
     _model(
-        "wan22-i2v-a14b",
-        "Wan 2.2 I2V A14B",
-        "Wan Video",
-        ["video"],
-        "Wan 2.2 I2V A14B dual low/high-noise 14B fp16 (first-frame image-to-video) with umt5-xxl and wan 2.2 VAE supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
-                "files": [
-                    "split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp16.safetensors",
-                    "split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp16.safetensors",
-                    "split_files/text_encoders/umt5_xxl_fp16.safetensors",
-                    "split_files/vae/wan2.2_vae.safetensors",
-                ],
-            }
-        ],
+        'wan22-i2v-a14b',
+        'Wan 2.2 I2V A14B',
+        'Wan Video',
+        ['video'],
+        'Wan 2.2 I2V A14B dual low/high-noise 14B fp16 (first-frame image-to-video) with umt5-xxl and wan 2.2 VAE supported by sd.cpp.',
+        [_ms_source('wan22-i2v-a14b')],
     ),
     _model(
-        "ltx-video",
-        "LTX Video",
-        "Video",
-        ["video"],
-        "LTX-2.3 22B dev UD-Q4_K_M GGUF with gemma-3-12b text encoder, connectors and video/audio VAE supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "unsloth/LTX-2.3-GGUF",
-                "files": [
-                    "ltx-2.3-22b-dev-UD-Q4_K_M.gguf",
-                    "text_encoders/ltx-2.3-22b-dev_embeddings_connectors.safetensors",
-                    "vae/ltx-2.3-22b-dev_video_vae.safetensors",
-                    "vae/ltx-2.3-22b-dev_audio_vae.safetensors",
-                ],
-            },
-            {"source": "hf", "model_id": "unsloth/gemma-3-12b-it-GGUF", "files": ["gemma-3-12b-it-UD-Q4_K_XL.gguf"]},
-        ],
+        'ltx-video',
+        'LTX Video',
+        'Video',
+        ['video'],
+        'LTX-2.3 22B dev UD-Q4_K_M GGUF with gemma-3-12b text encoder, connectors and video/audio VAE supported by sd.cpp.',
+        [_ms_source('ltx-video')],
     ),
     _model(
-        "hunyuan-video",
-        "HunyuanVideo 1.5 T2V 720P",
-        "Video",
-        ["video"],
-        "HunyuanVideo 1.5 720p T2V fp16 with qwen VAE, Qwen2.5-VL-7B and byt5 glyph encoder supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/HunyuanVideo_1.5_repackaged",
-                "files": [
-                    "split_files/diffusion_models/hunyuanvideo1.5_720p_t2v_fp16.safetensors",
-                    "split_files/vae/hunyuanvideo15_vae_fp16.safetensors",
-                    "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
-                    "split_files/text_encoders/byt5_small_glyphxl_fp16.safetensors",
-                ],
-            }
-        ],
+        'hunyuan-video',
+        'HunyuanVideo 1.5 T2V 720P',
+        'Video',
+        ['video'],
+        'HunyuanVideo 1.5 720p T2V fp16 with qwen VAE, Qwen2.5-VL-7B and byt5 glyph encoder supported by sd.cpp.',
+        [_ms_source('hunyuan-video')],
     ),
     _model(
-        "hunyuan-i2v-720p",
-        "HunyuanVideo 1.5 I2V 720P",
-        "Video",
-        ["video"],
-        "HunyuanVideo 1.5 720p I2V fp16 (first-frame image-to-video) with qwen VAE, Qwen2.5-VL-7B and byt5 glyph encoder supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/HunyuanVideo_1.5_repackaged",
-                "files": [
-                    "split_files/diffusion_models/hunyuanvideo1.5_720p_i2v_fp16.safetensors",
-                    "split_files/vae/hunyuanvideo15_vae_fp16.safetensors",
-                    "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
-                    "split_files/text_encoders/byt5_small_glyphxl_fp16.safetensors",
-                ],
-            }
-        ],
+        'hunyuan-i2v-720p',
+        'HunyuanVideo 1.5 I2V 720P',
+        'Video',
+        ['video'],
+        'HunyuanVideo 1.5 720p I2V fp16 (first-frame image-to-video) with qwen VAE, Qwen2.5-VL-7B and byt5 glyph encoder supported by sd.cpp.',
+        [_ms_source('hunyuan-i2v-720p')],
     ),
     _model(
-        "hunyuan-t2v-480p",
-        "HunyuanVideo 1.5 T2V 480P",
-        "Video",
-        ["video"],
-        "HunyuanVideo 1.5 480p T2V fp16, the lighter text-to-video entry, with qwen VAE, Qwen2.5-VL-7B and byt5 glyph encoder supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/HunyuanVideo_1.5_repackaged",
-                "files": [
-                    "split_files/diffusion_models/hunyuanvideo1.5_480p_t2v_fp16.safetensors",
-                    "split_files/vae/hunyuanvideo15_vae_fp16.safetensors",
-                    "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
-                    "split_files/text_encoders/byt5_small_glyphxl_fp16.safetensors",
-                ],
-            }
-        ],
+        'hunyuan-t2v-480p',
+        'HunyuanVideo 1.5 T2V 480P',
+        'Video',
+        ['video'],
+        'HunyuanVideo 1.5 480p T2V fp16, the lighter text-to-video entry, with qwen VAE, Qwen2.5-VL-7B and byt5 glyph encoder supported by sd.cpp.',
+        [_ms_source('hunyuan-t2v-480p')],
     ),
     _model(
-        "minimax-h3",
-        "MiniMax-H3",
-        "Video",
-        ["video"],
-        "MiniMax-H3 fl2va Q4_K_M GGUF with qwen3vl-32b text encoder and video/audio VAE supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "leejet/MiniMax-H3-GGUF",
-                "files": ["minimax_h3_fl2va-Q4_K_M.gguf", "qwen3vl_32b_minimax_h3-Q4_K_M.gguf"],
-            },
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/MiniMax-H3",
-                "files": ["vae/minimax_h3_video_vae_fp16.safetensors", "vae/minimax_h3_audio_vae_fp32.safetensors"],
-            },
-        ],
+        'minimax-h3',
+        'MiniMax-H3',
+        'Video',
+        ['video'],
+        'MiniMax-H3 fl2va Q4_K_M GGUF with qwen3vl-32b text encoder and video/audio VAE supported by sd.cpp.',
+        [_ms_source('minimax-h3')],
     ),
     _model(
-        "minimax-ref2va",
-        "MiniMax-H3 Ref2VA",
-        "Video",
-        ["video"],
-        "MiniMax-H3 Ref2VA pruned Q4_K_M GGUF (reference-image-to-video) with qwen3vl-32b text encoder and video/audio VAE supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "leejet/MiniMax-H3-GGUF",
-                "files": ["minimax_h3_ref2va_pruned-Q4_K_M.gguf", "qwen3vl_32b_minimax_h3-Q4_K_M.gguf"],
-            },
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/MiniMax-H3",
-                "files": ["vae/minimax_h3_video_vae_fp16.safetensors", "vae/minimax_h3_audio_vae_fp32.safetensors"],
-            },
-        ],
+        'minimax-ref2va',
+        'MiniMax-H3 Ref2VA',
+        'Video',
+        ['video'],
+        'MiniMax-H3 Ref2VA pruned Q4_K_M GGUF (reference-image-to-video) with qwen3vl-32b text encoder and video/audio VAE supported by sd.cpp.',
+        [_ms_source('minimax-ref2va')],
     ),
     _model(
-        "lingbot-video",
-        "LingBot Video",
-        "Video",
-        ["video"],
-        "LingBot Video dense 1.3B with wan 2.1 VAE and Qwen3-VL-4B text encoder supported by sd.cpp.",
-        [
-            {"source": "hf", "model_id": "robbyant/lingbot-video-dense-1.3b", "files": ["transformer/diffusion_pytorch_model.safetensors"]},
-            dict(_WAN21_VAE),
-            dict(_QWEN3VL_4B_GGUF),
-        ],
+        'lingbot-video',
+        'LingBot Video',
+        'Video',
+        ['video'],
+        'LingBot Video dense 1.3B with wan 2.1 VAE and Qwen3-VL-4B text encoder supported by sd.cpp.',
+        [_ms_source('lingbot-video')],
     ),
     _model(
-        "lens",
-        "Lens",
-        "Image",
-        ["txt2img"],
-        "Lens bf16 diffusion with flux2 VAE and gpt-oss-20b text encoder supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/Lens",
-                "files": ["diffusion_models/lens_bf16.safetensors", "vae/flux2-vae.safetensors"],
-            },
-            {"source": "hf", "model_id": "unsloth/gpt-oss-20b-GGUF", "files": ["gpt-oss-20b-UD-Q8_K_XL.gguf"]},
-        ],
+        'lens',
+        'Lens',
+        'Image',
+        ['txt2img'],
+        'Lens bf16 diffusion with flux2 VAE and gpt-oss-20b text encoder supported by sd.cpp.',
+        [_ms_source('lens')],
     ),
     _model(
-        "chroma",
-        "Chroma",
-        "Image",
-        ["txt2img"],
-        "Chroma unlocked v40 Q8_0 GGUF with flux VAE and t5xxl text encoder supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "silveroxides/Chroma-GGUF",
-                "files": ["chroma-unlocked-v40/chroma-unlocked-v40-Q8_0.gguf"],
-            },
-            dict(_FLUX_VAE),
-            {"source": "hf", "model_id": "comfyanonymous/flux_text_encoders", "files": ["t5xxl_fp16.safetensors"]},
-        ],
+        'chroma',
+        'Chroma',
+        'Image',
+        ['txt2img'],
+        'Chroma unlocked v40 Q8_0 GGUF with flux VAE and t5xxl text encoder supported by sd.cpp.',
+        [_ms_source('chroma')],
     ),
     _model(
-        "chroma-radiance",
-        "Chroma1 Radiance",
-        "Image",
-        ["txt2img"],
-        "Chroma1 Radiance v0.4 Q8_0 GGUF with t5xxl text encoder supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "silveroxides/Chroma1-Radiance-GGUF",
-                "files": ["Chroma1-Radiance-v0.4/Chroma1-Radiance-v0.4-Q8_0.gguf"],
-            },
-            {"source": "hf", "model_id": "comfyanonymous/flux_text_encoders", "files": ["t5xxl_fp16.safetensors"]},
-        ],
+        'chroma-radiance',
+        'Chroma1 Radiance',
+        'Image',
+        ['txt2img'],
+        'Chroma1 Radiance v0.4 Q8_0 GGUF with t5xxl text encoder supported by sd.cpp.',
+        [_ms_source('chroma-radiance')],
     ),
     _model(
-        "longcat-image",
-        "LongCat Image",
-        "Image",
-        ["txt2img"],
-        "LongCat Image Q4_K_M GGUF with flux VAE and Qwen2.5-VL-7B text encoder supported by sd.cpp.",
-        [
-            {"source": "hf", "model_id": "vantagewithai/LongCat-Image-GGUF", "files": ["comfy/LongCat-Image-Q4_K_M.gguf"]},
-            dict(_FLUX_VAE),
-            dict(_QWEN25VL_7B_GGUF),
-        ],
+        'longcat-image',
+        'LongCat Image',
+        'Image',
+        ['txt2img'],
+        'LongCat Image Q4_K_M GGUF with flux VAE and Qwen2.5-VL-7B text encoder supported by sd.cpp.',
+        [_ms_source('longcat-image')],
     ),
     _model(
-        "longcat-image-edit",
-        "LongCat Image Edit",
-        "Image Edit",
-        ["img2img", "edit"],
-        "LongCat Image Edit Q4_K_M GGUF with flux VAE and Qwen2.5-VL-7B text encoder supported by sd.cpp.",
-        [
-            {"source": "hf", "model_id": "vantagewithai/LongCat-Image-Edit-GGUF", "files": ["LongCat-Image-Edit-Q4_K_M.gguf"]},
-            dict(_FLUX_VAE),
-            dict(_QWEN25VL_7B_GGUF),
-        ],
+        'longcat-image-edit',
+        'LongCat Image Edit',
+        'Image Edit',
+        ['img2img', 'edit'],
+        'LongCat Image Edit Q4_K_M GGUF with flux VAE and Qwen2.5-VL-7B text encoder supported by sd.cpp.',
+        [_ms_source('longcat-image-edit')],
     ),
     _model(
-        "z-image",
-        "Z-Image",
-        "Image",
-        ["txt2img"],
-        "Z-Image base bf16 diffusion with flux VAE and Qwen3-4B text encoder supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/z_image",
-                "files": [
-                    "split_files/diffusion_models/z_image_bf16.safetensors",
-                    "split_files/text_encoders/qwen_3_4b.safetensors",
-                    "split_files/vae/ae.safetensors",
-                ],
-            }
-        ],
+        'z-image',
+        'Z-Image',
+        'Image',
+        ['txt2img'],
+        'Z-Image base bf16 diffusion with flux VAE and Qwen3-4B text encoder supported by sd.cpp.',
+        [_ms_source('z-image')],
     ),
     _model(
-        "minit2i",
-        "MiniT2I",
-        "Image",
-        ["txt2img"],
-        "MiniT2I B-16 diffusion with flan-t5-large text encoder supported by sd.cpp.",
-        [
-            {"source": "hf", "model_id": "MiniT2I/MiniT2I", "files": ["minit2i-b-16/transformer/diffusion_pytorch_model.safetensors"]},
-            {"source": "hf", "model_id": "google/flan-t5-large", "files": ["model.safetensors"]},
-        ],
+        'minit2i',
+        'MiniT2I',
+        'Image',
+        ['txt2img'],
+        'MiniT2I B-16 diffusion with flan-t5-large text encoder supported by sd.cpp.',
+        [_ms_source('minit2i')],
     ),
     _model(
-        "ovis-image",
-        "Ovis-Image",
-        "Image",
-        ["txt2img"],
-        "Ovis-Image-7B Q4_0 GGUF with ovis-2.5 text encoder and flux VAE supported by sd.cpp.",
-        [
-            {"source": "hf", "model_id": "leejet/Ovis-Image-7B-GGUF", "files": ["ovis_image-Q4_0.gguf"]},
-            {"source": "hf", "model_id": "Comfy-Org/Ovis-Image", "files": ["split_files/text_encoders/ovis_2.5.safetensors"]},
-            dict(_FLUX_VAE),
-        ],
+        'ovis-image',
+        'Ovis-Image',
+        'Image',
+        ['txt2img'],
+        'Ovis-Image-7B Q4_0 GGUF with ovis-2.5 text encoder and flux VAE supported by sd.cpp.',
+        [_ms_source('ovis-image')],
     ),
     _model(
-        "anima",
-        "Anima",
-        "Image",
-        ["txt2img"],
-        "Anima preview diffusion with qwen VAE and Qwen3-0.6B base text encoder supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "circlestone-labs/Anima",
-                "files": [
-                    "split_files/diffusion_models/anima-preview.safetensors",
-                    "split_files/vae/qwen_image_vae.safetensors",
-                    "split_files/text_encoders/qwen_3_06b_base.safetensors",
-                ],
-            }
-        ],
+        'anima',
+        'Anima',
+        'Image',
+        ['txt2img'],
+        'Anima preview diffusion with qwen VAE and Qwen3-0.6B base text encoder supported by sd.cpp.',
+        [_ms_source('anima')],
     ),
     _model(
-        "ernie-image",
-        "ERNIE-Image",
-        "Image",
-        ["txt2img"],
-        "ERNIE-Image Turbo diffusion with flux2 VAE and ministral-3b text encoder supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/ERNIE-Image",
-                "files": [
-                    "diffusion_models/ernie-image-turbo.safetensors",
-                    "vae/flux2-vae.safetensors",
-                    "text_encoders/ministral-3-3b.safetensors",
-                ],
-            }
-        ],
+        'ernie-image',
+        'ERNIE-Image',
+        'Image',
+        ['txt2img'],
+        'ERNIE-Image Turbo diffusion with flux2 VAE and ministral-3b text encoder supported by sd.cpp.',
+        [_ms_source('ernie-image')],
     ),
     _model(
-        "boogu-image",
-        "Boogu Image",
-        "Image",
-        ["txt2img"],
-        "Boogu Image base bf16 diffusion with flux VAE and Qwen3-VL-8B text encoder supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/Boogu-Image",
-                "files": ["diffusion_models/boogu_image_base_bf16.safetensors", "vae/flux1_vae_bf16.safetensors"],
-            },
-            dict(_QWEN3VL_8B_GGUF),
-        ],
+        'boogu-image',
+        'Boogu Image',
+        'Image',
+        ['txt2img'],
+        'Boogu Image base bf16 diffusion with flux VAE and Qwen3-VL-8B text encoder supported by sd.cpp.',
+        [_ms_source('boogu-image')],
     ),
     _model(
-        "boogu-image-edit",
-        "Boogu Image Edit",
-        "Image Edit",
-        ["img2img", "edit"],
-        "Boogu Image Edit bf16 diffusion with flux VAE and Qwen3-VL-8B text encoder supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "Comfy-Org/Boogu-Image",
-                "files": ["diffusion_models/boogu_image_edit_bf16.safetensors", "vae/flux1_vae_bf16.safetensors"],
-            },
-            dict(_QWEN3VL_8B_GGUF),
-        ],
+        'boogu-image-edit',
+        'Boogu Image Edit',
+        'Image Edit',
+        ['img2img', 'edit'],
+        'Boogu Image Edit bf16 diffusion with flux VAE and Qwen3-VL-8B text encoder supported by sd.cpp.',
+        [_ms_source('boogu-image-edit')],
     ),
     _model(
-        "krea2",
-        "Krea2",
-        "Image",
-        ["txt2img"],
-        "Krea-2 Base Q8_0 GGUF with wan 2.1 VAE and Qwen3-VL-4B text encoder supported by sd.cpp.",
-        [
-            {"source": "hf", "model_id": "realrebelai/KREA-2_GGUFs", "files": ["BASE/Krea-2-Base-Q8_0.gguf"]},
-            dict(_WAN21_VAE),
-            dict(_QWEN3VL_4B_GGUF),
-        ],
+        'krea2',
+        'Krea2',
+        'Image',
+        ['txt2img'],
+        'Krea-2 Base Q8_0 GGUF with wan 2.1 VAE and Qwen3-VL-4B text encoder supported by sd.cpp.',
+        [_ms_source('krea2')],
     ),
     _model(
-        "mage-flow",
-        "Mage-Flow",
-        "Image",
-        ["txt2img"],
-        "Mage-Flow Turbo transformer and VAE pulled through Model Hub (HF repo is gated), pair with Qwen3-VL-4B text encoder.",
-        [
-            {"source": "ms", "model_id": "microsoft/Mage-Flow-Turbo", "files": None},
-            dict(_QWEN3VL_4B_GGUF),
-        ],
+        'mage-flow',
+        'Mage-Flow',
+        'Image',
+        ['txt2img'],
+        'Mage-Flow Turbo transformer and VAE with Qwen3-VL-4B text encoder in a dedicated ModelScope runtime repo.',
+        [_ms_source('mage-flow')],
     ),
     _model(
-        "mage-flow-edit",
-        "Mage-Flow Edit",
-        "Image Edit",
-        ["img2img", "edit"],
-        "Mage-Flow Edit Turbo transformer and VAE pulled through Model Hub (HF repo is gated), pair with Qwen3-VL-4B text encoder.",
-        [
-            {"source": "ms", "model_id": "microsoft/Mage-Flow-Edit-Turbo", "files": None},
-            dict(_QWEN3VL_4B_GGUF),
-        ],
+        'mage-flow-edit',
+        'Mage-Flow Edit',
+        'Image Edit',
+        ['img2img', 'edit'],
+        'Mage-Flow Edit Turbo transformer and VAE with Qwen3-VL-4B text encoder in a dedicated ModelScope runtime repo.',
+        [_ms_source('mage-flow-edit')],
     ),
     _model(
-        "sefi-image",
-        "SeFi-Image",
-        "Image",
-        ["txt2img"],
-        "SeFi-Image 5B turbo (HF gated repo; requires HF_TOKEN and sd.cpp conversion script before use).",
-        [{"source": "hf", "model_id": "SeFi-Image/SeFi-Image-5B-turbo", "files": None}],
+        'sefi-image',
+        'SeFi-Image',
+        'Image',
+        ['txt2img'],
+        'SeFi-Image 5B turbo with its required transformer, VAE and Qwen3-VL files in a dedicated ModelScope runtime repo.',
+        [_ms_source('sefi-image')],
     ),
     _model(
-        "hidream-o1",
-        "HiDream-O1-Image",
-        "Image",
-        ["txt2img"],
-        "HiDream-O1-Image dev bf16 all-in-one checkpoint supported by sd.cpp.",
-        [
-            {"source": "hf", "model_id": "Comfy-Org/HiDream-O1-Image", "files": ["checkpoints/hidream_o1_image_dev_bf16.safetensors"]}
-        ],
+        'hidream-o1',
+        'HiDream-O1-Image',
+        'Image',
+        ['txt2img'],
+        'HiDream-O1-Image dev bf16 all-in-one checkpoint supported by sd.cpp.',
+        [_ms_source('hidream-o1')],
     ),
     _model(
-        "ideogram4",
-        "Ideogram4",
-        "Image",
-        ["txt2img"],
-        "Ideogram 4 fp8 transformer with unconditional transformer, text encoder and VAE supported by sd.cpp.",
-        [
-            {
-                "source": "hf",
-                "model_id": "ideogram-ai/ideogram-4-fp8",
-                "files": [
-                    "transformer/diffusion_pytorch_model.safetensors",
-                    "unconditional_transformer/diffusion_pytorch_model.safetensors",
-                    "text_encoder/model.safetensors",
-                    "vae/diffusion_pytorch_model.safetensors",
-                ],
-            }
-        ],
+        'ideogram4',
+        'Ideogram4',
+        'Image',
+        ['txt2img'],
+        'Ideogram 4 fp8 transformer with unconditional transformer, text encoder and VAE supported by sd.cpp.',
+        [_ms_source('ideogram4')],
     ),
 ]
-
 for _item in MODEL_DEFS:
     _item["params"] = MODEL_PARAMS.get(_item["key"], "")
 
@@ -1160,14 +1049,6 @@ def get_model_def(key: str) -> dict[str, Any]:
 
 
 def _relative_candidates(item: dict[str, Any]) -> list[str]:
-    if item["key"] == "sd15":
-        slug = item["model_id"]
-        return [
-            f"export/ms/{slug}/current/v1-5-pruned-emaonly.safetensors",
-            f"modelscope/vivibit/stable-diffusion-v1-5/v1-5-pruned-emaonly.safetensors",
-            f"vivibit/stable-diffusion-v1-5/v1-5-pruned-emaonly.safetensors",
-            f"export/ms/{slug}/current",
-        ]
     candidates = []
     for spec in item["sources"]:
         rel = f"export/{spec['source']}/{spec['model_id']}/current"
@@ -1179,13 +1060,14 @@ def _relative_candidates(item: dict[str, Any]) -> list[str]:
 def model_info(item: dict[str, Any]) -> ModelInfo:
     resolved = None
     size = None
+    expected_size = MODEL_SIZES.get(item["key"])
     registered_files = list(item.get("files") or [])
     for rel in _relative_candidates(item):
         candidate = settings.modelhub_root / rel
         found = _resolve_model_file(candidate, registered_files[0] if registered_files else None)
         if found:
             resolved = found
-            size = found.stat().st_size
+            size = expected_size or found.stat().st_size
             break
 
     fallback = settings.modelhub_root / _relative_candidates(item)[0]
@@ -1208,17 +1090,15 @@ def model_info(item: dict[str, Any]) -> ModelInfo:
         "resolved_path": str(resolved) if resolved else None,
         "status": "ready" if resolved else ("failed" if dirty_partial else "missing"),
         "size": size,
+        "total_bytes": expected_size,
     }
     if dirty_partial and not resolved:
         info["error"] = "发现上次未完成下载残留，请重新下载以清理后重新拉取"
-    hf_downloader.merge_state(item["key"], info)
     return ModelInfo(**info)
 
 
 def _has_incomplete_markers(item: dict[str, Any]) -> bool:
     for spec in item["sources"]:
-        if spec.get("source") != "hf":
-            continue
         repo_root = settings.modelhub_root / "export" / spec["source"] / spec["model_id"]
         if not repo_root.exists():
             continue
@@ -1292,35 +1172,37 @@ def _is_model_file(path: Path) -> bool:
 async def pull_model(key: str, force: bool = False) -> dict[str, Any]:
     item = get_model_def(key)
     primary = item["sources"][0]
-    if primary["source"] == "ms":
-        payload = {
-            "source": "ms",
-            "model_id": primary["model_id"],
-            "name": item["name"],
-            "force": force,
-            "files": primary.get("files"),
-        }
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(f"{settings.model_hub_api_url}/api/v1/models/pull", json=payload)
-            if resp.status_code == 409:
-                return {"status": "active", "model_id": primary["model_id"], "detail": resp.json().get("detail", "")}
-            resp.raise_for_status()
-            return {"status": "submitted", "model_id": primary["model_id"], "task": resp.json()}
-    file_entries = [name for spec in item["sources"] if spec["source"] == "hf" for name in (spec.get("files") or [])]
-    if not file_entries:
-        raise ValueError("该模型未配置下载文件清单（gated 仓库需要先在 HuggingFace 接受协议并配置 HF_TOKEN）")
-    status = await hf_downloader.start_download(key, item["sources"], force=force)
-    return {
-        "status": status,
+    payload = {
+        "source": "ms",
         "model_id": primary["model_id"],
-        "files": [f"{spec['model_id']}/{name}" for spec in item["sources"] if spec["source"] == "hf" for name in (spec.get("files") or [])],
+        "name": item["name"],
+        "force": force,
+        "files": primary.get("files"),
     }
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(f"{settings.model_hub_api_url}/api/v1/models/pull", json=payload)
+        if resp.status_code == 409:
+            return {"status": "active", "model_id": primary["model_id"], "detail": resp.json().get("detail", "")}
+        resp.raise_for_status()
+        return {"status": "submitted", "model_id": primary["model_id"], "task": resp.json()}
 
 
 async def stop_model(key: str) -> dict[str, Any]:
-    get_model_def(key)
-    stopped = hf_downloader.request_cancel(key)
-    return {"status": "cancelled" if stopped else "not_running", "model_id": get_model_def(key)["model_id"]}
+    model_id = get_model_def(key)["model_id"]
+    async with httpx.AsyncClient(timeout=30) as client:
+        tasks_resp = await client.get(f"{settings.model_hub_api_url}/api/v1/tasks")
+        tasks_resp.raise_for_status()
+        for task in tasks_resp.json():
+            task_model_id = str(task.get("model_id", "")).replace("ms://", "").replace("hf://", "")
+            phase = task.get("phase")
+            if task_model_id == model_id and phase in {"PENDING", "DOWNLOADING", "VERIFYING"}:
+                task_id = str(task.get("task_id", ""))
+                if not task_id:
+                    continue
+                cancel_resp = await client.post(f"{settings.model_hub_api_url}/api/v1/tasks/{quote(task_id, safe='')}/cancel")
+                cancel_resp.raise_for_status()
+                return {"status": "cancelled", "model_id": model_id, "task": cancel_resp.json()}
+    return {"status": "not_running", "model_id": model_id}
 
 
 async def sync_model_hub() -> dict[str, Any]:
@@ -1373,6 +1255,14 @@ def merge_model_hub_state(hub_state: dict[str, Any] | None, info: dict[str, Any]
         return
     if info["status"] == "downloading":
         return
+    hub_size = hub_state.get("size")
+    if isinstance(hub_size, int) and hub_size > 0:
+        info["total_bytes"] = hub_size
+        if info.get("status") == "ready" and not info.get("size"):
+            info["size"] = hub_size
+    access_path = hub_state.get("access_path") or hub_state.get("path")
+    if isinstance(access_path, str) and access_path:
+        info["access_path"] = access_path
     status = hub_state.get("status")
     if status in ("pulling", "PULLING"):
         info["status"] = "downloading"

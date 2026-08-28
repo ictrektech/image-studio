@@ -5,6 +5,31 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.services import generation, hf_downloader
+from app.services.models import MODEL_DEFS, MODEL_SCOPE_FILES, MODEL_SIZES, model_info
+
+
+class ModelRegistryTest(unittest.TestCase):
+    def test_all_models_use_dedicated_modelscope_repos(self):
+        self.assertEqual(len(MODEL_DEFS), 45)
+        for item in MODEL_DEFS:
+            key = item["key"]
+            repo = f"vivibit/image-studio-{key}"
+            with self.subTest(key=key):
+                self.assertEqual(item["source"], "ms")
+                self.assertEqual(item["model_id"], repo)
+                self.assertEqual(item["sources"], [{"source": "ms", "model_id": repo, "files": MODEL_SCOPE_FILES[key]}])
+                self.assertEqual(item["files"], MODEL_SCOPE_FILES[key])
+                self.assertEqual(item["expected_files"], MODEL_SCOPE_FILES[key])
+                self.assertGreater(MODEL_SIZES[key], 0)
+
+                info = model_info(item)
+                self.assertEqual(info.source, "ms")
+                self.assertEqual(info.model_id, repo)
+                self.assertEqual(info.total_bytes, MODEL_SIZES[key])
+
+                files = set(item["files"])
+                for role_path in (item["runtime"].get("roles") or {}).values():
+                    self.assertIn(role_path, files)
 
 
 class DownloadLifecycleTest(unittest.IsolatedAsyncioTestCase):

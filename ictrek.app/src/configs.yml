@@ -5,21 +5,10 @@ configs:
       zh-CN: Model Hub 共享模型目录
       en: Model Hub Shared Models Path
     description:
-      zh-CN: Model Hub 的共享根目录。安装时应选择与 Model Hub 相同的 NAS 公共目录；Image Studio 会读取其中的 ModelScope / HuggingFace 导出模型，并把直连下载的 HuggingFace 模型按 Model Hub 兼容布局写入该目录。
-      en: Shared root directory managed by Model Hub. Select the same NAS public directory as Model Hub at install time. Image Studio reads exported ModelScope / HuggingFace models from it and writes direct HuggingFace downloads into the same Model Hub compatible layout.
+      zh-CN: Model Hub 的共享根目录。安装时应选择与 Model Hub 相同的 NAS 公共目录；Image Studio 会读取其中由 Model Hub 拉取的 ModelScope 模型。
+      en: Shared root directory managed by Model Hub. Select the same NAS public directory as Model Hub at install time. Image Studio reads ModelScope models pulled by Model Hub.
     default: /data/vos_workspace/model_hub
     hints: [com.ictrek.model.storage]
-
-  - name: IMAGE_STUDIO_HF_ENDPOINT
-    type: string
-    title:
-      zh-CN: HuggingFace 下载端点
-      en: HuggingFace Download Endpoint
-    description:
-      zh-CN: Image Studio 直连下载模型时使用的 HF 端点，默认走 hf-mirror.com 镜像加速；直连环境可改为 https://huggingface.co。
-      en: HF endpoint used by Image Studio direct model downloads. Defaults to the hf-mirror.com acceleration mirror; set to https://huggingface.co for direct access.
-    default: https://hf-mirror.com
-
 
   - name: MODEL_HUB_API_URL
     type: string

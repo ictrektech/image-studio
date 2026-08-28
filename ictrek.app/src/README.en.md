@@ -8,7 +8,7 @@ generated-file access, and model management.
 >
 > This app relies on Model Hub for the model lifecycle. Install and start Model Hub before installing Image Studio.
 >
-> At install time, set `MODEL_HUB_SHARED_MODELS_PATH` to the same shared directory used by Model Hub. The default SD 1.5 model `vivibit/stable-diffusion-v1-5` is not bundled with this app; use the Models tab to trigger the Model Hub download. Other HuggingFace models are downloaded by Image Studio into the same Model Hub compatible layout and then synced into the Model Hub registry.
+> At install time, set `MODEL_HUB_SHARED_MODELS_PATH` to the same shared directory used by Model Hub. Built-in Image Studio models are pulled by Model Hub from dedicated `vivibit/image-studio-*` ModelScope runtime repositories; use the Models tab to trigger pull or sync.
 
 ## Features
 
@@ -24,12 +24,12 @@ generated-file access, and model management.
 
 ## Model
 
-Default model: `vivibit/stable-diffusion-v1-5`.
+Default model: `vivibit/image-studio-sd15`.
 
 Expected path:
 
 ```text
-/modelhub/export/ms/vivibit/stable-diffusion-v1-5/current/v1-5-pruned-emaonly.safetensors
+/modelhub/export/ms/vivibit/image-studio-sd15/current/v1-5-pruned-emaonly.safetensors
 ```
 
 If the model is missing, use the Models tab to trigger Model Hub pull or sync.
@@ -45,6 +45,5 @@ compute profile, and runtime parameters.
 | --- | --- | --- |
 | `MODEL_HUB_SHARED_MODELS_PATH` | `/data/vos_workspace/model_hub` | Model Hub shared model root; select the same public directory as Model Hub |
 | `MODEL_HUB_API_URL` | `http://model-hub-backend:5005` | Model Hub backend API inside the VOS network |
-| `IMAGE_STUDIO_HF_ENDPOINT` | `https://hf-mirror.com` | HuggingFace endpoint for direct downloads |
 
 User sessions, generation jobs, uploaded references, and outputs are stored in `${VOS_APP_STORAGE_PATH}/data`, assigned by VOS, and are no longer exposed as a public directory in the install form.

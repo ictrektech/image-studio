@@ -7,7 +7,7 @@ Image Studio 是基于 `stable-diffusion.cpp` 的本地图像生成工作台，�
 >
 > 本应用的模型生命周期依赖 Model Hub 服务，请在安装本应用前确保 Model Hub 已安装且正常运行。
 >
-> 安装时 `MODEL_HUB_SHARED_MODELS_PATH` 应选择与 Model Hub 相同的共享目录。默认 SD 1.5 模型 `vivibit/stable-diffusion-v1-5` 不随本应用提供，首次使用时可在“模型管理”页面触发 Model Hub 下载；其他 HuggingFace 模型由 Image Studio 下载到同一个 Model Hub 兼容目录，并同步到 Model Hub 注册表。
+> 安装时 `MODEL_HUB_SHARED_MODELS_PATH` 应选择与 Model Hub 相同的共享目录。Image Studio 的内置模型均由 Model Hub 从 `vivibit/image-studio-*` ModelScope 独立运行仓库拉取，首次使用时可在“模型管理”页面触发下载或同步。
 
 ## 功能
 
@@ -21,10 +21,10 @@ Image Studio 是基于 `stable-diffusion.cpp` 的本地图像生成工作台，�
 
 ## 模型
 
-默认模型为 `vivibit/stable-diffusion-v1-5`，预期路径：
+默认模型为 `vivibit/image-studio-sd15`，预期路径：
 
 ```text
-/modelhub/export/ms/vivibit/stable-diffusion-v1-5/current/v1-5-pruned-emaonly.safetensors
+/modelhub/export/ms/vivibit/image-studio-sd15/current/v1-5-pruned-emaonly.safetensors
 ```
 
 如模型未就绪，可在“模型管理”标签页触发 Model Hub 下载或同步。
@@ -39,6 +39,5 @@ Image Studio 是基于 `stable-diffusion.cpp` 的本地图像生成工作台，�
 | --- | --- | --- |
 | `MODEL_HUB_SHARED_MODELS_PATH` | `/data/vos_workspace/model_hub` | Model Hub 共享模型根目录；安装时应选择与 Model Hub 相同的公共目录 |
 | `MODEL_HUB_API_URL` | `http://model-hub-backend:5005` | VOS 网络内 Model Hub 后端 API 地址 |
-| `IMAGE_STUDIO_HF_ENDPOINT` | `https://hf-mirror.com` | HuggingFace 直连下载端点 |
 
 用户会话、生成任务、上传参考图和输出文件写入 VOS 自动分配的 `${VOS_APP_STORAGE_PATH}/data`，不再作为公共目录显示在安装表单中。

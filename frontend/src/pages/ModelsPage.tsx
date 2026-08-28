@@ -30,7 +30,8 @@ function bytesText(model: ModelInfo) {
 
 function sizeDisplay(model: ModelInfo, t: typeof messages['zh-CN']) {
   if (model.size) return sizeText(model.size)
-  if (model.status === 'downloading') return bytesText(model) || '-'
+  if (model.status === 'downloading') return bytesText(model) || sizeText(model.total_bytes ?? undefined)
+  if (model.total_bytes) return sizeText(model.total_bytes)
   if (model.files?.length) return `${model.files.length} ${t.filesCountLabel}`
   return '-'
 }

@@ -15,6 +15,11 @@ function formatSize(bytes?: number) {
   return `${value.toFixed(idx === 0 ? 0 : 2)} ${units[idx]}`
 }
 
+function modelSize(model?: ModelInfo) {
+  if (!model) return undefined
+  return model.size || model.total_bytes || model.downloaded_bytes || undefined
+}
+
 const isVideoFile = (name: string) => /\.(mp4|webm|mov)$/i.test(name)
 
 const initialPayload: GeneratePayload = {
@@ -253,7 +258,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
               <div><span>{t.paramsLabel}</span><code>{selectedModel.params || '-'}</code></div>
               <div><span>{t.capabilities}</span><code>{selectedModel.capabilities.join(', ')}</code></div>
               <div><span>{t.modelId}</span><code>{selectedModel.model_id}</code></div>
-              <div><span>{t.size}</span><code>{modelReady ? formatSize(selectedModel.size) : modelDownloading ? formatSize(selectedModel.downloaded_bytes ?? undefined) : '-'}</code></div>
+              <div><span>{t.size}</span><code>{formatSize(modelSize(selectedModel))}</code></div>
             </div>
             {!modelReady && (
               <>

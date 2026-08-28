@@ -45,7 +45,7 @@ Main endpoints:
 | `GET` | `/api/v1/inputs/{input_id}` | Download one uploaded reference image |
 | `DELETE` | `/api/v1/inputs/{input_id}` | Delete one uploaded reference image |
 | `GET` | `/api/v1/models` | List managed model definitions and state |
-| `POST` | `/api/v1/models/{key}/pull` | Trigger Model Hub pull or HF direct download |
+| `POST` | `/api/v1/models/{key}/pull` | Trigger Model Hub pull from ModelScope |
 | `POST` | `/api/v1/models/{key}/stop` | Stop an in-flight download (resumable) |
 | `POST` | `/api/v1/models/{key}/sync` | Ask Model Hub to sync local model registry |
 
@@ -73,43 +73,26 @@ registry exposes the sd.cpp-supported image, image-edit, and video model
 families. The UI shows every managed entry with its family, capabilities,
 shared path, and download/sync actions.
 
-Two download paths coexist:
+All built-in entries are pulled by Model Hub from dedicated ModelScope runtime
+repositories under `vivibit/image-studio-*`. Each repository contains the
+curated file list Image Studio needs for exactly one model key: diffusion
+weights plus required VAE, text encoder, vision encoder, tokenizer/config
+files, or GGUF quants where the sd.cpp runtime expects them.
 
-- **SD 1.5** keeps coming from Model Hub (`vivibit/stable-diffusion-v1-5` on
-  ModelScope). Pulling it delegates to the Model Hub API, so the task and its
-  progress appear natively in the Model Hub UI.
-- **Every other family** downloads straight from HuggingFace inside the
-  Image Studio backend, using the curated file list from the sd.cpp docs
-  (diffusion model + required VAE / text encoders, GGUF quants where the docs
-  recommend them). `HF_ENDPOINT` defaults to `https://hf-mirror.com` for
-  mirror acceleration; override it (or `IMAGE_STUDIO_HF_ENDPOINT` in the VOS
-  package) to download directly.
-
-HF downloads are written in the Model Hub compatible layout, so both sides
-stay in sync:
+ModelScope downloads use the Model Hub compatible layout, so both sides stay in
+sync:
 
 ```text
-<shared>/export/hf/<org>/<repo>/snapshots/<commit>/<repo-relative files>
+<shared>/export/ms/vivibit/image-studio-<key>/current/<repo-relative files>
 ```
 
-`force=true` re-downloads the selected files without deleting the repository
-root or its current snapshot. If an older worker is still writing a large
-file, Image Studio waits for it to stop at the file boundary before starting
-the replacement; downloads sharing one HF repository are serialized. This
-keeps shared encoders and the last ready snapshot available if a retry fails.
-The wait is bounded by `IMAGE_STUDIO_RESTART_WAIT_SECONDS` (default 1800);
-timeout is reported as a failed restart while the original worker remains
-tracked until it exits.
-
-After a download finishes, Image Studio calls `POST /api/v1/models/sync` on
-Model Hub, which registers the repo, refreshes the `current` symlink, and
-makes the model visible in the Model Hub UI. In the other direction,
-Image Studio reads Model Hub's registry and task list to display pull
-progress for Model Hub-managed models (SD 1.5, Mage-Flow).
+`force=true` asks Model Hub to refresh the selected runtime repository. Image
+Studio reads Model Hub's registry and task list to display pull progress,
+local readiness, expected total size, and the resolved shared path.
 
 All models resolve through the same shared-root convention:
 ```text
-/modelhub/export/<ms|hf>/<org>/<repo>/current/
+/modelhub/export/ms/vivibit/image-studio-<key>/current/
 ```
 
 When a model is ready, Image Studio resolves the largest compatible model file
@@ -138,14 +121,10 @@ with a retry message.
 Notes:
 
 - The Model Hub shared root must be mounted writable (the VOS package mounts
-  it at `/modelhub` without `:ro`) so HF downloads can land in `export/hf`.
-- Mage-Flow families pull through Model Hub from the official
-  `microsoft/*` ModelScope mirrors because the HuggingFace repos are gated.
-- SeFi-Image is registered but gated on HuggingFace: downloading requires an
-  `HF_TOKEN` for an account that accepted the license, plus the sd.cpp
-  conversion script before use.
-- Multi-file families (FLUX, Qwen-Image, Wan, …) fetch only the doc-selected
-  variants; expect roughly 5-40 GB per family.
+  it at `/modelhub` without `:ro`) so ModelScope downloads can land in
+  `export/ms`.
+- Multi-file families (FLUX, Qwen-Image, Wan, SeFi, Ideogram, ...) fetch only
+  the Image Studio-selected runtime files; expect roughly 4-70 GB per family.
 
 ## Development
 

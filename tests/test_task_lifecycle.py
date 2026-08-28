@@ -332,6 +332,20 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
             output.write_bytes(b"\x1a\x45\xdf\xa3")
             generation._assert_browser_playable_video(output)
 
+    async def test_backend_dockerfiles_enable_webm_for_video_outputs(self):
+        root = Path(__file__).resolve().parents[1]
+        dockerfiles = [
+            root / "docker" / name
+            for name in ("Dockerfile.cpu", "Dockerfile.amd-cuda", "Dockerfile.arm-cuda", "Dockerfile.thor", "Dockerfile.l4t")
+        ]
+        for dockerfile in dockerfiles:
+            with self.subTest(dockerfile=dockerfile.name):
+                text = dockerfile.read_text(encoding="utf-8")
+                self.assertIn("-DSD_WEBP=ON", text)
+                self.assertIn("-DSD_WEBM=ON", text)
+                self.assertNotIn("-DSD_WEBP=OFF", text)
+                self.assertNotIn("-DSD_WEBM=OFF", text)
+
     async def test_video_args_include_base_and_video_parameters(self):
         job = JobRecord(
             job_id="job_video",

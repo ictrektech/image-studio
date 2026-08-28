@@ -101,6 +101,8 @@ entry may include a `variants` list. Pass `model_variant` to generation or
 `variant` to pull/stop APIs to use one of those quantized variants. Empty means
 the default full-precision model. Variants can point to one or more ModelScope
 repositories when a GGUF main model needs separate VAE or text-encoder files.
+The frontend expands base models and variants into separate selectable entries
+so quantized versions are visible and ordered independently.
 
 When a model is ready, Image Studio resolves the largest compatible model file
 under that directory (`.safetensors`, `.ckpt`, `.pt`, `.pth`, or `.gguf`) and
@@ -130,6 +132,9 @@ The generation workspace keeps model selection and common image controls in a
 compact top toolbar, uses a wide generation canvas with a narrow task
 inspector, and groups advanced and VRAM/runtime controls into expandable
 sections. Video-specific controls only appear for video models.
+The selected model entry and each model entry's last-used generation parameters
+are stored in browser local storage. The reset action restores the current
+model entry's runtime defaults without switching back to the first model.
 Video jobs default to VAE tiling plus graph-split streaming with `max_vram=-2`
 and retry VAE decode once on CPU when sd-cli reports CUDA/VAE allocation
 failure.

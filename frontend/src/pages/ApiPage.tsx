@@ -130,7 +130,7 @@ curl -X POST $BASE/api/v1/models/sd35/pull -H "$AUTH"
 watch -n 10 "curl -s $BASE/api/v1/models -H \\"$AUTH\\" \\
   | jq '.[] | select(.key==\\"sd35\\") | {status,progress,downloaded_bytes,total_bytes}'"
 
-# 3) ready 后即可按流程 A 生成；所有可用 key（含未下载）见 GET /api/v1/models`
+# 3) ready 后即可按流程 A 生成；所有可用 key/variant（含未下载）见 GET /api/v1/models`
 
 const RECIPE_E = `# 批量：一次任务出 4 张，outputs 为多个文件名，逐个下载
 curl -X POST $BASE/api/v1/generate -H "$AUTH" -H 'Content-Type: application/json' \\
@@ -158,8 +158,50 @@ curl -X DELETE $BASE/api/v1/inputs/in_20260825_... -H "$AUTH"
 # 确认当前 token 归属（排障第一步）
 curl $BASE/api/v1/me -H "$AUTH"`
 
+const RECIPE_G = `# 文生视频：纯 T2V 模型不传参考图，输出 output.webm
+curl -X POST $BASE/api/v1/generate -H "$AUTH" -H 'Content-Type: application/json' \\
+  -d '{"prompt":"a dancer under warm stage light","model_key":"wan21",
+       "width":512,"height":320,"steps":12,"cfg_scale":6,
+       "video_frames":33,"fps":24,
+       "vae_tiling":true,"temporal_tiling":true,"max_vram":-2}'
+
+# 图生视频：先上传首帧，再传给 I2V / TI2V / Ref2VA 模型
+curl -X POST $BASE/api/v1/inputs -H "$AUTH" -F 'file=@first-frame.png'
+curl -X POST $BASE/api/v1/generate -H "$AUTH" -H 'Content-Type: application/json' \\
+  -d '{"prompt":"slow camera push in, soft light","model_key":"wan22",
+       "init_input_id":"in_20260825_...","width":512,"height":320,
+       "video_frames":33,"fps":24,"temporal_tiling":true}'`
+
+const RECIPE_H = `# 查看模型支持哪些参数、默认值和量化版本
+curl $BASE/api/v1/models -H "$AUTH" \\
+  | jq '.[] | select(.key=="qwen-image") | {key, runtime, variants}'
+
+# 使用量化版本生成：model_key 仍是基础模型 key，model_variant 指定版本
+curl -X POST $BASE/api/v1/generate -H "$AUTH" -H 'Content-Type: application/json' \\
+  -d '{"prompt":"clean product photo on white background",
+       "model_key":"qwen-image","model_variant":"q4_k_m",
+       "width":1024,"height":1024,"steps":20,"cfg_scale":4}'
+
+# 低显存优先策略：先选量化版本，再缩小 width/height/frames/steps，
+# 最后按模型支持情况打开 vae_tiling / temporal_tiling / stream_layers / vae_cpu_fallback
+curl -X POST $BASE/api/v1/generate -H "$AUTH" -H 'Content-Type: application/json' \\
+  -d '{"prompt":"small low-vram smoke test","model_key":"wan21",
+       "model_variant":"q8_0","width":384,"height":240,"steps":8,
+       "video_frames":17,"fps":12,"vae_tiling":true,
+       "temporal_tiling":true,"stream_layers":true,"vae_cpu_fallback":true}'`
+
+const MODEL_SHAPE_EXAMPLE = `curl $BASE/api/v1/models -H "$AUTH" | jq '.[0] | {
+  key, name, status, progress, total_bytes, size,
+  runtime: {mode: .runtime.mode, defaults: .runtime.defaults, parameters: .runtime.parameters},
+  variants: [.variants[]? | {id, name, status, progress, total_bytes, runtime}]
+}'`
+
 const PULL_EXAMPLE = `# 触发下载（后台异步执行，接口立即返回）
 curl -X POST https://<vos-host>/api/com.ictrek.image-studio/api/v1/models/flux-schnell/pull \\
+  -H "Authorization: Bearer <token>"
+
+# 下载某个量化/替代版本（variant 来自 GET /api/v1/models 的 variants[].id）
+curl -X POST "https://<vos-host>/api/com.ictrek.image-studio/api/v1/models/qwen-image/pull?variant=q4_k_m" \\
   -H "Authorization: Bearer <token>"
 
 # 强制重新下载（取消旧任务并从头/断点重来）
@@ -168,6 +210,10 @@ curl -X POST "https://<vos-host>/api/com.ictrek.image-studio/api/v1/models/flux-
 
 # 停止下载（保留断点，可续传）
 curl -X POST https://<vos-host>/api/com.ictrek.image-studio/api/v1/models/flux-schnell/stop \\
+  -H "Authorization: Bearer <token>"
+
+# 停止某个 variant
+curl -X POST "https://<vos-host>/api/com.ictrek.image-studio/api/v1/models/qwen-image/stop?variant=q4_k_m" \\
   -H "Authorization: Bearer <token>"
 
 # 轮询下载进度（status=downloading + progress / downloaded_bytes / total_bytes）
@@ -210,7 +256,7 @@ export default function ApiPage({ t }: { t: T }) {
         <div><span>Job</span><code>GET /api/v1/jobs/&lt;job_id&gt;</code> <code>DELETE …</code></div>
         <div><span>{t.outputFile}</span><code>GET /api/v1/outputs/&lt;job_id&gt;/&lt;filename&gt;</code></div>
         <div><span>Outputs</span><code>GET /api/v1/outputs</code></div>
-        <div><span>Pull</span><code>POST /api/v1/models/&lt;key&gt;/pull?force=</code> <code>POST …/stop</code></div>
+        <div><span>Pull</span><code>POST /api/v1/models/&lt;key&gt;/pull?variant=&amp;force=</code> <code>POST …/stop?variant=</code></div>
         <div><span>Upload input</span><code>POST /api/v1/inputs</code> <code>GET /api/v1/inputs</code></div>
         <div><span>{t.modelList}</span><code>GET /api/v1/models</code></div>
         <div><span>{t.sessionUser}</span><code>GET /api/v1/me</code></div>
@@ -239,6 +285,12 @@ export default function ApiPage({ t }: { t: T }) {
       <GuideCode>{RECIPE_E}</GuideCode>
       <h4 className="api-recipe-title">{t.apiRecipeF}</h4>
       <GuideCode>{RECIPE_F}</GuideCode>
+      <h4 className="api-recipe-title">{t.apiRecipeG}</h4>
+      <p className="api-note">{t.apiRecipeGNote}</p>
+      <GuideCode>{RECIPE_G}</GuideCode>
+      <h4 className="api-recipe-title">{t.apiRecipeH}</h4>
+      <p className="api-note">{t.apiRecipeHNote}</p>
+      <GuideCode>{RECIPE_H}</GuideCode>
 
       <h4 className="api-recipe-title">{t.apiErrorsTitle}</h4>
       <pre className="api-err-list">{t.apiErrList}</pre>
@@ -260,6 +312,9 @@ export default function ApiPage({ t }: { t: T }) {
           ))}
         </tbody>
       </table>
+      <h4 className="api-recipe-title">{t.apiModelShapeTitle}</h4>
+      <p className="api-note">{t.apiModelShapeNote}</p>
+      <GuideCode>{MODEL_SHAPE_EXAMPLE}</GuideCode>
 
       <div className="auth-section-label" style={{ marginTop: 20 }}>{t.apiModelsTitle}</div>
       <p>{t.apiModelsHelp}</p>

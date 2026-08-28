@@ -87,8 +87,32 @@ const initialPayload: GeneratePayload = {
   params_backend: '',
 }
 
+const SELECTED_MODEL_STORAGE_KEY = 'image-studio.generate.selected-model'
+const MODEL_PAYLOAD_STORAGE_PREFIX = 'image-studio.generate.payload.'
+
+const modelEntryKey = (key: string, variantId = '') => `${key}::${variantId || ''}`
+const payloadStorageKey = (key: string, variantId = '') => `${MODEL_PAYLOAD_STORAGE_PREFIX}${modelEntryKey(key, variantId)}`
+
+function readStoredPayload(key: string, variantId = ''): GeneratePayload | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(payloadStorageKey(key, variantId))
+    if (!raw) return null
+    return { ...initialPayload, ...JSON.parse(raw), model_key: key, model_variant: variantId }
+  } catch {
+    return null
+  }
+}
+
+function readInitialPayload(): GeneratePayload {
+  if (typeof window === 'undefined') return initialPayload
+  const selected = window.localStorage.getItem(SELECTED_MODEL_STORAGE_KEY) || modelEntryKey(initialPayload.model_key, initialPayload.model_variant)
+  const [key, variantId = ''] = selected.split('::')
+  return readStoredPayload(key, variantId) || { ...initialPayload, model_key: key || initialPayload.model_key, model_variant: variantId }
+}
+
 export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { models: ModelInfo[]; onRefresh: () => void; onOpenModels: () => void; t: typeof messages['zh-CN'] }) {
-  const [payload, setPayload] = useState<GeneratePayload>(initialPayload)
+  const [payload, setPayload] = useState<GeneratePayload>(readInitialPayload)
   const [jobs, setJobs] = useState<JobRecord[]>([])
   const [inputs, setInputs] = useState<InputItem[]>([])
   const [session, setSession] = useState<SessionInfo | null>(null)
@@ -188,16 +212,51 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
     }
   }
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      window.localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, modelEntryKey(payload.model_key, payload.model_variant))
+      window.localStorage.setItem(payloadStorageKey(payload.model_key, payload.model_variant), JSON.stringify(payload))
+    } catch {
+      // Ignore quota or privacy-mode storage failures; the generator still works.
+    }
+  }, [payload])
+
+  useEffect(() => {
+    if (!imageModels.length) return
+    if (imageModels.some(entry => entry.base.key === payload.model_key && entry.variantId === payload.model_variant)) return
+    const first = imageModels[0]
+    setPayload(applyRuntimeDefaults({ ...payload, model_key: first.base.key, model_variant: first.variantId }, first.active, first.active.runtime?.mode === 'video'))
+  }, [imageModels, payload])
+
   const switchModelEntry = (value: string) => {
     const [key, variantId = ''] = value.split('::')
     const base = models.find(model => model.key === key)
     const next = variantId ? base?.variants?.find(variant => variant.id === variantId) : base
     const nextVideoModel = next?.runtime?.mode === 'video'
+    const stored = readStoredPayload(key, variantId)
+    if (stored) {
+      setPayload(stored)
+      return
+    }
     setPayload(applyRuntimeDefaults({
       ...payload,
       model_key: key,
       model_variant: variantId,
     }, next, Boolean(nextVideoModel)))
+  }
+
+  const resetCurrentModelDefaults = () => {
+    setPayload(applyRuntimeDefaults({
+      ...initialPayload,
+      prompt: payload.prompt,
+      negative_prompt: payload.negative_prompt,
+      model_key: payload.model_key,
+      model_variant: payload.model_variant,
+      init_job_id: payload.init_job_id,
+      init_filename: payload.init_filename,
+      init_input_id: payload.init_input_id,
+    }, activeModel, isVideoModel))
   }
 
   const loadJobs = async () => {
@@ -344,7 +403,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
           <div className="quick-field"><label>{t.seed}</label><input type="number" title={t.randomSeedHint} value={payload.seed} onChange={e => setPayload({ ...payload, seed: Number(e.target.value) })} /></div>
           <div className="quick-actions">
             <button className="icon-button" onClick={onRefresh} title={t.refreshModels}><RefreshCw size={16} /></button>
-            <button className="icon-button" onClick={() => setPayload(initialPayload)} title={t.reset}><RotateCcw size={16} /></button>
+            <button className="icon-button" onClick={resetCurrentModelDefaults} title={t.resetModelDefaults}><RotateCcw size={16} /></button>
           </div>
         </div>
         <div className={`quick-model-status ${modelReady ? 'ready' : modelDownloading ? 'downloading' : 'missing'}`}>

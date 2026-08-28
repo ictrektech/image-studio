@@ -366,7 +366,6 @@ esac
 
 TARGET_SHEETS=()
 COMPONENTS=()
-TAG_OVERRIDE=""
 if [[ -n "${IMAGE_STUDIO_RELEASE_SHEETS:-}" ]]; then
   IFS=',' read -r -a ENV_SHEETS <<< "${IMAGE_STUDIO_RELEASE_SHEETS}"
   for sheet in "${ENV_SHEETS[@]}"; do
@@ -382,10 +381,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --sheet)
       TARGET_SHEETS+=("$2")
-      shift 2
-      ;;
-    --tag)
-      TAG_OVERRIDE="$2"
       shift 2
       ;;
     -h|--help)
@@ -458,7 +453,7 @@ log "Sheets: ${TARGET_SHEETS[*]}"
 log "Components: ${COMPONENTS[*]}"
 
 if contains "frontend" "${COMPONENTS[@]}"; then
-  FRONTEND_TAG="${HOST_ARCH}_${TAG_OVERRIDE:-$DATE}"
+  FRONTEND_TAG="${HOST_ARCH}_${DATE}"
   FRONTEND_IMAGE="${FRONTEND_REPOSITORY}:${FRONTEND_TAG}"
   log "Building shared ${HOST_ARCH} frontend image: ${FRONTEND_IMAGE}"
   docker buildx build \
@@ -479,7 +474,7 @@ fi
 for sheet in "${TARGET_SHEETS[@]}"; do
   spec="$(sheet_spec "$sheet")"
   IFS='|' read -r PROFILE TAG_PREFIX BACKEND_DOCKERFILE NODE_TAG NGINX_TAG <<< "$spec"
-  TAG="${TAG_PREFIX}_${TAG_OVERRIDE:-$DATE}"
+  TAG="${TAG_PREFIX}_${DATE}"
   BUILD_ARGS=(
     --build-arg "PYTHON_BASE_IMAGE=${REGISTRY}/python:${TAG_PREFIX%%_cuda}_3.12-slim"
     --build-arg "GITHUB_ACCELERATOR=${GITHUB_ACCELERATOR}"

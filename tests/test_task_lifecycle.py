@@ -1,6 +1,7 @@
 import asyncio
 import tempfile
 import unittest
+from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -209,6 +210,87 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
                 raise ProcessLookupError
 
         await generation._terminate_process(ExitedProcess())
+
+    async def test_sd_cli_progress_parser_reads_runtime_output(self):
+        self.assertEqual(generation._sd_cli_progress_from_text("step 3/20"), 0.15)
+        self.assertEqual(generation._sd_cli_progress_from_text("frame 12/120"), 0.1)
+        self.assertEqual(generation._sd_cli_progress_from_text("sampling 42%"), 0.42)
+        self.assertIsNone(generation._sd_cli_progress_from_text("loading 832x480 model"))
+
+    async def test_sd_cli_progress_updates_job_monotonically(self):
+        job = JobRecord(
+            job_id="job_progress",
+            user_key="user",
+            status="running",
+            prompt="prompt",
+            model_key="sd15",
+            model_path="/models/sd15.safetensors",
+            width=512,
+            height=512,
+            steps=20,
+            cfg_scale=7.0,
+            sampler="euler",
+            seed=-1,
+            batch_count=1,
+            progress=0.1,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        stored = job.model_copy(deep=True)
+        saved = []
+
+        def fake_save(next_job):
+            nonlocal stored
+            stored = next_job.model_copy(deep=True)
+            saved.append(stored.progress)
+
+        with (
+            patch.object(generation, "load_job", side_effect=lambda *_: stored),
+            patch.object(generation, "save_job", side_effect=fake_save),
+        ):
+            generation._apply_sd_cli_progress(job, 0.5, 0.1, 0.87)
+            generation._apply_sd_cli_progress(job, 0.4, 0.1, 0.87)
+
+        self.assertAlmostEqual(saved[0], 0.535)
+        self.assertEqual(len(saved), 1)
+        self.assertAlmostEqual(job.progress, 0.535)
+
+    async def test_sd_cli_stream_consumer_keeps_error_tail_and_writes_progress(self):
+        job = JobRecord(
+            job_id="job_stream",
+            user_key="user",
+            status="running",
+            prompt="prompt",
+            model_key="sd15",
+            model_path="/models/sd15.safetensors",
+            width=512,
+            height=512,
+            steps=20,
+            cfg_scale=7.0,
+            sampler="euler",
+            seed=-1,
+            batch_count=1,
+            progress=0.1,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        stored = job.model_copy(deep=True)
+        tail = deque(maxlen=80)
+
+        def fake_save(next_job):
+            nonlocal stored
+            stored = next_job.model_copy(deep=True)
+
+        with (
+            patch.object(generation, "load_job", side_effect=lambda *_: stored),
+            patch.object(generation, "save_job", side_effect=fake_save),
+        ):
+            pending = generation._consume_sd_cli_text(job, tail, "step 2/20\rpartial", 0.1, 0.87)
+            pending = generation._consume_sd_cli_text(job, tail, pending + " line\nframe 30/120\n", 0.1, 0.87)
+
+        self.assertEqual(list(tail), ["step 2/20", "partial line", "frame 30/120"])
+        self.assertEqual(pending, "")
+        self.assertGreater(stored.progress, 0.3)
 
     async def test_video_args_include_base_and_video_parameters(self):
         job = JobRecord(

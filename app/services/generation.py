@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import shlex
 import shutil
 import uuid
+from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -73,6 +75,9 @@ MEMORY_ERROR_MARKERS = (
     "vae decode compute failed",
     "ggml_gallocr_reserve_n_impl",
 )
+_PERCENT_RE = re.compile(r"(?<![\d.])(\d{1,3}(?:\.\d+)?)\s*%")
+_STEP_RE = re.compile(r"\b(?:step|steps|sampling|sample|denoise|denoising)\D{0,32}(\d+)\s*/\s*(\d+)", re.IGNORECASE)
+_FRAME_RE = re.compile(r"\b(?:frame|frames|video)\D{0,32}(\d+)\s*/\s*(\d+)", re.IGNORECASE)
 
 
 async def create_job(user_key: str, request: GenerateRequest) -> JobRecord:
@@ -195,9 +200,9 @@ async def run_job(job: JobRecord) -> None:
             if not has_bin and not settings.mock_when_runtime_missing:
                 raise RuntimeError(f"sd.cpp binary not found: {settings.sd_cpp_bin}")
 
-            async def run_once(output: Path, seed_offset: int = 0) -> None:
+            async def run_once(output: Path, seed_offset: int = 0, progress_base: float = 0.1, progress_span: float = 0.87) -> None:
                 if has_bin:
-                    await run_sd_cpp(job, output, seed_offset=seed_offset)
+                    await run_sd_cpp(job, output, seed_offset=seed_offset, progress_base=progress_base, progress_span=progress_span)
                 else:
                     await asyncio.to_thread(write_mock_svg_as_png_named, job, output)
 
@@ -212,7 +217,7 @@ async def run_job(job: JobRecord) -> None:
                     job.error = "CUDA/VAE 显存不足，正在切换到 CPU VAE 低显存重试"
                     job.progress = 0.12
                     save_job(job)
-                    await run_sd_cpp(job, output, low_memory_retry=True)
+                    await run_sd_cpp(job, output, low_memory_retry=True, progress_base=0.12, progress_span=0.85)
                 job.outputs = [output.name]
             else:
                 names = (
@@ -223,7 +228,9 @@ async def run_job(job: JobRecord) -> None:
                 for i, name in enumerate(names):
                     if load_job(job.user_key, job.job_id) is None:
                         return
-                    await run_once(output_dir / name, i)
+                    progress_base = 0.1 + 0.9 * i / len(names)
+                    progress_span = 0.9 / len(names)
+                    await run_once(output_dir / name, i, progress_base=progress_base, progress_span=progress_span * 0.95)
                     job.outputs = [*job.outputs, name]
                     job.progress = 0.1 + 0.9 * (i + 1) / len(names)
                     save_job(job)
@@ -297,7 +304,14 @@ def build_sd_args(job: JobRecord, output: Path, seed_offset: int = 0, low_memory
     return args
 
 
-async def run_sd_cpp(job: JobRecord, output: Path, seed_offset: int = 0, low_memory_retry: bool = False) -> None:
+async def run_sd_cpp(
+    job: JobRecord,
+    output: Path,
+    seed_offset: int = 0,
+    low_memory_retry: bool = False,
+    progress_base: float = 0.1,
+    progress_span: float = 0.87,
+) -> None:
     args = build_sd_args(job, output, seed_offset=seed_offset, low_memory_retry=low_memory_retry)
     video_mode = get_model_def(job.model_key, job.model_variant)["runtime"].get("mode") == "video"
     timeout = settings.video_timeout_seconds if video_mode else settings.default_timeout_seconds
@@ -308,21 +322,103 @@ async def run_sd_cpp(job: JobRecord, output: Path, seed_offset: int = 0, low_mem
         stderr=asyncio.subprocess.PIPE,
     )
     _job_processes[task_key] = process
+    output_tail: deque[str] = deque(maxlen=80)
+    stdout_task = asyncio.create_task(_consume_sd_cli_stream(process.stdout, job, output_tail, progress_base, progress_span))
+    stderr_task = asyncio.create_task(_consume_sd_cli_stream(process.stderr, job, output_tail, progress_base, progress_span))
     try:
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        await asyncio.wait_for(process.wait(), timeout=timeout)
+        await asyncio.gather(stdout_task, stderr_task)
     except asyncio.CancelledError:
         await _terminate_process(process)
+        stdout_task.cancel()
+        stderr_task.cancel()
+        await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
         raise
     except asyncio.TimeoutError as exc:
         await _terminate_process(process)
+        stdout_task.cancel()
+        stderr_task.cancel()
+        await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
         raise RuntimeError(f"sd-cli 超时（{timeout}s）") from exc
     finally:
         _job_processes.pop(task_key, None)
     if process.returncode != 0:
-        stderr_text = stderr.decode(errors="replace")
-        stderr_tail = stderr_text.strip().splitlines()[-6:]
-        detail = " | ".join(line.strip() for line in stderr_tail if line.strip())
+        detail = " | ".join(line.strip() for line in list(output_tail)[-6:] if line.strip())
         raise RuntimeError(f"sd-cli 退出码 {process.returncode}: {detail or '无错误输出'}")
+
+
+async def _consume_sd_cli_stream(
+    stream: asyncio.StreamReader | None,
+    job: JobRecord,
+    output_tail: deque[str],
+    progress_base: float,
+    progress_span: float,
+) -> None:
+    if stream is None:
+        return
+    pending = ""
+    while True:
+        chunk = await stream.read(4096)
+        if not chunk:
+            break
+        text = chunk.decode(errors="replace")
+        pending = _consume_sd_cli_text(job, output_tail, pending + text, progress_base, progress_span)
+    if pending.strip():
+        _consume_sd_cli_text(job, output_tail, pending + "\n", progress_base, progress_span)
+
+
+def _consume_sd_cli_text(
+    job: JobRecord,
+    output_tail: deque[str],
+    text: str,
+    progress_base: float,
+    progress_span: float,
+) -> str:
+    normalized = text.replace("\r", "\n")
+    parts = normalized.split("\n")
+    if not normalized.endswith("\n"):
+        pending = parts.pop()
+    else:
+        pending = ""
+    for part in parts:
+        line = part.strip()
+        if not line:
+            continue
+        output_tail.append(line)
+        progress = _sd_cli_progress_from_text(line)
+        if progress is not None:
+            _apply_sd_cli_progress(job, progress, progress_base, progress_span)
+    return pending
+
+
+def _sd_cli_progress_from_text(text: str) -> float | None:
+    for pattern in (_FRAME_RE, _STEP_RE):
+        match = pattern.search(text)
+        if match:
+            done = int(match.group(1))
+            total = int(match.group(2))
+            if total > 0:
+                return max(0.0, min(done / total, 1.0))
+    percent_matches = _PERCENT_RE.findall(text)
+    for raw in reversed(percent_matches):
+        value = float(raw)
+        if 0 <= value <= 100:
+            return value / 100
+    return None
+
+
+def _apply_sd_cli_progress(job: JobRecord, raw_progress: float, progress_base: float, progress_span: float) -> None:
+    current = load_job(job.user_key, job.job_id)
+    if current is None or current.status != "running":
+        return
+    mapped = progress_base + max(0.0, min(raw_progress, 1.0)) * progress_span
+    mapped = max(progress_base, min(mapped, 0.98))
+    if mapped <= current.progress + 0.005:
+        return
+    current.progress = mapped
+    current.updated_at = datetime.now(timezone.utc)
+    save_job(current)
+    job.progress = current.progress
 
 
 def _runtime_string(

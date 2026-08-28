@@ -344,11 +344,13 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("-DSD_WEBP=ON", text)
                 self.assertIn("-DSD_WEBM=ON", text)
                 self.assertIn("-DSD_USE_SYSTEM_WEBP=ON", text)
-                self.assertIn("-DSD_USE_SYSTEM_WEBM=ON", text)
                 self.assertIn("libwebp", text)
-                self.assertIn("libwebm", text)
+                self.assertIn("libwebpmux3", text)
                 self.assertNotIn("-DSD_WEBP=OFF", text)
                 self.assertNotIn("-DSD_WEBM=OFF", text)
+        install_script = (root / "docker" / "install_sd_cpp.sh").read_text(encoding="utf-8")
+        self.assertIn("LIBWEBM_REF", install_script)
+        self.assertIn("thirdparty/libwebm", install_script)
 
     async def test_video_args_include_base_and_video_parameters(self):
         job = JobRecord(

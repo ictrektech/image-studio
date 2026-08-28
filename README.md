@@ -119,6 +119,10 @@ The same `runtime.parameters` contract covers advanced sd-cli controls exposed
 in the UI/API: scheduler, clip skip, guidance, eta, flow shift, SLG, highres
 fix, cache, RNG/prediction overrides, Qwen layered output, VAE tiling, temporal
 tiling, VRAM budget, streaming, auto-fit, CPU offload, and backend assignment.
+The generation workspace keeps model selection and common image controls in a
+compact top toolbar, uses a wide generation canvas with a narrow task
+inspector, and groups advanced and VRAM/runtime controls into expandable
+sections. Video-specific controls only appear for video models.
 Video jobs default to VAE tiling plus graph-split streaming with `max_vram=-2`
 and retry VAE decode once on CPU when sd-cli reports CUDA/VAE allocation
 failure.

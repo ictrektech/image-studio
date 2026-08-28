@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CheckCircle2, Database, Download, DownloadCloud, AlertTriangle, ImageIcon, Loader2, Play, RefreshCw, RotateCcw, Sparkles, Square, Trash2, UserCircle2, Wand2, X } from 'lucide-react'
+import { ChevronDown, Database, Download, DownloadCloud, AlertTriangle, ImageIcon, Loader2, Play, RefreshCw, RotateCcw, Sparkles, Square, Trash2, UserCircle2, Wand2, X } from 'lucide-react'
 import { api, GeneratePayload, InputItem, JobRecord, ModelInfo, SessionInfo } from '../api/client'
 import { messages } from '../i18n'
 
@@ -307,6 +307,40 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
 
   return (
     <div className="page-stack">
+      <section className="panel quick-settings-panel">
+        <div className="quick-settings-grid">
+          <div className="quick-field quick-model-field">
+            <label>{t.modelPanelTitle}</label>
+            <select value={payload.model_key} onChange={e => switchModel(e.target.value)}>
+              {imageModels.map(model => <option key={model.key} value={model.key}>{model.name}{model.params ? ` (${model.params})` : ''} · {model.family}</option>)}
+            </select>
+          </div>
+          <div className="quick-field"><label>{t.width}</label><input type="number" value={payload.width} onChange={e => setPayload({ ...payload, width: Number(e.target.value) })} /></div>
+          <div className="quick-field"><label>{t.height}</label><input type="number" value={payload.height} onChange={e => setPayload({ ...payload, height: Number(e.target.value) })} /></div>
+          <div className="quick-field"><label>{t.steps}</label><input type="number" value={payload.steps} onChange={e => setPayload({ ...payload, steps: Number(e.target.value) })} /></div>
+          <div className="quick-field"><label>{t.cfgScale}{!supportsParam('cfg_scale') && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label><input type="number" step="0.5" value={payload.cfg_scale} disabled={!supportsParam('cfg_scale')} onChange={e => setPayload({ ...payload, cfg_scale: Number(e.target.value) })} /></div>
+          <div className="quick-field"><label>{t.sampler}</label><select value={payload.sampler} onChange={e => setPayload({ ...payload, sampler: e.target.value })}>{samplerOptions.map(v => <option value={v} key={v}>{v}</option>)}</select></div>
+          <div className="quick-field"><label>{t.seed}</label><input type="number" title={t.randomSeedHint} value={payload.seed} onChange={e => setPayload({ ...payload, seed: Number(e.target.value) })} /></div>
+          <div className="quick-actions">
+            <button className="icon-button" onClick={onRefresh} title={t.refreshModels}><RefreshCw size={16} /></button>
+            <button className="icon-button" onClick={() => setPayload(initialPayload)} title={t.reset}><RotateCcw size={16} /></button>
+          </div>
+        </div>
+        <div className={`quick-model-status ${modelReady ? 'ready' : modelDownloading ? 'downloading' : 'missing'}`}>
+          <span className="quick-status-dot" />
+          <strong>{selectedModel?.name || t.noModelsConfigured}</strong>
+          <span>{modelReady ? t.modelReady : modelDownloading ? `${t.modelDownloading} ${modelProgress}%` : modelUsable ? t.modelMissing : t.chooseModelHint}</span>
+          {selectedModel && <code>{selectedModel.source} · {selectedModel.family} · {formatSize(modelSize(selectedModel))}</code>}
+          {!modelReady && selectedModel && (
+            <button className="quiet-button" disabled={modelDownloading} onClick={downloadModel}>
+              {modelDownloading ? <Loader2 size={13} className="spin" /> : <DownloadCloud size={13} />}
+              {modelDownloading ? `${modelProgress}%` : t.downloadModel}
+            </button>
+          )}
+          {modelDownloading && <button className="quiet-button" onClick={stopModelDownload}><Square size={13} />{t.stopDownload}</button>}
+          {(!modelReady || !modelUsable) && <button className="quiet-button" onClick={onOpenModels}><Database size={13} />{t.openModelManagement}</button>}
+        </div>
+      </section>
       {jobs[0] && (
         <div className="current-job-bar">
           <span className="current-job-label">{t.currentJob}</span>
@@ -317,85 +351,8 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
           <span className="current-job-prompt">{jobs[0].prompt.slice(0, 60)}{jobs[0].prompt.length > 60 ? '…' : ''}</span>
         </div>
       )}
-    <div className="workspace-grid chat-workspace">
-      {/* 左栏：模型 + 视频生成参数 */}
-      <section className="panel side-panel studio-panel">
-        <div className="panel-heading">
-          <div className="panel-title">{t.modelPanelTitle}</div>
-          <button className="quiet-button" onClick={onRefresh} title={t.refreshModels}><RefreshCw size={15} /></button>
-        </div>
-        <select value={payload.model_key} onChange={e => switchModel(e.target.value)}>
-          {imageModels.map(model => <option key={model.key} value={model.key}>{model.name}{model.params ? ` (${model.params})` : ''} · {model.family}</option>)}
-        </select>
-        <div className={`inline-status ${modelReady ? 'ready' : 'missing'}`}>
-          <strong>{selectedModel?.name || t.noModelsConfigured}</strong>
-          <span>{modelUsable ? (modelReady ? t.modelReady : t.modelMissing) : t.chooseModelHint}</span>
-          <code>{selectedModel?.resolved_path || selectedModel?.access_path || '-'}</code>
-        </div>
-        {selectedModel && (
-          <div className={`model-brief-card ${modelReady ? 'ready' : modelDownloading ? 'downloading' : 'pending'}`}>
-            <div className="model-brief-meta">
-              <div><span>{t.status}</span>
-                <code className="model-brief-status">
-                  {modelReady && <CheckCircle2 size={13} />}
-                  {modelDownloading && <Loader2 size={13} className="spin" />}
-                  {modelReady ? t.modelReady : modelDownloading ? `${t.modelDownloading} ${modelProgress}%` : selectedModel.status === 'failed' ? t.modelFailed : t.modelMissing}
-                </code>
-              </div>
-              <div><span>{t.source}</span><code>{selectedModel.source}</code></div>
-              <div><span>{t.family}</span><code>{selectedModel.family}</code></div>
-              <div><span>{t.paramsLabel}</span><code>{selectedModel.params || '-'}</code></div>
-              <div><span>{t.capabilities}</span><code>{selectedModel.capabilities.join(', ')}</code></div>
-              <div><span>{t.modelId}</span><code>{selectedModel.model_id}</code></div>
-              <div><span>{t.size}</span><code>{formatSize(modelSize(selectedModel))}</code></div>
-            </div>
-            {!modelReady && (
-              <>
-                {selectedModel.status === 'failed' && selectedModel.error && (
-                  <code className="model-brief-error">⚠ {selectedModel.error}</code>
-                )}
-                <button
-                  className="secondary-action model-brief-download"
-                  disabled={modelDownloading}
-                  onClick={downloadModel}
-                >
-                  {modelDownloading ? <Loader2 size={14} className="spin" /> : <DownloadCloud size={14} />}
-                  {modelDownloading ? `${t.modelDownloading} ${modelProgress}%` : t.downloadModel}
-                </button>
-                {modelDownloading && (
-                  <button className="secondary-action model-brief-download" onClick={stopModelDownload}>
-                    <Square size={14} />{t.stopDownload}
-                  </button>
-                )}
-                {modelDownloading && <progress className="model-brief-progress" max="100" value={modelProgress} />}
-              </>
-            )}
-          </div>
-        )}
-        {(!modelReady || !modelUsable) && (
-          <button className="secondary-action model-jump-action" onClick={onOpenModels}>
-            <Database size={15} />{t.openModelManagement}
-          </button>
-        )}
-
-        <div className={`side-param-block${isVideoModel ? '' : ' param-ignored'}`}>
-          <div className="section-label">{t.videoParamsTitle}{!isVideoModel && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</div>
-          <div className="control-row two">
-            <div><label>{t.videoFrames}</label><input type="number" min="2" max="240" value={payload.video_frames} disabled={!supportsParam('video_frames', isVideoModel)} onChange={e => setPayload({ ...payload, video_frames: Number(e.target.value) })} /></div>
-            <div><label>{t.videoFps}</label><input type="number" min="1" max="60" value={payload.fps} disabled={!supportsParam('fps', isVideoModel)} onChange={e => setPayload({ ...payload, fps: Number(e.target.value) })} /></div>
-          </div>
-          <div className="control-row two">
-            <div><label>{t.highNoiseSteps}{!supportsParam('high_noise_steps', false) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label><input type="number" min="0" max="150" value={payload.high_noise_steps} disabled={!supportsParam('high_noise_steps', false)} onChange={e => setPayload({ ...payload, high_noise_steps: Number(e.target.value) })} /></div>
-            <div><label>{t.highNoiseCfg}{!supportsParam('high_noise_cfg_scale', false) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label><input type="number" min="0" max="30" step="0.5" value={payload.high_noise_cfg_scale} disabled={!supportsParam('high_noise_cfg_scale', false)} onChange={e => setPayload({ ...payload, high_noise_cfg_scale: Number(e.target.value) })} /></div>
-          </div>
-          <div className="control-row">
-            <div><label>{t.highNoiseSampler}{!supportsParam('high_noise_sampler', false) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label><select value={payload.high_noise_sampler} disabled={!supportsParam('high_noise_sampler', false)} onChange={e => setPayload({ ...payload, high_noise_sampler: e.target.value })}><option value="">{t.modelDefault}</option>{samplerOptions.map(v => <option value={v} key={v}>{v}</option>)}</select></div>
-          </div>
-          {videoDuration && <span className="video-duration">{t.videoDurationHint} {videoDuration} {t.videoSeconds}</span>}
-        </div>
-      </section>
-
-      {/* 中间：聊天主窗口 */}
+      <div className="workspace-grid chat-workspace">
+      {/* 左栏：聊天主窗口 */}
       <section className="panel chat-panel studio-panel">
         <div className="chat-toolbar">
           <div className="panel-title">{t.chatTitle}</div>
@@ -577,11 +534,10 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
         </div>
       </section>
 
-      {/* 右栏：基础生成参数 */}
+      {/* 右栏：任务参数检查器 */}
       <aside className="panel detail-panel studio-panel">
         <div className="panel-heading">
           <div className="panel-title">{isVideoModel ? t.baseParamsTitle : t.imageParamsTitle}</div>
-          <button className="quiet-button" onClick={() => setPayload(initialPayload)} title={t.reset}><RotateCcw size={15} /></button>
         </div>
         <div className={`inline-status ${isImg2Img ? 'ready' : ''}`}>
           <strong>{isVideoModel ? (isImg2Img ? t.img2Video : t.text2Video) : isImg2Img ? (isEditModel ? t.imageEdit : t.imageToImage) : t.textToImage}</strong>
@@ -589,18 +545,6 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
           {isImg2Img && <code>{payload.init_input_id || `${payload.init_job_id}/${payload.init_filename}`}</code>}
         </div>
         <div className="side-param-block">
-          <div className="control-row two">
-            <div><label>{t.width}</label><input type="number" value={payload.width} onChange={e => setPayload({ ...payload, width: Number(e.target.value) })} /></div>
-            <div><label>{t.height}</label><input type="number" value={payload.height} onChange={e => setPayload({ ...payload, height: Number(e.target.value) })} /></div>
-          </div>
-          <div className="control-row two">
-            <div><label>{t.steps}</label><input type="number" value={payload.steps} onChange={e => setPayload({ ...payload, steps: Number(e.target.value) })} /></div>
-            <div><label>{t.cfgScale}{!supportsParam('cfg_scale') && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label><input type="number" step="0.5" value={payload.cfg_scale} disabled={!supportsParam('cfg_scale')} onChange={e => setPayload({ ...payload, cfg_scale: Number(e.target.value) })} /></div>
-          </div>
-          <div className="control-row two">
-            <div><label>{t.sampler}</label><select value={payload.sampler} onChange={e => setPayload({ ...payload, sampler: e.target.value })}>{samplerOptions.map(v => <option value={v} key={v}>{v}</option>)}</select></div>
-            <div><label>{t.seed}</label><input type="number" title={t.randomSeedHint} value={payload.seed} onChange={e => setPayload({ ...payload, seed: Number(e.target.value) })} /></div>
-          </div>
           <div className="control-row two">
             <div>
               <label>{t.strength}{!(isImg2Img && supportsStrength) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label>
@@ -612,8 +556,26 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
             </div>
           </div>
         </div>
-        <div className="side-param-block">
-          <div className="section-label">{t.imageAdvancedParamsTitle}</div>
+        {isVideoModel && (
+          <details className="parameter-section">
+            <summary><span>{t.videoParamsTitle}</span><ChevronDown size={16} aria-hidden="true" /></summary>
+            <div className="parameter-section-body">
+              <div className="control-row two">
+                <div><label>{t.videoFrames}</label><input type="number" min="2" max="240" value={payload.video_frames} disabled={!supportsParam('video_frames', isVideoModel)} onChange={e => setPayload({ ...payload, video_frames: Number(e.target.value) })} /></div>
+                <div><label>{t.videoFps}</label><input type="number" min="1" max="60" value={payload.fps} disabled={!supportsParam('fps', isVideoModel)} onChange={e => setPayload({ ...payload, fps: Number(e.target.value) })} /></div>
+              </div>
+              <div className="control-row two">
+                <div><label>{t.highNoiseSteps}{!supportsParam('high_noise_steps', false) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label><input type="number" min="0" max="150" value={payload.high_noise_steps} disabled={!supportsParam('high_noise_steps', false)} onChange={e => setPayload({ ...payload, high_noise_steps: Number(e.target.value) })} /></div>
+                <div><label>{t.highNoiseCfg}{!supportsParam('high_noise_cfg_scale', false) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label><input type="number" min="0" max="30" step="0.5" value={payload.high_noise_cfg_scale} disabled={!supportsParam('high_noise_cfg_scale', false)} onChange={e => setPayload({ ...payload, high_noise_cfg_scale: Number(e.target.value) })} /></div>
+              </div>
+              <div className="control-row"><div><label>{t.highNoiseSampler}</label><select value={payload.high_noise_sampler} disabled={!supportsParam('high_noise_sampler', false)} onChange={e => setPayload({ ...payload, high_noise_sampler: e.target.value })}><option value="">{t.modelDefault}</option>{samplerOptions.map(v => <option value={v} key={v}>{v}</option>)}</select></div></div>
+              {videoDuration && <span className="video-duration">{t.videoDurationHint} {videoDuration} {t.videoSeconds}</span>}
+            </div>
+          </details>
+        )}
+        <details className="parameter-section">
+          <summary><span>{t.imageAdvancedParamsTitle}</span><ChevronDown size={16} aria-hidden="true" /></summary>
+          <div className="parameter-section-body">
           <div className="control-row two">
             <div><label>{t.scheduler}</label><select value={payload.scheduler} disabled={!supportsParam('scheduler')} onChange={e => setPayload({ ...payload, scheduler: e.target.value })}>{schedulerOptions.map(v => <option value={v} key={v}>{v || t.modelDefault}</option>)}</select></div>
             <div><label>{t.clipSkip}</label><input type="number" min="-1" max="24" value={payload.clip_skip} disabled={!supportsParam('clip_skip')} onChange={e => setPayload({ ...payload, clip_skip: Number(e.target.value) })} /></div>
@@ -663,9 +625,11 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
           <div className="control-row">
             <div><label>{t.cacheOption}</label><input value={payload.cache_option} disabled={!supportsParam('cache_option')} onChange={e => setPayload({ ...payload, cache_option: e.target.value })} placeholder="threshold=0.25,start=0.1,end=0.8" /></div>
           </div>
-        </div>
-        <div className="side-param-block">
-          <div className="section-label">{t.memoryParamsTitle}</div>
+          </div>
+        </details>
+        <details className="parameter-section">
+          <summary><span>{t.memoryParamsTitle}</span><ChevronDown size={16} aria-hidden="true" /></summary>
+          <div className="parameter-section-body">
           <div className="control-row two">
             <label className="check-row"><input type="checkbox" checked={payload.vae_tiling} disabled={!supportsParam('vae_tiling')} onChange={e => setPayload({ ...payload, vae_tiling: e.target.checked })} />{t.vaeTiling}</label>
             <label className="check-row"><input type="checkbox" checked={payload.stream_layers} disabled={!supportsParam('stream_layers')} onChange={e => setPayload({ ...payload, stream_layers: e.target.checked })} />{t.streamLayers}</label>
@@ -693,7 +657,8 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
           <div className="control-row">
             <div><label>{t.backendAssign}</label><input value={payload.backend} disabled={!supportsParam('backend')} onChange={e => setPayload({ ...payload, backend: e.target.value })} placeholder="clip=cpu,vae=cuda0,diffusion=cuda0" /></div>
           </div>
-        </div>
+          </div>
+        </details>
         <p className="api-note">{t.paramsIgnoredHint}</p>
       </aside>
 

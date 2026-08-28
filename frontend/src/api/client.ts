@@ -15,6 +15,7 @@ export interface ModelRuntime {
   extra_args?: string[]
   defaults?: Partial<GeneratePayload>
   negative?: boolean
+  parameters?: Record<string, boolean>
 }
 
 export interface ModelInfo {

@@ -1,11 +1,13 @@
 import asyncio
 import tempfile
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
+from app.models import JobRecord
 from app.services import generation, hf_downloader
-from app.services.models import MODEL_DEFS, MODEL_SCOPE_FILES, MODEL_SIZES, model_info
+from app.services.models import MODEL_DEFS, MODEL_SCOPE_FILES, MODEL_SIZES, merge_model_hub_state, model_info
 
 
 class ModelRegistryTest(unittest.TestCase):
@@ -30,6 +32,23 @@ class ModelRegistryTest(unittest.TestCase):
                 files = set(item["files"])
                 for role_path in (item["runtime"].get("roles") or {}).values():
                     self.assertIn(role_path, files)
+
+    def test_ready_model_hub_state_wins_over_stale_task_progress(self):
+        info = model_info(MODEL_DEFS[0]).model_dump()
+        info["status"] = "ready"
+        info["size"] = MODEL_SIZES[MODEL_DEFS[0]["key"]]
+
+        merge_model_hub_state(
+            {
+                "status": "ready",
+                "size": MODEL_SIZES[MODEL_DEFS[0]["key"]],
+                "progress": 1.0,
+            },
+            info,
+        )
+
+        self.assertEqual(info["status"], "ready")
+        self.assertIsNone(info.get("progress"))
 
 
 class DownloadLifecycleTest(unittest.IsolatedAsyncioTestCase):
@@ -165,6 +184,190 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
                 raise ProcessLookupError
 
         await generation._terminate_process(ExitedProcess())
+
+    async def test_video_args_include_base_and_video_parameters(self):
+        job = JobRecord(
+            job_id="job_video",
+            user_key="user",
+            status="queued",
+            prompt="a dancer",
+            negative_prompt="",
+            model_key="wan21",
+            model_path="/models/wan.safetensors",
+            width=832,
+            height=480,
+            steps=20,
+            cfg_scale=6.0,
+            strength=0.75,
+            sampler="euler",
+            seed=42,
+            batch_count=4,
+            video_frames=120,
+            fps=24,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+
+        with patch.object(generation, "runtime_paths_for", return_value={}):
+            args = generation.build_sd_args(job, Path("/tmp/output.mp4"))
+
+        self.assertIn("-M", args)
+        self.assertIn("vid_gen", args)
+        self.assertEqual(args[args.index("-o") + 1], "/tmp/output.mp4")
+        self.assertEqual(args[args.index("--width") + 1], "832")
+        self.assertEqual(args[args.index("--height") + 1], "480")
+        self.assertEqual(args[args.index("--steps") + 1], "20")
+        self.assertEqual(args[args.index("--cfg-scale") + 1], "6.0")
+        self.assertEqual(args[args.index("--sampling-method") + 1], "euler")
+        self.assertEqual(args[args.index("--seed") + 1], "42")
+        self.assertEqual(args[args.index("--video-frames") + 1], "120")
+        self.assertEqual(args[args.index("--fps") + 1], "24")
+        self.assertNotIn("--strength", args)
+
+    async def test_create_job_normalizes_unsupported_parameters(self):
+        async def fake_run(_job):
+            return None
+
+        with (
+            patch.object(generation, "assert_model_hub_ready"),
+            patch.object(generation, "model_path_for", return_value=Path("/models/wan.safetensors")),
+            patch.object(generation, "run_job", fake_run),
+            patch.object(generation, "save_job"),
+        ):
+            job = await generation.create_job(
+                "user",
+                generation.GenerateRequest(
+                    prompt="a dancer",
+                    model_key="wan21",
+                    negative_prompt="ignored",
+                    cfg_scale=9,
+                    strength=0.75,
+                    batch_count=4,
+                    video_frames=120,
+                    fps=24,
+                ),
+            )
+
+        self.assertEqual(job.negative_prompt, "ignored")
+        self.assertEqual(job.cfg_scale, 9)
+        self.assertEqual(job.strength, 0)
+        self.assertEqual(job.batch_count, 1)
+        self.assertEqual(job.video_frames, 120)
+        self.assertEqual(job.fps, 24)
+
+    async def test_image_job_ignores_video_parameters(self):
+        async def fake_run(_job):
+            return None
+
+        with (
+            patch.object(generation, "assert_model_hub_ready"),
+            patch.object(generation, "model_path_for", return_value=Path("/models/sd15.safetensors")),
+            patch.object(generation, "run_job", fake_run),
+            patch.object(generation, "save_job"),
+        ):
+            job = await generation.create_job(
+                "user",
+                generation.GenerateRequest(
+                    prompt="a cabin",
+                    model_key="sd15",
+                    init_input_id="in_1",
+                    strength=0.6,
+                    batch_count=2,
+                    video_frames=48,
+                    fps=24,
+                ),
+            )
+
+        self.assertEqual(job.strength, 0.6)
+        self.assertEqual(job.batch_count, 2)
+        self.assertEqual(job.video_frames, 0)
+        self.assertEqual(job.fps, 0)
+        self.assertEqual(job.metadata["init_input_id"], "in_1")
+
+    async def test_fixed_cfg_model_uses_runtime_default(self):
+        job = JobRecord(
+            job_id="job_flux",
+            user_key="user",
+            status="queued",
+            prompt="a cabin",
+            negative_prompt="ignored negative",
+            model_key="flux-schnell",
+            model_path="/models/flux.gguf",
+            width=1024,
+            height=1024,
+            steps=4,
+            cfg_scale=7.0,
+            strength=0.75,
+            sampler="euler",
+            seed=-1,
+            batch_count=1,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            metadata={"init_input_id": "in_1"},
+        )
+
+        with patch.object(generation, "runtime_paths_for", return_value={}):
+            args = generation.build_sd_args(job, Path("/tmp/output.png"))
+
+        self.assertEqual(args[args.index("--cfg-scale") + 1], "1.0")
+        self.assertNotIn("-n", args)
+        self.assertNotIn("-i", args)
+        self.assertNotIn("--strength", args)
+
+    async def test_all_model_runtime_specs_build_expected_command_shape(self):
+        now = datetime.now(UTC)
+        for item in MODEL_DEFS:
+            runtime = item["runtime"]
+            defaults = runtime.get("defaults") or {}
+            video_mode = runtime.get("mode") == "video"
+            params = runtime.get("parameters") or {}
+            job = JobRecord(
+                job_id=f"job_{item['key']}",
+                user_key="user",
+                status="queued",
+                prompt="prompt",
+                negative_prompt="negative",
+                model_key=item["key"],
+                model_path="/models/main.safetensors",
+                width=int(defaults.get("width", 768)),
+                height=int(defaults.get("height", 768)),
+                steps=int(defaults.get("steps", 20)),
+                cfg_scale=float(defaults.get("cfg_scale", 7.0)),
+                strength=0.75,
+                sampler=str(defaults.get("sampler", "euler")),
+                seed=1,
+                batch_count=2,
+                video_frames=int(defaults.get("video_frames", 0)),
+                fps=int(defaults.get("fps", 0)),
+                created_at=now,
+                updated_at=now,
+                metadata={"init_input_id": "in_1"},
+            )
+            output = Path("/tmp/output.mp4" if video_mode else "/tmp/output.png")
+
+            with self.subTest(key=item["key"]):
+                with (
+                    patch.object(generation, "runtime_paths_for", return_value={}),
+                    patch.object(generation, "init_image_path", return_value=Path("/tmp/input.png")),
+                ):
+                    args = generation.build_sd_args(job, output)
+                self.assertEqual(args[args.index("-o") + 1], str(output))
+                if video_mode:
+                    self.assertIn("-M", args)
+                    self.assertIn("vid_gen", args)
+                    self.assertIn("--video-frames", args)
+                    self.assertIn("--fps", args)
+                else:
+                    self.assertNotIn("vid_gen", args)
+                if params.get("negative_prompt", runtime.get("negative", True)):
+                    self.assertIn("-n", args)
+                else:
+                    self.assertNotIn("-n", args)
+                if params.get("reference_image", False):
+                    self.assertIn(runtime.get("ref_flag", "-i"), args)
+                else:
+                    self.assertNotIn("-i", args)
+                    self.assertNotIn("-r", args)
 
 
 if __name__ == "__main__":

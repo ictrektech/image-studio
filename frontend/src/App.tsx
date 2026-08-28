@@ -50,6 +50,12 @@ export default function App() {
   }, [refresh])
 
   useEffect(() => {
+    if (!models.some(model => model.status === 'downloading')) return
+    const timer = window.setInterval(() => refresh(), 2000)
+    return () => window.clearInterval(timer)
+  }, [models, refresh])
+
+  useEffect(() => {
     api.settings()
       .then(settings => setLanguage(settings.language === 'en' ? 'en' : 'zh-CN'))
       .catch(() => undefined)

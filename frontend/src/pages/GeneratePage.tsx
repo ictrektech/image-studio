@@ -59,11 +59,13 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
   const selectedModel = models.find(model => model.key === payload.model_key)
   const modelReady = selectedModel?.status === 'ready'
   const isVideoModel = selectedModel?.runtime?.mode === 'video'
+  const supportedParams = selectedModel?.runtime?.parameters || {}
+  const supportsParam = (name: string, fallback = true) => supportedParams[name] ?? fallback
   const modelUsable = Boolean(selectedModel?.capabilities.includes('txt2img') || selectedModel?.capabilities.includes('img2img')) || isVideoModel
-  const supportsInit = !isVideoModel || Boolean(selectedModel?.runtime?.ref_flag)
+  const supportsInit = supportsParam('reference_image', !isVideoModel)
   const isEditModel = selectedModel?.runtime?.ref_flag === '-r'
-  const supportsStrength = !isEditModel && !isVideoModel
-  const negativeIgnored = selectedModel?.runtime?.negative === false
+  const supportsStrength = supportsParam('strength', !isEditModel && !isVideoModel)
+  const negativeIgnored = !supportsParam('negative_prompt', selectedModel?.runtime?.negative !== false)
   const hasRunning = jobs.some(job => job.status === 'queued' || job.status === 'running')
   const isImg2Img = Boolean((payload.init_job_id && payload.init_filename) || payload.init_input_id)
   const videoDuration = payload.fps > 0 && payload.video_frames > 0 ? (payload.video_frames / payload.fps).toFixed(1) : ''
@@ -78,6 +80,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
   const switchModel = (key: string) => {
     const next = models.find(model => model.key === key)
     const defaults = next?.runtime?.defaults || {}
+    const nextVideoModel = next?.runtime?.mode === 'video'
     setPayload({
       ...payload,
       model_key: key,
@@ -88,6 +91,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
       sampler: defaults.sampler ?? payload.sampler,
       video_frames: defaults.video_frames ?? payload.video_frames,
       fps: defaults.fps ?? payload.fps,
+      batch_count: nextVideoModel ? 1 : payload.batch_count,
     })
   }
 
@@ -209,7 +213,8 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
   const modelProgress = modelDownloading ? Math.round((selectedModel?.progress ?? 0) * 100) : 0
 
   const deleteJob = async (job: JobRecord) => {
-    if (!window.confirm(t.confirmDelete)) return
+    const hasVideoOutput = job.outputs.some(isVideoFile)
+    if (!window.confirm(hasVideoOutput ? t.confirmDeleteVideo : t.confirmDelete)) return
     await api.deleteJob(job.job_id)
     await loadJobs()
   }
@@ -292,8 +297,8 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
         <div className={`side-param-block${isVideoModel ? '' : ' param-ignored'}`}>
           <div className="section-label">{t.videoParamsTitle}{!isVideoModel && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</div>
           <div className="control-row two">
-            <div><label>{t.videoFrames}</label><input type="number" min="2" max="240" value={payload.video_frames} onChange={e => setPayload({ ...payload, video_frames: Number(e.target.value) })} /></div>
-            <div><label>{t.videoFps}</label><input type="number" min="1" max="60" value={payload.fps} onChange={e => setPayload({ ...payload, fps: Number(e.target.value) })} /></div>
+            <div><label>{t.videoFrames}</label><input type="number" min="2" max="240" value={payload.video_frames} disabled={!supportsParam('video_frames', isVideoModel)} onChange={e => setPayload({ ...payload, video_frames: Number(e.target.value) })} /></div>
+            <div><label>{t.videoFps}</label><input type="number" min="1" max="60" value={payload.fps} disabled={!supportsParam('fps', isVideoModel)} onChange={e => setPayload({ ...payload, fps: Number(e.target.value) })} /></div>
           </div>
           {videoDuration && <span className="video-duration">{t.videoDurationHint} {videoDuration} {t.videoSeconds}</span>}
         </div>
@@ -377,7 +382,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
                     <div className="chat-msg-actions">
                       {job.outputs[0] && !isVideoFile(job.outputs[0]) && <button className="quiet-button" onClick={() => reuseOutput(job, job.outputs[0])}><Wand2 size={14} />{t.continueThread}</button>}
                       {job.outputs[0] && <a className="quiet-button" href={api.outputUrl(job.job_id, job.outputs[0])} download><Download size={14} />{t.downloadOutput}</a>}
-                      <button className="quiet-button danger-action" onClick={() => deleteJob(job)}><Trash2 size={14} />{t.deleteOutput}</button>
+                      <button className="quiet-button danger-action" onClick={() => deleteJob(job)}><Trash2 size={14} />{job.outputs.some(isVideoFile) ? t.deleteVideoOutput : t.deleteOutput}</button>
                     </div>
                   </div>
                 </div>
@@ -467,6 +472,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
                 value={payload.negative_prompt}
                 onChange={e => setPayload({ ...payload, negative_prompt: e.target.value })}
                 rows={4}
+                disabled={negativeIgnored}
                 placeholder={negativeIgnored ? t.negativeIgnoredHint : ''}
               />
             </div>
@@ -474,16 +480,16 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
           <div className="composer-send">
             {error && <div className="notice error">{error}</div>}
             <button className="primary-action generate-action" disabled={submitting || !modelReady || !modelUsable} onClick={submit}>
-              {submitting ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />}{submitting ? t.submitting : t.submit}
+              {submitting ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />}{submitting ? t.submitting : isVideoModel ? t.submitVideo : t.submit}
             </button>
           </div>
         </div>
       </section>
 
-      {/* 右栏：图片生成参数 */}
+      {/* 右栏：基础生成参数 */}
       <aside className="panel detail-panel studio-panel">
         <div className="panel-heading">
-          <div className="panel-title">{t.imageParamsTitle}{isVideoModel && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</div>
+          <div className="panel-title">{isVideoModel ? t.baseParamsTitle : t.imageParamsTitle}</div>
           <button className="quiet-button" onClick={() => setPayload(initialPayload)} title={t.reset}><RotateCcw size={15} /></button>
         </div>
         <div className={`inline-status ${isImg2Img ? 'ready' : ''}`}>
@@ -491,14 +497,14 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
           <span>{isVideoModel ? t.videoModelHint : isImg2Img ? (isEditModel ? t.imageEditHint : t.sourceImageHint) : t.previewHint}</span>
           {isImg2Img && <code>{payload.init_input_id || `${payload.init_job_id}/${payload.init_filename}`}</code>}
         </div>
-        <div className={`side-param-block${isVideoModel ? ' param-ignored' : ''}`}>
+        <div className="side-param-block">
           <div className="control-row two">
             <div><label>{t.width}</label><input type="number" value={payload.width} onChange={e => setPayload({ ...payload, width: Number(e.target.value) })} /></div>
             <div><label>{t.height}</label><input type="number" value={payload.height} onChange={e => setPayload({ ...payload, height: Number(e.target.value) })} /></div>
           </div>
           <div className="control-row two">
             <div><label>{t.steps}</label><input type="number" value={payload.steps} onChange={e => setPayload({ ...payload, steps: Number(e.target.value) })} /></div>
-            <div><label>{t.cfgScale}</label><input type="number" step="0.5" value={payload.cfg_scale} onChange={e => setPayload({ ...payload, cfg_scale: Number(e.target.value) })} /></div>
+            <div><label>{t.cfgScale}{!supportsParam('cfg_scale') && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label><input type="number" step="0.5" value={payload.cfg_scale} disabled={!supportsParam('cfg_scale')} onChange={e => setPayload({ ...payload, cfg_scale: Number(e.target.value) })} /></div>
           </div>
           <div className="control-row two">
             <div><label>{t.sampler}</label><select value={payload.sampler} onChange={e => setPayload({ ...payload, sampler: e.target.value })}><option value="euler_a">Euler A</option><option value="euler">Euler</option><option value="heun">Heun</option><option value="dpm++2m">DPM++ 2M</option></select></div>
@@ -507,11 +513,11 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
           <div className="control-row two">
             <div>
               <label>{t.strength}{!(isImg2Img && supportsStrength) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label>
-              <input type="number" min="0" max="1" step="0.05" value={payload.strength} onChange={e => setPayload({ ...payload, strength: Number(e.target.value) })} />
+              <input type="number" min="0" max="1" step="0.05" value={payload.strength} disabled={!(isImg2Img && supportsStrength)} onChange={e => setPayload({ ...payload, strength: Number(e.target.value) })} />
             </div>
             <div>
               <label>{t.batch}{isVideoModel && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label>
-              <input type="number" min="1" max="4" value={payload.batch_count} onChange={e => setPayload({ ...payload, batch_count: Number(e.target.value) })} />
+              <input type="number" min="1" max="4" value={payload.batch_count} disabled={!supportsParam('batch_count')} onChange={e => setPayload({ ...payload, batch_count: Number(e.target.value) })} />
             </div>
           </div>
         </div>

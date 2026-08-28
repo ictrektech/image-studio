@@ -4,7 +4,7 @@ import asyncio
 import shlex
 import shutil
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from app.config import settings
@@ -44,38 +44,41 @@ async def create_job(user_key: str, request: GenerateRequest) -> JobRecord:
     runtime = get_model_def(request.model_key)["runtime"]
     video_mode = runtime.get("mode") == "video"
     defaults = runtime.get("defaults") or {}
+    parameters = runtime.get("parameters") or {}
     await assert_model_hub_ready(request.model_key)
     model_path = model_path_for(request.model_key)
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
+    supports_reference = parameters.get("reference_image", False)
+    effective_video_frames = request.video_frames or int(defaults.get("video_frames", 0) or 0)
+    if video_mode and effective_video_frames <= 1:
+        # sd-cli 以 --video-frames > 1 区分视频生成，缺省时强制使用家族默认
+        effective_video_frames = int(defaults.get("video_frames", 33) or 33)
     job = JobRecord(
         job_id=f"job_{now.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}",
         user_key=user_key,
         status="queued",
         prompt=request.prompt,
-        negative_prompt=request.negative_prompt,
+        negative_prompt=request.negative_prompt if parameters.get("negative_prompt", runtime.get("negative", True)) else "",
         model_key=request.model_key,
         model_path=str(model_path),
         width=request.width,
         height=request.height,
         steps=request.steps,
-        cfg_scale=request.cfg_scale,
-        strength=request.strength,
+        cfg_scale=request.cfg_scale if parameters.get("cfg_scale", True) else float(defaults.get("cfg_scale", 1.0) or 1.0),
+        strength=request.strength if parameters.get("strength", False) else 0,
         sampler=request.sampler,
         seed=request.seed,
-        batch_count=request.batch_count,
-        video_frames=request.video_frames or int(defaults.get("video_frames", 0) or 0),
-        fps=request.fps or int(defaults.get("fps", 0) or 0),
+        batch_count=request.batch_count if parameters.get("batch_count", True) else 1,
+        video_frames=effective_video_frames if parameters.get("video_frames", False) else 0,
+        fps=(request.fps or int(defaults.get("fps", 0) or 0)) if parameters.get("fps", False) else 0,
         metadata={
-            "init_job_id": request.init_job_id,
-            "init_filename": request.init_filename,
-            "init_input_id": request.init_input_id,
+            "init_job_id": request.init_job_id if supports_reference else "",
+            "init_filename": request.init_filename if supports_reference else "",
+            "init_input_id": request.init_input_id if supports_reference else "",
         },
         created_at=now,
         updated_at=now,
     )
-    if video_mode and job.video_frames <= 1:
-        # sd-cli 以 --video-frames > 1 区分视频生成，缺省时强制使用家族默认
-        job.video_frames = int(defaults.get("video_frames", 33) or 33)
     save_job(job)
     task_key = (job.user_key, job.job_id)
     task = asyncio.create_task(run_job(job))
@@ -158,6 +161,8 @@ def build_sd_args(job: JobRecord, output: Path, seed_offset: int = 0) -> list[st
     item = get_model_def(job.model_key)
     runtime = item["runtime"]
     video_mode = runtime.get("mode") == "video"
+    defaults = runtime.get("defaults") or {}
+    parameters = runtime.get("parameters") or {}
     role_paths = runtime_paths_for(job.model_key)
 
     args = [settings.sd_cpp_bin]
@@ -176,7 +181,8 @@ def build_sd_args(job: JobRecord, output: Path, seed_offset: int = 0) -> list[st
     args.extend(["--width", str(job.width)])
     args.extend(["--height", str(job.height)])
     args.extend(["--steps", str(job.steps)])
-    args.extend(["--cfg-scale", str(job.cfg_scale)])
+    cfg_scale = job.cfg_scale if parameters.get("cfg_scale", True) else defaults.get("cfg_scale", 1.0)
+    args.extend(["--cfg-scale", str(cfg_scale)])
     args.extend(["--sampling-method", SAMPLER_MAP.get(job.sampler, job.sampler)])
     if video_mode:
         if job.video_frames > 1:
@@ -184,7 +190,7 @@ def build_sd_args(job: JobRecord, output: Path, seed_offset: int = 0) -> list[st
         if job.fps > 0:
             args.extend(["--fps", str(job.fps)])
 
-    init_image = init_image_path(job)
+    init_image = init_image_path(job) if parameters.get("reference_image", False) else None
     if init_image:
         ref_flag = runtime.get("ref_flag", "-i")
         args.extend([ref_flag, str(init_image)])
@@ -192,7 +198,7 @@ def build_sd_args(job: JobRecord, output: Path, seed_offset: int = 0) -> list[st
         if ref_flag == "-i" and not video_mode:
             args.extend(["--strength", str(job.strength)])
 
-    if job.negative_prompt and runtime.get("negative", True):
+    if job.negative_prompt and parameters.get("negative_prompt", runtime.get("negative", True)):
         args.extend(["-n", job.negative_prompt])
     if job.seed >= 0:
         # batch 时固定 seed 逐张 +i，保持可复现的同时避免完全相同的图

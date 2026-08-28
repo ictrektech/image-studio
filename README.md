@@ -101,17 +101,22 @@ passes it to `sd-cli`.
 
 ## Video Generation
 
-Video families (`wan21`, `wan22`, `ltx-video`, `hunyuan-video`, `minimax-h3`,
+Video families (`wan21`, `wan22`, `wan21-t2v-14b`, `wan21-i2v-14b`,
+`wan22-t2v-a14b`, `wan22-i2v-a14b`, `ltx-video`, `hunyuan-video`,
+`hunyuan-i2v-720p`, `hunyuan-t2v-480p`, `minimax-h3`, `minimax-ref2va`,
 `lingbot-video`) generate through the same job pipeline: the backend appends
-`-M vid_gen` plus `--video-frames` / `--fps` from the request (0 = family
-default from the sd.cpp docs) and produces a single `output.mp4`. Families
-whose runtime declares a reference flag (Wan 2.2 TI2V, LTX, MiniMax, LingBot)
-accept a first-frame image via the same `init_input_id` / `init_job_id`
-mechanism; `--strength` is not applied for video. Video jobs use a separate,
-much longer timeout (`IMAGE_STUDIO_VIDEO_TIMEOUT_SECONDS`, default 3600).
-Parameters that do not apply to the selected family (e.g. `batch_count` for
-video, `negative_prompt` for families without uncond support) are silently
-ignored when assembling the sd-cli command line.
+`-M vid_gen`, passes the supported base parameters (`width`, `height`, `steps`,
+`cfg_scale`, `sampler`, `seed`) plus `--video-frames` / `--fps`, and produces a
+single `output.mp4`.
+
+Each model's `runtime.parameters` is the shared contract used by both frontend
+controls and backend sd-cli argument assembly. Pure T2V models do not accept a
+reference image; I2V/TI2V/Ref2VA models opt into `-i` or `-r` explicitly.
+`--strength` and `batch_count` are not applied to video jobs. Families without
+negative prompt support, or fixed-CFG families such as FLUX/turbo/MiniMax, have
+those inputs disabled in the UI and normalized to runtime defaults on submit.
+Video jobs use a separate, much longer timeout
+(`IMAGE_STUDIO_VIDEO_TIMEOUT_SECONDS`, default 3600).
 
 Deleting a running generation job first terminates and waits for its `sd-cli`
 process, then removes metadata and outputs. On service startup, persisted jobs

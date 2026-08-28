@@ -16,14 +16,30 @@ MODEL_FILE_PATTERNS = ("*.safetensors", "*.ckpt", "*.pt", "*.pth", "*.gguf")
 def _runtime(
     mode: str = "image",
     model_flag: str = "-m",
-    ref_flag: str = "-i",
+    ref_flag: str | None = None,
     roles: dict[str, str] | None = None,
     extra_args: list[str] | None = None,
     defaults: dict[str, Any] | None = None,
     negative: bool = True,
+    parameters: dict[str, bool] | None = None,
 ) -> dict[str, Any]:
     base_defaults = {"width": 1024, "height": 1024, "steps": 20, "cfg_scale": 7.0, "sampler": "euler"}
     base_defaults.update(defaults or {})
+    effective_parameters = {
+        "width": True,
+        "height": True,
+        "steps": True,
+        "cfg_scale": True,
+        "sampler": True,
+        "seed": True,
+        "negative_prompt": negative,
+        "reference_image": False,
+        "strength": False,
+        "batch_count": mode != "video",
+        "video_frames": mode == "video",
+        "fps": mode == "video",
+    }
+    effective_parameters.update(parameters or {})
     return {
         "mode": mode,
         "model_flag": model_flag,
@@ -32,6 +48,7 @@ def _runtime(
         "extra_args": extra_args or [],
         "defaults": base_defaults,
         "negative": negative,
+        "parameters": effective_parameters,
     }
 
 
@@ -50,11 +67,22 @@ def _model(
 ) -> dict[str, Any]:
     primary = sources[0]
     if key in RUNTIME_SPECS:
-        runtime = RUNTIME_SPECS[key]
+        runtime = dict(RUNTIME_SPECS[key])
     elif "video" in capabilities and "txt2img" not in capabilities and "img2img" not in capabilities:
         runtime = _runtime(mode="video")
     else:
         runtime = _runtime()
+    parameters = dict(runtime.get("parameters") or {})
+    supports_reference = any(cap in capabilities for cap in ("img2img", "edit")) or parameters.get("reference_image", False)
+    default_ref_flag = runtime.get("ref_flag") or ("-r" if "edit" in capabilities else "-i")
+    parameters["reference_image"] = supports_reference
+    parameters["strength"] = runtime.get("mode") != "video" and "img2img" in capabilities and default_ref_flag == "-i"
+    parameters["batch_count"] = runtime.get("mode") != "video"
+    parameters["video_frames"] = runtime.get("mode") == "video"
+    parameters["fps"] = runtime.get("mode") == "video"
+    if supports_reference and not runtime.get("ref_flag"):
+        runtime["ref_flag"] = default_ref_flag
+    runtime["parameters"] = parameters
     required_files: list[str] = []
     for source in sources:
         for filename in source.get("files") or []:
@@ -83,9 +111,9 @@ def _model(
 RUNTIME_SPECS: dict[str, dict[str, Any]] = {
     "sd15": _runtime(defaults={"width": 512, "height": 512, "steps": 30, "cfg_scale": 7.0, "sampler": "euler_a"}),
     "sd2": _runtime(defaults={"width": 512, "height": 512, "steps": 30, "cfg_scale": 7.0, "sampler": "euler_a"}),
-    "sd-turbo": _runtime(defaults={"steps": 4, "cfg_scale": 1.0, "sampler": "euler_a"}),
+    "sd-turbo": _runtime(defaults={"steps": 4, "cfg_scale": 1.0, "sampler": "euler_a"}, parameters={"cfg_scale": False}),
     "sdxl": _runtime(defaults={"steps": 30, "cfg_scale": 7.0, "sampler": "euler_a"}),
-    "sdxl-turbo": _runtime(defaults={"steps": 4, "cfg_scale": 1.0, "sampler": "euler_a"}),
+    "sdxl-turbo": _runtime(defaults={"steps": 4, "cfg_scale": 1.0, "sampler": "euler_a"}, parameters={"cfg_scale": False}),
     "sd3": _runtime(
         extra_args=["--clip-on-cpu", "--vae-tiling"],
         defaults={"steps": 28, "cfg_scale": 4.5, "sampler": "euler"},
@@ -105,6 +133,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
         extra_args=list(_FA_ARGS),
         defaults={"steps": 4, "cfg_scale": 1.0, "sampler": "euler"},
         negative=False,
+        parameters={"cfg_scale": False},
     ),
     "flux-dev": _runtime(
         model_flag="--diffusion-model",
@@ -112,6 +141,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
         extra_args=list(_FA_ARGS),
         defaults={"steps": 20, "cfg_scale": 1.0, "sampler": "euler"},
         negative=False,
+        parameters={"cfg_scale": False},
     ),
     "flux-kontext": _runtime(
         model_flag="--diffusion-model",
@@ -120,6 +150,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
         extra_args=list(_FA_ARGS),
         defaults={"steps": 20, "cfg_scale": 1.0, "sampler": "euler"},
         negative=False,
+        parameters={"cfg_scale": False},
     ),
     "flux2": _runtime(
         model_flag="--diffusion-model",
@@ -130,6 +161,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
         extra_args=list(_FA_ARGS),
         defaults={"steps": 20, "cfg_scale": 1.0, "sampler": "euler"},
         negative=False,
+        parameters={"cfg_scale": False},
     ),
     "qwen-image": _runtime(
         model_flag="--diffusion-model",
@@ -198,6 +230,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
         },
         extra_args=list(_FA_ARGS),
         defaults={"steps": 8, "cfg_scale": 1.0, "sampler": "euler"},
+        parameters={"cfg_scale": False},
     ),
     "boogu-image": _runtime(
         model_flag="--diffusion-model",
@@ -232,6 +265,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
         roles={"vae": "vae/diffusion_pytorch_model.safetensors", "llm": "Qwen3VL-4B-Instruct-Q4_K_M.gguf"},
         extra_args=list(_FA_ARGS),
         defaults={"steps": 4, "cfg_scale": 1.0, "sampler": "euler"},
+        parameters={"cfg_scale": False},
     ),
     "mage-flow-edit": _runtime(
         model_flag="--diffusion-model",
@@ -239,8 +273,9 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
         roles={"vae": "vae/diffusion_pytorch_model.safetensors", "llm": "Qwen3VL-4B-Instruct-Q4_K_M.gguf"},
         extra_args=list(_FA_ARGS),
         defaults={"steps": 4, "cfg_scale": 1.0, "sampler": "euler"},
+        parameters={"cfg_scale": False},
     ),
-    "hidream-o1": _runtime(defaults={"steps": 20, "cfg_scale": 1.0, "sampler": "euler"}),
+    "hidream-o1": _runtime(defaults={"steps": 20, "cfg_scale": 1.0, "sampler": "euler"}, parameters={"cfg_scale": False}),
     "ideogram4": _runtime(
         model_flag="--diffusion-model",
         roles={
@@ -285,6 +320,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
         },
         extra_args=[*_FA_ARGS, "--flow-shift", "3.0", "-v"],
         defaults={"width": 480, "height": 832, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
+        parameters={"reference_image": True},
     ),
     "ltx-video": _runtime(
         mode="video",
@@ -298,6 +334,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
         },
         extra_args=[*_FA_ARGS, "-v"],
         defaults={"width": 1280, "height": 720, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
+        parameters={"reference_image": True},
     ),
     "hunyuan-video": _runtime(
         mode="video",
@@ -323,6 +360,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
         extra_args=["--diffusion-fa", "--offload-to-cpu", "--rng", "cpu", "-v"],
         defaults={"width": 864, "height": 480, "steps": 20, "cfg_scale": 1.0, "sampler": "euler", "video_frames": 56, "fps": 24},
         negative=False,
+        parameters={"cfg_scale": False, "reference_image": True},
     ),
     "lingbot-video": _runtime(
         mode="video",
@@ -334,6 +372,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
         },
         extra_args=[*_FA_ARGS, "-v"],
         defaults={"width": 832, "height": 480, "steps": 20, "cfg_scale": 3.0, "sampler": "euler", "video_frames": 33, "fps": 24},
+        parameters={"reference_image": True},
     ),
     "wan21-t2v-14b": _runtime(
         mode="video",
@@ -356,6 +395,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
         },
         extra_args=[*_FA_ARGS, "--flow-shift", "3.0", "-v"],
         defaults={"width": 480, "height": 832, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
+        parameters={"reference_image": True},
     ),
     "wan22-t2v-a14b": _runtime(
         mode="video",
@@ -381,6 +421,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
         extra_args=[*_FA_ARGS, "--flow-shift", "3.0",
                     "--high-noise-cfg-scale", "3.5", "--high-noise-sampling-method", "euler", "--high-noise-steps", "8", "-v"],
         defaults={"width": 832, "height": 480, "steps": 10, "cfg_scale": 3.5, "sampler": "euler", "video_frames": 33, "fps": 24},
+        parameters={"reference_image": True},
     ),
     "hunyuan-i2v-720p": _runtime(
         mode="video",
@@ -394,6 +435,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
         extra_args=["--diffusion-fa", "--offload-to-cpu", "--vae-tiling", "-v"],
         defaults={"width": 1280, "height": 720, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
         negative=False,
+        parameters={"reference_image": True},
     ),
     "hunyuan-t2v-480p": _runtime(
         mode="video",
@@ -419,6 +461,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
         extra_args=["--diffusion-fa", "--offload-to-cpu", "--rng", "cpu", "-v"],
         defaults={"width": 864, "height": 480, "steps": 20, "cfg_scale": 1.0, "sampler": "euler", "video_frames": 56, "fps": 24},
         negative=False,
+        parameters={"cfg_scale": False, "reference_image": True},
     ),
 }
 
@@ -1226,6 +1269,10 @@ async def fetch_model_hub_states() -> dict[str, dict[str, Any]]:
                     "size": entry.get("size"),
                     "path": entry.get("path"),
                     "access_path": entry.get("access_path"),
+                    "progress": entry.get("progress"),
+                    "downloaded_bytes": entry.get("downloaded_bytes"),
+                    "total_bytes": entry.get("total_bytes"),
+                    "current_file": entry.get("current_file"),
                 }
             tasks_resp = await client.get(f"{settings.model_hub_api_url}/api/v1/tasks")
             if tasks_resp.status_code == 200:
@@ -1234,8 +1281,13 @@ async def fetch_model_hub_states() -> dict[str, dict[str, Any]]:
                     state = states.setdefault(model_id, {})
                     phase = task.get("phase")
                     if phase == "DOWNLOADING":
+                        if state.get("status") in ("ready", "READY"):
+                            continue
                         state["status"] = "pulling"
                         state["progress"] = task.get("progress")
+                        state["downloaded_bytes"] = task.get("downloaded_bytes")
+                        state["total_bytes"] = task.get("total_bytes")
+                        state["current_file"] = task.get("current_file")
                     elif phase == "FAILED" and state.get("status") in (None, "pulling", "failed"):
                         state["status"] = "failed"
                         state["error"] = task.get("error_msg")
@@ -1268,6 +1320,10 @@ def merge_model_hub_state(hub_state: dict[str, Any] | None, info: dict[str, Any]
         info["status"] = "downloading"
         progress = hub_state.get("progress")
         info["progress"] = float(progress) if isinstance(progress, (int, float)) else None
+        for field in ("downloaded_bytes", "total_bytes", "current_file"):
+            value = hub_state.get(field)
+            if value is not None:
+                info[field] = value
     elif status in ("failed", "FAILED") and info["status"] != "ready":
         info["status"] = "failed"
         info["error"] = hub_state.get("error") or ""
@@ -1296,6 +1352,8 @@ async def assert_model_hub_ready(key: str) -> None:
         status = state.get("status")
         if status in ("pulling", "PULLING"):
             raise FileNotFoundError(f"Model Hub 仍在下载: {spec['model_id']}")
+    model_path_for(key)
+    runtime_paths_for(key)
 
 
 def model_path_for(key: str) -> Path:

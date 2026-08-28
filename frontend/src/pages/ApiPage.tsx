@@ -78,7 +78,7 @@ const PARAMS: [string, string, string, keyof T & string][] = [
   ['cache_mode / cache_option', 'string', '""', 'apiP_cache'],
   ['qwen_image_layers', 'int · 0~16', '0', 'apiP_qwen_layers'],
   ['hires*', 'boolean / numbers', 'false', 'apiP_hires'],
-  ['vae_tiling / max_vram / backend...', 'boolean / string / number', '模型默认', 'apiP_memory'],
+  ['vae_tiling / clip_on_cpu / offload_to_cpu / max_vram / backend...', 'boolean / string / number', '模型默认', 'apiP_memory'],
   ['video_frames', 'int · 0~240', '0 (家族默认)', 'apiP_video_frames'],
   ['fps', 'int · 0~60', '0 (家族默认)', 'apiP_video_fps'],
   ['init_job_id', 'string', '""', 'apiP_init_job'],
@@ -115,13 +115,17 @@ curl -X POST $BASE/api/v1/generate -H "$AUTH" -H 'Content-Type: application/json
 # 3) 轮询 + 下载同流程 A；查看已上传的参考图：
 curl $BASE/api/v1/inputs -H "$AUTH"`
 
-const RECIPE_C = `# 把上一轮的输出作为下一轮输入（网页「继续此图」的 API 形式），
+const RECIPE_C = `# 把上一轮的输出作为下一轮输入（网页「继续这一轮」/「基于此图生成」的 API 形式），
 # init_job_id + init_filename 取自上一个 succeeded 任务的 job_id 和 outputs[0]
 curl -X POST $BASE/api/v1/generate -H "$AUTH" -H 'Content-Type: application/json' \\
   -d '{"prompt":"add warm lights in the windows","model_key":"flux-kontext",
        "init_job_id":"j_ab12...","init_filename":"output.png"}'
 
-# 可跨模型迭代：SDXL 生成 → Qwen-Image-Edit 修改 → 再交给下一个 edit 模型……`
+# 可跨模型迭代：SDXL 生成 → Qwen-Image-Edit 修改 → 再交给支持参考图的视频模型生成视频
+curl -X POST $BASE/api/v1/generate -H "$AUTH" -H 'Content-Type: application/json' \\
+  -d '{"prompt":"slow camera push in, cinematic light","model_key":"wan22",
+       "init_job_id":"j_ab12...","init_filename":"output.png",
+       "width":512,"height":320,"video_frames":33,"fps":24}'`
 
 const RECIPE_D = `# 1) 模型未下载时，generate 会返回 409「模型文件未就绪」；先触发下载（后台执行）
 curl -X POST $BASE/api/v1/models/sd35/pull -H "$AUTH"
@@ -183,12 +187,14 @@ curl -X POST $BASE/api/v1/generate -H "$AUTH" -H 'Content-Type: application/json
        "width":1024,"height":1024,"steps":20,"cfg_scale":4}'
 
 # 低显存优先策略：先选量化版本，再缩小 width/height/frames/steps，
-# 最后按模型支持情况打开 vae_tiling / temporal_tiling / stream_layers / vae_cpu_fallback
+# 最后按模型支持情况打开 vae_tiling / temporal_tiling / stream_layers / vae_cpu_fallback；
+# offload_to_cpu 默认关闭，只在明确接受变慢换显存时打开
 curl -X POST $BASE/api/v1/generate -H "$AUTH" -H 'Content-Type: application/json' \\
   -d '{"prompt":"small low-vram smoke test","model_key":"wan21",
        "model_variant":"q8_0","width":384,"height":240,"steps":8,
        "video_frames":17,"fps":12,"vae_tiling":true,
-       "temporal_tiling":true,"stream_layers":true,"vae_cpu_fallback":true}'`
+       "temporal_tiling":true,"stream_layers":true,"vae_cpu_fallback":true,
+       "offload_to_cpu":false}'`
 
 const MODEL_SHAPE_EXAMPLE = `curl $BASE/api/v1/models -H "$AUTH" | jq '.[0] | {
   key, name, status, progress, total_bytes, size,

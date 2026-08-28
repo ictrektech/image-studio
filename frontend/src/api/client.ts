@@ -98,6 +98,7 @@ export interface GeneratePayload {
   max_vram: number
   stream_layers: boolean
   auto_fit: boolean
+  clip_on_cpu: boolean
   offload_to_cpu: boolean
   vae_cpu_fallback: boolean
   backend: string

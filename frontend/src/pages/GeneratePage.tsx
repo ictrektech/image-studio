@@ -81,6 +81,7 @@ const initialPayload: GeneratePayload = {
   max_vram: -2,
   stream_layers: false,
   auto_fit: false,
+  clip_on_cpu: false,
   offload_to_cpu: false,
   vae_cpu_fallback: true,
   backend: '',
@@ -204,6 +205,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
       max_vram: defaults.max_vram ?? (nextVideoModel ? -2 : 0),
       stream_layers: defaults.stream_layers ?? nextVideoModel,
       auto_fit: defaults.auto_fit ?? false,
+      clip_on_cpu: defaults.clip_on_cpu ?? false,
       offload_to_cpu: defaults.offload_to_cpu ?? false,
       vae_cpu_fallback: defaults.vae_cpu_fallback ?? nextVideoModel,
       backend: defaults.backend ?? '',
@@ -725,15 +727,18 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
             <label className="check-row"><input type="checkbox" checked={payload.auto_fit} disabled={!supportsParam('auto_fit')} onChange={e => setPayload({ ...payload, auto_fit: e.target.checked })} />{t.autoFit}</label>
           </div>
           <div className="control-row two">
+            <label className="check-row"><input type="checkbox" checked={payload.clip_on_cpu} disabled={!supportsParam('clip_on_cpu')} onChange={e => setPayload({ ...payload, clip_on_cpu: e.target.checked })} />{t.clipOnCpu}</label>
             <label className="check-row"><input type="checkbox" checked={payload.offload_to_cpu} disabled={!supportsParam('offload_to_cpu')} onChange={e => setPayload({ ...payload, offload_to_cpu: e.target.checked })} />{t.offloadToCpu}</label>
+          </div>
+          <div className="control-row two">
             <label className="check-row"><input type="checkbox" checked={payload.vae_cpu_fallback} disabled={!supportsParam('vae_cpu_fallback', isVideoModel)} onChange={e => setPayload({ ...payload, vae_cpu_fallback: e.target.checked })} />{t.vaeCpuFallback}</label>
-          </div>
-          <div className="control-row two">
             <label className="check-row"><input type="checkbox" checked={payload.temporal_tiling} disabled={!supportsParam('temporal_tiling', false)} onChange={e => setPayload({ ...payload, temporal_tiling: e.target.checked })} />{t.temporalTiling}</label>
-            <div><label>{t.temporalTileFrames}</label><input type="number" min="1" max="32" value={payload.temporal_tile_frames} disabled={!payload.temporal_tiling || !supportsParam('temporal_tile_frames', false)} onChange={e => setPayload({ ...payload, temporal_tile_frames: Number(e.target.value) })} /></div>
           </div>
           <div className="control-row two">
+            <div><label>{t.temporalTileFrames}</label><input type="number" min="1" max="32" value={payload.temporal_tile_frames} disabled={!payload.temporal_tiling || !supportsParam('temporal_tile_frames', false)} onChange={e => setPayload({ ...payload, temporal_tile_frames: Number(e.target.value) })} /></div>
             <div><label>{t.temporalTileOverlap}</label><input type="number" min="0" max="16" value={payload.temporal_tile_overlap} disabled={!payload.temporal_tiling || !supportsParam('temporal_tile_overlap', false)} onChange={e => setPayload({ ...payload, temporal_tile_overlap: Number(e.target.value) })} /></div>
+          </div>
+          <div className="control-row two">
             <div><label>{t.paramsBackend}</label><input value={payload.params_backend} disabled={!supportsParam('params_backend')} onChange={e => setPayload({ ...payload, params_backend: e.target.value })} placeholder="cpu / disk" /></div>
           </div>
           <div className="control-row">

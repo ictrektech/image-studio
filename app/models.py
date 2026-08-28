@@ -60,6 +60,7 @@ class GenerateRequest(BaseModel):
     max_vram: float = Field(default=0.0, ge=-64.0, le=128.0)
     stream_layers: bool | None = None
     auto_fit: bool | None = None
+    clip_on_cpu: bool | None = None
     offload_to_cpu: bool | None = None
     vae_cpu_fallback: bool | None = None
     backend: str = Field(default="", max_length=200)
@@ -120,6 +121,7 @@ class JobRecord(BaseModel):
     max_vram: float = 0.0
     stream_layers: bool = False
     auto_fit: bool = False
+    clip_on_cpu: bool = False
     offload_to_cpu: bool = False
     vae_cpu_fallback: bool = False
     backend: str = ""

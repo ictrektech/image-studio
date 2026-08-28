@@ -142,6 +142,7 @@ async def create_job(user_key: str, request: GenerateRequest) -> JobRecord:
         max_vram=_runtime_float(request.max_vram, defaults, parameters, "max_vram", 0.0),
         stream_layers=_runtime_bool(request.stream_layers, defaults, parameters, "stream_layers", False),
         auto_fit=_runtime_bool(request.auto_fit, defaults, parameters, "auto_fit", False),
+        clip_on_cpu=_runtime_bool(request.clip_on_cpu, defaults, parameters, "clip_on_cpu", False),
         offload_to_cpu=_runtime_bool(request.offload_to_cpu, defaults, parameters, "offload_to_cpu", False),
         vae_cpu_fallback=_runtime_bool(request.vae_cpu_fallback, defaults, parameters, "vae_cpu_fallback", False),
         backend=request.backend.strip() if parameters.get("backend", True) else "",
@@ -432,6 +433,8 @@ def _append_runtime_memory_args(args: list[str], job: JobRecord, parameters: dic
         _append_unique(args, "--stream-layers")
     if job.auto_fit and parameters.get("auto_fit", True):
         _append_unique(args, "--auto-fit")
+    if job.clip_on_cpu and parameters.get("clip_on_cpu", True):
+        _append_unique(args, "--clip-on-cpu")
     if job.offload_to_cpu and parameters.get("offload_to_cpu", True):
         _append_unique(args, "--offload-to-cpu")
     if job.backend and parameters.get("backend", True):

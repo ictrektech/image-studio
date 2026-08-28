@@ -258,14 +258,30 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("--offload-to-cpu", args)
         self.assertNotIn("--strength", args)
 
+        job.clip_on_cpu = True
         job.offload_to_cpu = True
         with patch.object(generation, "runtime_paths_for", return_value={}):
             args = generation.build_sd_args(job, Path("/tmp/output.webm"))
+        self.assertIn("--clip-on-cpu", args)
         self.assertIn("--offload-to-cpu", args)
 
-    async def test_runtime_specs_do_not_force_cpu_offload(self):
+    async def test_runtime_specs_do_not_hide_user_controlled_flags(self):
+        user_controlled_flags = {
+            "--scheduler", "--clip-skip", "--guidance", "--img-cfg-scale", "--eta", "--flow-shift",
+            "--high-noise-steps", "--high-noise-cfg-scale", "--high-noise-sampling-method",
+            "--slg-scale", "--skip-layer-start", "--skip-layer-end", "--rng", "--sampler-rng",
+            "--prediction", "--type", "--tensor-type-rules", "--cache-mode", "--cache-option",
+            "--qwen-image-layers", "--hires", "--hires-scale", "--hires-width", "--hires-height",
+            "--hires-steps", "--hires-denoising-strength", "--video-frames", "--fps",
+            "--vae-tiling", "--vae-tile-size", "--vae-tile-overlap", "--temporal-tiling",
+            "--extra-tiling-args", "--max-vram", "--stream-layers", "--auto-fit", "--clip-on-cpu",
+            "--offload-to-cpu", "--backend", "--params-backend", "--width", "--height", "--steps",
+            "--cfg-scale", "--sampling-method", "--seed", "--strength", "-n", "-i", "-r",
+        }
         for item in MODEL_DEFS:
-            self.assertNotIn("--offload-to-cpu", item["runtime"].get("extra_args") or [], item["key"])
+            extra = item["runtime"].get("extra_args") or []
+            blocked = [arg for arg in extra if arg in user_controlled_flags]
+            self.assertEqual(blocked, [], item["key"])
 
     async def test_create_job_normalizes_unsupported_parameters(self):
         async def fake_run(_job):
@@ -297,6 +313,25 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(job.batch_count, 1)
         self.assertEqual(job.video_frames, 120)
         self.assertEqual(job.fps, 24)
+
+    async def test_model_runtime_defaults_are_reflected_in_job_fields(self):
+        async def fake_run(_job):
+            return None
+
+        with (
+            patch.object(generation, "assert_model_hub_ready"),
+            patch.object(generation, "model_path_for", return_value=Path("/models/model.safetensors")),
+            patch.object(generation, "run_job", fake_run),
+            patch.object(generation, "save_job"),
+        ):
+            sd3 = await generation.create_job("user", generation.GenerateRequest(prompt="a cabin", model_key="sd3"))
+            minimax = await generation.create_job("user", generation.GenerateRequest(prompt="a dancer", model_key="minimax-h3"))
+
+        self.assertTrue(sd3.clip_on_cpu)
+        self.assertTrue(sd3.vae_tiling)
+        self.assertFalse(sd3.offload_to_cpu)
+        self.assertEqual(minimax.rng, "cpu")
+        self.assertFalse(minimax.offload_to_cpu)
 
     async def test_image_job_ignores_video_parameters(self):
         async def fake_run(_job):

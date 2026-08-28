@@ -343,6 +343,8 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
                 text = dockerfile.read_text(encoding="utf-8")
                 self.assertIn("-DSD_WEBP=ON", text)
                 self.assertIn("-DSD_WEBM=ON", text)
+                self.assertIn("-DSD_USE_SYSTEM_WEBP=ON", text)
+                self.assertIn("libwebp", text)
                 self.assertNotIn("-DSD_WEBP=OFF", text)
                 self.assertNotIn("-DSD_WEBM=OFF", text)
 

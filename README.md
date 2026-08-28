@@ -107,7 +107,7 @@ Video families (`wan21`, `wan22`, `wan21-t2v-14b`, `wan21-i2v-14b`,
 `lingbot-video`) generate through the same job pipeline: the backend appends
 `-M vid_gen`, passes the supported base parameters (`width`, `height`, `steps`,
 `cfg_scale`, `sampler`, `seed`) plus `--video-frames` / `--fps`, and produces a
-single `output.mp4`.
+single browser-playable `output.webm`.
 
 Each model's `runtime.parameters` is the shared contract used by both frontend
 controls and backend sd-cli argument assembly. Pure T2V models do not accept a
@@ -115,6 +115,13 @@ reference image; I2V/TI2V/Ref2VA models opt into `-i` or `-r` explicitly.
 `--strength` and `batch_count` are not applied to video jobs. Families without
 negative prompt support, or fixed-CFG families such as FLUX/turbo/MiniMax, have
 those inputs disabled in the UI and normalized to runtime defaults on submit.
+The same `runtime.parameters` contract covers advanced sd-cli controls exposed
+in the UI/API: scheduler, clip skip, guidance, eta, flow shift, SLG, highres
+fix, cache, RNG/prediction overrides, Qwen layered output, VAE tiling, temporal
+tiling, VRAM budget, streaming, auto-fit, CPU offload, and backend assignment.
+Video jobs default to VAE tiling plus graph-split streaming with `max_vram=-2`
+and retry VAE decode once on CPU when sd-cli reports CUDA/VAE allocation
+failure.
 Video jobs use a separate, much longer timeout
 (`IMAGE_STUDIO_VIDEO_TIMEOUT_SECONDS`, default 3600).
 

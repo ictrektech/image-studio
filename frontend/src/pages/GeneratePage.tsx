@@ -21,6 +21,12 @@ function modelSize(model?: ModelInfo) {
 }
 
 const isVideoFile = (name: string) => /\.(mp4|webm|mov)$/i.test(name)
+const samplerOptions = ['euler_a', 'euler', 'heun', 'dpm2', 'dpm++2s_a', 'dpm++2m', 'dpm++2mv2', 'ipndm', 'ipndm_v', 'lcm', 'ddim_trailing', 'tcd', 'res_multistep', 'res_2s', 'er_sde', 'euler_cfg_pp', 'euler_a_cfg_pp', 'euler_ge', 'dpm++2m_sde', 'dpm++2m_sde_bt', 'lms']
+const schedulerOptions = ['', 'discrete', 'karras', 'exponential', 'ays', 'gits', 'sgm_uniform', 'simple', 'smoothstep', 'kl_optimal', 'lcm', 'bong_tangent', 'ltx2', 'logit_normal', 'flux2', 'flux', 'beta']
+const rngOptions = ['', 'cuda', 'cpu', 'std_default']
+const predictionOptions = ['', 'eps', 'v', 'edm_v', 'sd3_flow', 'flux_flow', 'sefi_flow']
+const weightTypeOptions = ['', 'f32', 'f16', 'q4_0', 'q4_1', 'q5_0', 'q5_1', 'q8_0', 'q2_K', 'q3_K', 'q4_K']
+const cacheOptions = ['', 'easycache', 'ucache', 'dbcache', 'taylorseer', 'cache-dit', 'spectrum']
 
 const initialPayload: GeneratePayload = {
   prompt: 'a cozy mountain cabin at dusk, warm lights, snowy pine trees, cinematic lighting, ultra detailed',
@@ -37,8 +43,47 @@ const initialPayload: GeneratePayload = {
   sampler: 'euler_a',
   seed: -1,
   batch_count: 1,
+  scheduler: '',
+  clip_skip: -1,
+  guidance: 0,
+  img_cfg_scale: 0,
+  eta: 0,
+  flow_shift: 0,
+  high_noise_steps: 0,
+  high_noise_cfg_scale: 0,
+  high_noise_sampler: '',
+  slg_scale: 0,
+  skip_layer_start: 0.01,
+  skip_layer_end: 0.2,
+  rng: '',
+  sampler_rng: '',
+  prediction: '',
+  weight_type: '',
+  tensor_type_rules: '',
+  cache_mode: '',
+  cache_option: '',
+  qwen_image_layers: 0,
+  hires: false,
+  hires_scale: 2,
+  hires_width: 0,
+  hires_height: 0,
+  hires_steps: 0,
+  hires_denoising_strength: 0.7,
   video_frames: 33,
   fps: 24,
+  vae_tiling: false,
+  vae_tile_size: '',
+  vae_tile_overlap: 0.5,
+  temporal_tiling: true,
+  temporal_tile_frames: 4,
+  temporal_tile_overlap: 1,
+  max_vram: -2,
+  stream_layers: false,
+  auto_fit: false,
+  offload_to_cpu: false,
+  vae_cpu_fallback: true,
+  backend: '',
+  params_backend: '',
 }
 
 export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { models: ModelInfo[]; onRefresh: () => void; onOpenModels: () => void; t: typeof messages['zh-CN'] }) {
@@ -89,8 +134,47 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
       steps: defaults.steps ?? payload.steps,
       cfg_scale: defaults.cfg_scale ?? payload.cfg_scale,
       sampler: defaults.sampler ?? payload.sampler,
+      scheduler: defaults.scheduler ?? '',
+      clip_skip: defaults.clip_skip ?? -1,
+      guidance: defaults.guidance ?? 0,
+      img_cfg_scale: defaults.img_cfg_scale ?? 0,
+      eta: defaults.eta ?? 0,
+      flow_shift: defaults.flow_shift ?? 0,
+      high_noise_steps: defaults.high_noise_steps ?? 0,
+      high_noise_cfg_scale: defaults.high_noise_cfg_scale ?? 0,
+      high_noise_sampler: defaults.high_noise_sampler ?? '',
+      slg_scale: defaults.slg_scale ?? 0,
+      skip_layer_start: defaults.skip_layer_start ?? 0.01,
+      skip_layer_end: defaults.skip_layer_end ?? 0.2,
+      rng: defaults.rng ?? '',
+      sampler_rng: defaults.sampler_rng ?? '',
+      prediction: defaults.prediction ?? '',
+      weight_type: defaults.weight_type ?? '',
+      tensor_type_rules: defaults.tensor_type_rules ?? '',
+      cache_mode: defaults.cache_mode ?? '',
+      cache_option: defaults.cache_option ?? '',
+      qwen_image_layers: defaults.qwen_image_layers ?? 0,
+      hires: defaults.hires ?? false,
+      hires_scale: defaults.hires_scale ?? 2,
+      hires_width: defaults.hires_width ?? 0,
+      hires_height: defaults.hires_height ?? 0,
+      hires_steps: defaults.hires_steps ?? 0,
+      hires_denoising_strength: defaults.hires_denoising_strength ?? 0.7,
       video_frames: defaults.video_frames ?? payload.video_frames,
       fps: defaults.fps ?? payload.fps,
+      vae_tiling: defaults.vae_tiling ?? nextVideoModel,
+      vae_tile_size: defaults.vae_tile_size ?? '',
+      vae_tile_overlap: defaults.vae_tile_overlap ?? 0.5,
+      temporal_tiling: defaults.temporal_tiling ?? next?.runtime?.parameters?.temporal_tiling ?? false,
+      temporal_tile_frames: defaults.temporal_tile_frames ?? 4,
+      temporal_tile_overlap: defaults.temporal_tile_overlap ?? 1,
+      max_vram: defaults.max_vram ?? (nextVideoModel ? -2 : 0),
+      stream_layers: defaults.stream_layers ?? nextVideoModel,
+      auto_fit: defaults.auto_fit ?? false,
+      offload_to_cpu: defaults.offload_to_cpu ?? false,
+      vae_cpu_fallback: defaults.vae_cpu_fallback ?? nextVideoModel,
+      backend: defaults.backend ?? '',
+      params_backend: defaults.params_backend ?? '',
       batch_count: nextVideoModel ? 1 : payload.batch_count,
     })
   }
@@ -300,6 +384,13 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
             <div><label>{t.videoFrames}</label><input type="number" min="2" max="240" value={payload.video_frames} disabled={!supportsParam('video_frames', isVideoModel)} onChange={e => setPayload({ ...payload, video_frames: Number(e.target.value) })} /></div>
             <div><label>{t.videoFps}</label><input type="number" min="1" max="60" value={payload.fps} disabled={!supportsParam('fps', isVideoModel)} onChange={e => setPayload({ ...payload, fps: Number(e.target.value) })} /></div>
           </div>
+          <div className="control-row two">
+            <div><label>{t.highNoiseSteps}{!supportsParam('high_noise_steps', false) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label><input type="number" min="0" max="150" value={payload.high_noise_steps} disabled={!supportsParam('high_noise_steps', false)} onChange={e => setPayload({ ...payload, high_noise_steps: Number(e.target.value) })} /></div>
+            <div><label>{t.highNoiseCfg}{!supportsParam('high_noise_cfg_scale', false) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label><input type="number" min="0" max="30" step="0.5" value={payload.high_noise_cfg_scale} disabled={!supportsParam('high_noise_cfg_scale', false)} onChange={e => setPayload({ ...payload, high_noise_cfg_scale: Number(e.target.value) })} /></div>
+          </div>
+          <div className="control-row">
+            <div><label>{t.highNoiseSampler}{!supportsParam('high_noise_sampler', false) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label><select value={payload.high_noise_sampler} disabled={!supportsParam('high_noise_sampler', false)} onChange={e => setPayload({ ...payload, high_noise_sampler: e.target.value })}><option value="">{t.modelDefault}</option>{samplerOptions.map(v => <option value={v} key={v}>{v}</option>)}</select></div>
+          </div>
           {videoDuration && <span className="video-duration">{t.videoDurationHint} {videoDuration} {t.videoSeconds}</span>}
         </div>
       </section>
@@ -507,7 +598,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
             <div><label>{t.cfgScale}{!supportsParam('cfg_scale') && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label><input type="number" step="0.5" value={payload.cfg_scale} disabled={!supportsParam('cfg_scale')} onChange={e => setPayload({ ...payload, cfg_scale: Number(e.target.value) })} /></div>
           </div>
           <div className="control-row two">
-            <div><label>{t.sampler}</label><select value={payload.sampler} onChange={e => setPayload({ ...payload, sampler: e.target.value })}><option value="euler_a">Euler A</option><option value="euler">Euler</option><option value="heun">Heun</option><option value="dpm++2m">DPM++ 2M</option></select></div>
+            <div><label>{t.sampler}</label><select value={payload.sampler} onChange={e => setPayload({ ...payload, sampler: e.target.value })}>{samplerOptions.map(v => <option value={v} key={v}>{v}</option>)}</select></div>
             <div><label>{t.seed}</label><input type="number" title={t.randomSeedHint} value={payload.seed} onChange={e => setPayload({ ...payload, seed: Number(e.target.value) })} /></div>
           </div>
           <div className="control-row two">
@@ -519,6 +610,88 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
               <label>{t.batch}{isVideoModel && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label>
               <input type="number" min="1" max="4" value={payload.batch_count} disabled={!supportsParam('batch_count')} onChange={e => setPayload({ ...payload, batch_count: Number(e.target.value) })} />
             </div>
+          </div>
+        </div>
+        <div className="side-param-block">
+          <div className="section-label">{t.imageAdvancedParamsTitle}</div>
+          <div className="control-row two">
+            <div><label>{t.scheduler}</label><select value={payload.scheduler} disabled={!supportsParam('scheduler')} onChange={e => setPayload({ ...payload, scheduler: e.target.value })}>{schedulerOptions.map(v => <option value={v} key={v}>{v || t.modelDefault}</option>)}</select></div>
+            <div><label>{t.clipSkip}</label><input type="number" min="-1" max="24" value={payload.clip_skip} disabled={!supportsParam('clip_skip')} onChange={e => setPayload({ ...payload, clip_skip: Number(e.target.value) })} /></div>
+          </div>
+          <div className="control-row two">
+            <div><label>{t.guidance}</label><input type="number" min="0" max="30" step="0.5" value={payload.guidance} disabled={!supportsParam('guidance')} onChange={e => setPayload({ ...payload, guidance: Number(e.target.value) })} /></div>
+            <div><label>{t.imgCfgScale}{!supportsParam('img_cfg_scale', false) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label><input type="number" min="0" max="30" step="0.5" value={payload.img_cfg_scale} disabled={!supportsParam('img_cfg_scale', false)} onChange={e => setPayload({ ...payload, img_cfg_scale: Number(e.target.value) })} /></div>
+          </div>
+          <div className="control-row two">
+            <div><label>{t.eta}</label><input type="number" min="0" max="10" step="0.05" value={payload.eta} disabled={!supportsParam('eta')} onChange={e => setPayload({ ...payload, eta: Number(e.target.value) })} /></div>
+            <div><label>{t.flowShift}</label><input type="number" min="0" max="20" step="0.1" value={payload.flow_shift} disabled={!supportsParam('flow_shift')} onChange={e => setPayload({ ...payload, flow_shift: Number(e.target.value) })} /></div>
+          </div>
+          <div className="control-row two">
+            <div><label>{t.slgScale}</label><input type="number" min="0" max="20" step="0.1" value={payload.slg_scale} disabled={!supportsParam('slg_scale')} onChange={e => setPayload({ ...payload, slg_scale: Number(e.target.value) })} /></div>
+            <div><label>{t.skipLayerRange}</label><input type="text" value={`${payload.skip_layer_start}-${payload.skip_layer_end}`} disabled={!supportsParam('slg_scale')} onChange={e => {
+              const [start, end] = e.target.value.split('-').map(Number)
+              setPayload({ ...payload, skip_layer_start: Number.isFinite(start) ? start : payload.skip_layer_start, skip_layer_end: Number.isFinite(end) ? end : payload.skip_layer_end })
+            }} /></div>
+          </div>
+          <div className="control-row two">
+            <div><label>{t.rng}</label><select value={payload.rng} disabled={!supportsParam('rng')} onChange={e => setPayload({ ...payload, rng: e.target.value })}>{rngOptions.map(v => <option value={v} key={v}>{v || t.modelDefault}</option>)}</select></div>
+            <div><label>{t.samplerRng}</label><select value={payload.sampler_rng} disabled={!supportsParam('sampler_rng')} onChange={e => setPayload({ ...payload, sampler_rng: e.target.value })}>{rngOptions.map(v => <option value={v} key={v}>{v || t.sameAsRng}</option>)}</select></div>
+          </div>
+          <div className="control-row two">
+            <div><label>{t.prediction}</label><select value={payload.prediction} disabled={!supportsParam('prediction')} onChange={e => setPayload({ ...payload, prediction: e.target.value })}>{predictionOptions.map(v => <option value={v} key={v}>{v || t.modelDefault}</option>)}</select></div>
+            <div><label>{t.qwenImageLayers}{!supportsParam('qwen_image_layers', false) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label><input type="number" min="0" max="16" value={payload.qwen_image_layers} disabled={!supportsParam('qwen_image_layers', false)} onChange={e => setPayload({ ...payload, qwen_image_layers: Number(e.target.value) })} /></div>
+          </div>
+          <div className="control-row two">
+            <div><label>{t.weightType}</label><select value={payload.weight_type} disabled={!supportsParam('weight_type')} onChange={e => setPayload({ ...payload, weight_type: e.target.value })}>{weightTypeOptions.map(v => <option value={v} key={v}>{v || t.modelDefault}</option>)}</select></div>
+            <div><label>{t.tensorTypeRules}</label><input value={payload.tensor_type_rules} disabled={!supportsParam('tensor_type_rules')} onChange={e => setPayload({ ...payload, tensor_type_rules: e.target.value })} placeholder="^vae.=f16,model.=q8_0" /></div>
+          </div>
+          <div className="control-row two">
+            <label className="check-row"><input type="checkbox" checked={payload.hires} disabled={!supportsParam('hires', !isVideoModel)} onChange={e => setPayload({ ...payload, hires: e.target.checked })} />{t.hires}</label>
+            <div><label>{t.hiresScale}</label><input type="number" min="1" max="8" step="0.1" value={payload.hires_scale} disabled={!payload.hires || !supportsParam('hires_scale', !isVideoModel)} onChange={e => setPayload({ ...payload, hires_scale: Number(e.target.value) })} /></div>
+          </div>
+          <div className="control-row two">
+            <div><label>{t.hiresSize}</label><input type="text" value={`${payload.hires_width || 0}x${payload.hires_height || 0}`} disabled={!payload.hires || !supportsParam('hires_width', !isVideoModel)} onChange={e => {
+              const [width, height] = e.target.value.toLowerCase().split('x').map(Number)
+              setPayload({ ...payload, hires_width: Number.isFinite(width) ? width : 0, hires_height: Number.isFinite(height) ? height : 0 })
+            }} /></div>
+            <div><label>{t.hiresSteps}</label><input type="number" min="0" max="150" value={payload.hires_steps} disabled={!payload.hires || !supportsParam('hires_steps', !isVideoModel)} onChange={e => setPayload({ ...payload, hires_steps: Number(e.target.value) })} /></div>
+          </div>
+          <div className="control-row two">
+            <div><label>{t.hiresDenoise}</label><input type="number" min="0" max="1" step="0.05" value={payload.hires_denoising_strength} disabled={!payload.hires || !supportsParam('hires_denoising_strength', !isVideoModel)} onChange={e => setPayload({ ...payload, hires_denoising_strength: Number(e.target.value) })} /></div>
+            <div><label>{t.cacheMode}</label><select value={payload.cache_mode} disabled={!supportsParam('cache_mode')} onChange={e => setPayload({ ...payload, cache_mode: e.target.value })}>{cacheOptions.map(v => <option value={v} key={v}>{v || t.disabled}</option>)}</select></div>
+          </div>
+          <div className="control-row">
+            <div><label>{t.cacheOption}</label><input value={payload.cache_option} disabled={!supportsParam('cache_option')} onChange={e => setPayload({ ...payload, cache_option: e.target.value })} placeholder="threshold=0.25,start=0.1,end=0.8" /></div>
+          </div>
+        </div>
+        <div className="side-param-block">
+          <div className="section-label">{t.memoryParamsTitle}</div>
+          <div className="control-row two">
+            <label className="check-row"><input type="checkbox" checked={payload.vae_tiling} disabled={!supportsParam('vae_tiling')} onChange={e => setPayload({ ...payload, vae_tiling: e.target.checked })} />{t.vaeTiling}</label>
+            <label className="check-row"><input type="checkbox" checked={payload.stream_layers} disabled={!supportsParam('stream_layers')} onChange={e => setPayload({ ...payload, stream_layers: e.target.checked })} />{t.streamLayers}</label>
+          </div>
+          <div className="control-row two">
+            <div><label>{t.maxVram}</label><input type="number" min="-64" max="128" step="0.5" value={payload.max_vram} disabled={!supportsParam('max_vram')} onChange={e => setPayload({ ...payload, max_vram: Number(e.target.value) })} /></div>
+            <div><label>{t.vaeTileSize}</label><input value={payload.vae_tile_size} disabled={!payload.vae_tiling || !supportsParam('vae_tile_size')} onChange={e => setPayload({ ...payload, vae_tile_size: e.target.value })} placeholder="32x32" /></div>
+          </div>
+          <div className="control-row two">
+            <div><label>{t.vaeTileOverlap}</label><input type="number" min="0" max="0.95" step="0.05" value={payload.vae_tile_overlap} disabled={!payload.vae_tiling || !supportsParam('vae_tile_overlap')} onChange={e => setPayload({ ...payload, vae_tile_overlap: Number(e.target.value) })} /></div>
+            <label className="check-row"><input type="checkbox" checked={payload.auto_fit} disabled={!supportsParam('auto_fit')} onChange={e => setPayload({ ...payload, auto_fit: e.target.checked })} />{t.autoFit}</label>
+          </div>
+          <div className="control-row two">
+            <label className="check-row"><input type="checkbox" checked={payload.offload_to_cpu} disabled={!supportsParam('offload_to_cpu')} onChange={e => setPayload({ ...payload, offload_to_cpu: e.target.checked })} />{t.offloadToCpu}</label>
+            <label className="check-row"><input type="checkbox" checked={payload.vae_cpu_fallback} disabled={!supportsParam('vae_cpu_fallback', isVideoModel)} onChange={e => setPayload({ ...payload, vae_cpu_fallback: e.target.checked })} />{t.vaeCpuFallback}</label>
+          </div>
+          <div className="control-row two">
+            <label className="check-row"><input type="checkbox" checked={payload.temporal_tiling} disabled={!supportsParam('temporal_tiling', false)} onChange={e => setPayload({ ...payload, temporal_tiling: e.target.checked })} />{t.temporalTiling}</label>
+            <div><label>{t.temporalTileFrames}</label><input type="number" min="1" max="32" value={payload.temporal_tile_frames} disabled={!payload.temporal_tiling || !supportsParam('temporal_tile_frames', false)} onChange={e => setPayload({ ...payload, temporal_tile_frames: Number(e.target.value) })} /></div>
+          </div>
+          <div className="control-row two">
+            <div><label>{t.temporalTileOverlap}</label><input type="number" min="0" max="16" value={payload.temporal_tile_overlap} disabled={!payload.temporal_tiling || !supportsParam('temporal_tile_overlap', false)} onChange={e => setPayload({ ...payload, temporal_tile_overlap: Number(e.target.value) })} /></div>
+            <div><label>{t.paramsBackend}</label><input value={payload.params_backend} disabled={!supportsParam('params_backend')} onChange={e => setPayload({ ...payload, params_backend: e.target.value })} placeholder="cpu / disk" /></div>
+          </div>
+          <div className="control-row">
+            <div><label>{t.backendAssign}</label><input value={payload.backend} disabled={!supportsParam('backend')} onChange={e => setPayload({ ...payload, backend: e.target.value })} placeholder="clip=cpu,vae=cuda0,diffusion=cuda0" /></div>
           </div>
         </div>
         <p className="api-note">{t.paramsIgnoredHint}</p>

@@ -23,7 +23,52 @@ def _runtime(
     negative: bool = True,
     parameters: dict[str, bool] | None = None,
 ) -> dict[str, Any]:
-    base_defaults = {"width": 1024, "height": 1024, "steps": 20, "cfg_scale": 7.0, "sampler": "euler"}
+    base_defaults = {
+        "width": 1024,
+        "height": 1024,
+        "steps": 20,
+        "cfg_scale": 7.0,
+        "sampler": "euler",
+        "scheduler": "",
+        "clip_skip": -1,
+        "guidance": 0.0,
+        "img_cfg_scale": 0.0,
+        "eta": 0.0,
+        "flow_shift": 0.0,
+        "high_noise_steps": 0,
+        "high_noise_cfg_scale": 0.0,
+        "high_noise_sampler": "",
+        "slg_scale": 0.0,
+        "skip_layer_start": 0.01,
+        "skip_layer_end": 0.2,
+        "rng": "",
+        "sampler_rng": "",
+        "prediction": "",
+        "weight_type": "",
+        "tensor_type_rules": "",
+        "cache_mode": "",
+        "cache_option": "",
+        "qwen_image_layers": 0,
+        "hires": False,
+        "hires_scale": 2.0,
+        "hires_width": 0,
+        "hires_height": 0,
+        "hires_steps": 0,
+        "hires_denoising_strength": 0.7,
+        "vae_tiling": mode == "video",
+        "vae_tile_size": "",
+        "vae_tile_overlap": 0.5,
+        "temporal_tiling": False,
+        "temporal_tile_frames": 4,
+        "temporal_tile_overlap": 1,
+        "max_vram": -2.0 if mode == "video" else 0.0,
+        "stream_layers": mode == "video",
+        "auto_fit": False,
+        "offload_to_cpu": False,
+        "vae_cpu_fallback": mode == "video",
+        "backend": "",
+        "params_backend": "",
+    }
     base_defaults.update(defaults or {})
     effective_parameters = {
         "width": True,
@@ -36,8 +81,47 @@ def _runtime(
         "reference_image": False,
         "strength": False,
         "batch_count": mode != "video",
+        "scheduler": True,
+        "clip_skip": True,
+        "guidance": True,
+        "img_cfg_scale": False,
+        "eta": True,
+        "flow_shift": True,
+        "high_noise_steps": False,
+        "high_noise_cfg_scale": False,
+        "high_noise_sampler": False,
+        "slg_scale": True,
+        "skip_layer_start": True,
+        "skip_layer_end": True,
+        "rng": True,
+        "sampler_rng": True,
+        "prediction": True,
+        "weight_type": True,
+        "tensor_type_rules": True,
+        "cache_mode": True,
+        "cache_option": True,
+        "qwen_image_layers": False,
+        "hires": mode != "video",
+        "hires_scale": mode != "video",
+        "hires_width": mode != "video",
+        "hires_height": mode != "video",
+        "hires_steps": mode != "video",
+        "hires_denoising_strength": mode != "video",
         "video_frames": mode == "video",
         "fps": mode == "video",
+        "vae_tiling": True,
+        "vae_tile_size": True,
+        "vae_tile_overlap": True,
+        "temporal_tiling": False,
+        "temporal_tile_frames": False,
+        "temporal_tile_overlap": False,
+        "max_vram": True,
+        "stream_layers": True,
+        "auto_fit": True,
+        "offload_to_cpu": True,
+        "vae_cpu_fallback": mode == "video",
+        "backend": True,
+        "params_backend": True,
     }
     effective_parameters.update(parameters or {})
     return {
@@ -54,6 +138,22 @@ def _runtime(
 
 # 拆分式图像家族共用的运行时参数（FLUX / Qwen / Wan 等文本编码器在 CPU 更稳）
 _FA_ARGS = ["--diffusion-fa", "--offload-to-cpu"]
+
+
+def _with_runtime_defaults(spec: dict[str, Any], **defaults: Any) -> dict[str, Any]:
+    next_spec = dict(spec)
+    merged = dict(next_spec.get("defaults") or {})
+    merged.update(defaults)
+    next_spec["defaults"] = merged
+    return next_spec
+
+
+def _with_runtime_parameters(spec: dict[str, Any], **parameters: bool) -> dict[str, Any]:
+    next_spec = dict(spec)
+    merged = dict(next_spec.get("parameters") or {})
+    merged.update(parameters)
+    next_spec["parameters"] = merged
+    return next_spec
 
 
 def _model(
@@ -77,9 +177,11 @@ def _model(
     default_ref_flag = runtime.get("ref_flag") or ("-r" if "edit" in capabilities else "-i")
     parameters["reference_image"] = supports_reference
     parameters["strength"] = runtime.get("mode") != "video" and "img2img" in capabilities and default_ref_flag == "-i"
+    parameters["img_cfg_scale"] = runtime.get("mode") != "video" and supports_reference
     parameters["batch_count"] = runtime.get("mode") != "video"
     parameters["video_frames"] = runtime.get("mode") == "video"
     parameters["fps"] = runtime.get("mode") == "video"
+    parameters["vae_cpu_fallback"] = runtime.get("mode") == "video"
     if supports_reference and not runtime.get("ref_flag"):
         runtime["ref_flag"] = default_ref_flag
     runtime["parameters"] = parameters
@@ -166,28 +268,30 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
     "qwen-image": _runtime(
         model_flag="--diffusion-model",
         roles={"vae": "split_files/vae/qwen_image_vae.safetensors", "llm": "split_files/text_encoders/qwen_2.5_vl_7b.safetensors"},
-        extra_args=[*_FA_ARGS, "--flow-shift", "3"],
-        defaults={"steps": 20, "cfg_scale": 2.5, "sampler": "euler"},
+        extra_args=list(_FA_ARGS),
+        defaults={"steps": 20, "cfg_scale": 2.5, "sampler": "euler", "flow_shift": 3.0},
+        parameters={"qwen_image_layers": True},
     ),
     "qwen-image-edit": _runtime(
         model_flag="--diffusion-model",
         ref_flag="-r",
         roles={"vae": "split_files/vae/qwen_image_vae.safetensors", "llm": "split_files/text_encoders/qwen_2.5_vl_7b.safetensors"},
-        extra_args=[*_FA_ARGS, "--flow-shift", "3"],
-        defaults={"steps": 20, "cfg_scale": 2.5, "sampler": "euler"},
+        extra_args=list(_FA_ARGS),
+        defaults={"steps": 20, "cfg_scale": 2.5, "sampler": "euler", "flow_shift": 3.0},
+        parameters={"qwen_image_layers": True},
     ),
     "longcat-image": _runtime(
         model_flag="--diffusion-model",
         roles={"vae": "ae.safetensors", "llm": "Qwen2.5-VL-7B-Instruct-Q8_0.gguf"},
-        extra_args=[*_FA_ARGS, "--flow-shift", "3"],
-        defaults={"steps": 20, "cfg_scale": 5.0, "sampler": "euler"},
+        extra_args=list(_FA_ARGS),
+        defaults={"steps": 20, "cfg_scale": 5.0, "sampler": "euler", "flow_shift": 3.0},
     ),
     "longcat-image-edit": _runtime(
         model_flag="--diffusion-model",
         ref_flag="-r",
         roles={"vae": "ae.safetensors", "llm": "Qwen2.5-VL-7B-Instruct-Q8_0.gguf"},
-        extra_args=[*_FA_ARGS, "--flow-shift", "3"],
-        defaults={"steps": 20, "cfg_scale": 5.0, "sampler": "euler"},
+        extra_args=list(_FA_ARGS),
+        defaults={"steps": 20, "cfg_scale": 5.0, "sampler": "euler", "flow_shift": 3.0},
     ),
     "z-image": _runtime(
         model_flag="--diffusion-model",
@@ -307,8 +411,8 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
             "vae": "split_files/vae/wan_2.1_vae.safetensors",
             "t5xxl": "split_files/text_encoders/umt5_xxl_fp16.safetensors",
         },
-        extra_args=[*_FA_ARGS, "--flow-shift", "3.0", "-v"],
-        defaults={"width": 832, "height": 480, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
+        extra_args=[*_FA_ARGS, "-v"],
+        defaults={"width": 832, "height": 480, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "flow_shift": 3.0, "video_frames": 33, "fps": 24},
     ),
     "wan22": _runtime(  # TI2V 5B 支持 -i 首帧参考（不加 --strength）
         mode="video",
@@ -318,8 +422,8 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
             "vae": "split_files/vae/wan2.2_vae.safetensors",
             "t5xxl": "split_files/text_encoders/umt5_xxl_fp16.safetensors",
         },
-        extra_args=[*_FA_ARGS, "--flow-shift", "3.0", "-v"],
-        defaults={"width": 480, "height": 832, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
+        extra_args=[*_FA_ARGS, "-v"],
+        defaults={"width": 480, "height": 832, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "flow_shift": 3.0, "video_frames": 33, "fps": 24},
         parameters={"reference_image": True},
     ),
     "ltx-video": _runtime(
@@ -334,7 +438,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
         },
         extra_args=[*_FA_ARGS, "-v"],
         defaults={"width": 1280, "height": 720, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
-        parameters={"reference_image": True},
+        parameters={"reference_image": True, "temporal_tiling": True, "temporal_tile_frames": True, "temporal_tile_overlap": True},
     ),
     "hunyuan-video": _runtime(
         mode="video",
@@ -381,8 +485,8 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
             "vae": "split_files/vae/wan_2.1_vae.safetensors",
             "t5xxl": "split_files/text_encoders/umt5_xxl_fp16.safetensors",
         },
-        extra_args=[*_FA_ARGS, "--flow-shift", "3.0", "-v"],
-        defaults={"width": 832, "height": 480, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
+        extra_args=[*_FA_ARGS, "-v"],
+        defaults={"width": 832, "height": 480, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "flow_shift": 3.0, "video_frames": 33, "fps": 24},
     ),
     "wan21-i2v-14b": _runtime(
         mode="video",
@@ -393,8 +497,8 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
             "t5xxl": "split_files/text_encoders/umt5_xxl_fp16.safetensors",
             "clip_vision": "split_files/clip_vision/clip_vision_h.safetensors",
         },
-        extra_args=[*_FA_ARGS, "--flow-shift", "3.0", "-v"],
-        defaults={"width": 480, "height": 832, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
+        extra_args=[*_FA_ARGS, "-v"],
+        defaults={"width": 480, "height": 832, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "flow_shift": 3.0, "video_frames": 33, "fps": 24},
         parameters={"reference_image": True},
     ),
     "wan22-t2v-a14b": _runtime(
@@ -405,9 +509,12 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
             "vae": "split_files/vae/wan2.2_vae.safetensors",
             "t5xxl": "split_files/text_encoders/umt5_xxl_fp16.safetensors",
         },
-        extra_args=[*_FA_ARGS, "--flow-shift", "3.0",
-                    "--high-noise-cfg-scale", "3.5", "--high-noise-sampling-method", "euler", "--high-noise-steps", "8", "-v"],
-        defaults={"width": 832, "height": 480, "steps": 10, "cfg_scale": 3.5, "sampler": "euler", "video_frames": 33, "fps": 24},
+        extra_args=[*_FA_ARGS, "-v"],
+        defaults={
+            "width": 832, "height": 480, "steps": 10, "cfg_scale": 3.5, "sampler": "euler", "flow_shift": 3.0,
+            "high_noise_steps": 8, "high_noise_cfg_scale": 3.5, "high_noise_sampler": "euler", "video_frames": 33, "fps": 24,
+        },
+        parameters={"high_noise_steps": True, "high_noise_cfg_scale": True, "high_noise_sampler": True},
     ),
     "wan22-i2v-a14b": _runtime(
         mode="video",
@@ -418,10 +525,12 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
             "vae": "split_files/vae/wan2.2_vae.safetensors",
             "t5xxl": "split_files/text_encoders/umt5_xxl_fp16.safetensors",
         },
-        extra_args=[*_FA_ARGS, "--flow-shift", "3.0",
-                    "--high-noise-cfg-scale", "3.5", "--high-noise-sampling-method", "euler", "--high-noise-steps", "8", "-v"],
-        defaults={"width": 832, "height": 480, "steps": 10, "cfg_scale": 3.5, "sampler": "euler", "video_frames": 33, "fps": 24},
-        parameters={"reference_image": True},
+        extra_args=[*_FA_ARGS, "-v"],
+        defaults={
+            "width": 832, "height": 480, "steps": 10, "cfg_scale": 3.5, "sampler": "euler", "flow_shift": 3.0,
+            "high_noise_steps": 8, "high_noise_cfg_scale": 3.5, "high_noise_sampler": "euler", "video_frames": 33, "fps": 24,
+        },
+        parameters={"reference_image": True, "high_noise_steps": True, "high_noise_cfg_scale": True, "high_noise_sampler": True},
     ),
     "hunyuan-i2v-720p": _runtime(
         mode="video",

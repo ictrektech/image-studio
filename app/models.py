@@ -21,9 +21,48 @@ class GenerateRequest(BaseModel):
     sampler: str = "euler_a"
     seed: int = -1
     batch_count: int = Field(default=1, ge=1, le=4)
+    scheduler: str = ""
+    clip_skip: int = Field(default=-1, ge=-1, le=24)
+    guidance: float = Field(default=0.0, ge=0.0, le=30.0)
+    img_cfg_scale: float = Field(default=0.0, ge=0.0, le=30.0)
+    eta: float = Field(default=0.0, ge=0.0, le=10.0)
+    flow_shift: float = Field(default=0.0, ge=0.0, le=20.0)
+    high_noise_steps: int = Field(default=0, ge=0, le=150)
+    high_noise_cfg_scale: float = Field(default=0.0, ge=0.0, le=30.0)
+    high_noise_sampler: str = ""
+    slg_scale: float = Field(default=0.0, ge=0.0, le=20.0)
+    skip_layer_start: float = Field(default=0.01, ge=0.0, le=1.0)
+    skip_layer_end: float = Field(default=0.2, ge=0.0, le=1.0)
+    rng: str = ""
+    sampler_rng: str = ""
+    prediction: str = ""
+    weight_type: str = ""
+    tensor_type_rules: str = Field(default="", max_length=1000)
+    cache_mode: str = ""
+    cache_option: str = Field(default="", max_length=1000)
+    qwen_image_layers: int = Field(default=0, ge=0, le=16)
+    hires: bool = False
+    hires_scale: float = Field(default=2.0, ge=1.0, le=8.0)
+    hires_width: int = Field(default=0, ge=0, le=4096)
+    hires_height: int = Field(default=0, ge=0, le=4096)
+    hires_steps: int = Field(default=0, ge=0, le=150)
+    hires_denoising_strength: float = Field(default=0.7, ge=0.0, le=1.0)
     # 视频参数：0 表示使用模型家族默认值（仅视频家族生效）
     video_frames: int = Field(default=0, ge=0, le=240)
     fps: int = Field(default=0, ge=0, le=60)
+    vae_tiling: bool | None = None
+    vae_tile_size: str = Field(default="", max_length=32)
+    vae_tile_overlap: float = Field(default=0.5, ge=0.0, le=0.95)
+    temporal_tiling: bool | None = None
+    temporal_tile_frames: int = Field(default=4, ge=1, le=32)
+    temporal_tile_overlap: int = Field(default=1, ge=0, le=16)
+    max_vram: float = Field(default=0.0, ge=-64.0, le=128.0)
+    stream_layers: bool | None = None
+    auto_fit: bool | None = None
+    offload_to_cpu: bool | None = None
+    vae_cpu_fallback: bool | None = None
+    backend: str = Field(default="", max_length=200)
+    params_backend: str = Field(default="", max_length=200)
 
 
 class JobRecord(BaseModel):
@@ -42,8 +81,47 @@ class JobRecord(BaseModel):
     sampler: str
     seed: int
     batch_count: int
+    scheduler: str = ""
+    clip_skip: int = -1
+    guidance: float = 0.0
+    img_cfg_scale: float = 0.0
+    eta: float = 0.0
+    flow_shift: float = 0.0
+    high_noise_steps: int = 0
+    high_noise_cfg_scale: float = 0.0
+    high_noise_sampler: str = ""
+    slg_scale: float = 0.0
+    skip_layer_start: float = 0.01
+    skip_layer_end: float = 0.2
+    rng: str = ""
+    sampler_rng: str = ""
+    prediction: str = ""
+    weight_type: str = ""
+    tensor_type_rules: str = ""
+    cache_mode: str = ""
+    cache_option: str = ""
+    qwen_image_layers: int = 0
+    hires: bool = False
+    hires_scale: float = 2.0
+    hires_width: int = 0
+    hires_height: int = 0
+    hires_steps: int = 0
+    hires_denoising_strength: float = 0.7
     video_frames: int = 0
     fps: int = 0
+    vae_tiling: bool = False
+    vae_tile_size: str = ""
+    vae_tile_overlap: float = 0.5
+    temporal_tiling: bool = False
+    temporal_tile_frames: int = 4
+    temporal_tile_overlap: int = 1
+    max_vram: float = 0.0
+    stream_layers: bool = False
+    auto_fit: bool = False
+    offload_to_cpu: bool = False
+    vae_cpu_fallback: bool = False
+    backend: str = ""
+    params_backend: str = ""
     progress: float = 0
     outputs: list[str] = []
     error: str = ""

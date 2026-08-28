@@ -37,7 +37,42 @@ SAMPLER_MAP = {
     "euler": "euler",
     "heun": "heun",
     "dpm++2m": "dpm++_2m",
+    "dpm2": "dpm2",
+    "dpm++2s_a": "dpm++2s_a",
+    "dpm++2mv2": "dpm++2mv2",
+    "ipndm": "ipndm",
+    "ipndm_v": "ipndm_v",
+    "lcm": "lcm",
+    "ddim_trailing": "ddim_trailing",
+    "tcd": "tcd",
+    "res_multistep": "res_multistep",
+    "res_2s": "res_2s",
+    "er_sde": "er_sde",
+    "euler_cfg_pp": "euler_cfg_pp",
+    "euler_a_cfg_pp": "euler_a_cfg_pp",
+    "euler_ge": "euler_ge",
+    "dpm++2m_sde": "dpm++2m_sde",
+    "dpm++2m_sde_bt": "dpm++2m_sde_bt",
+    "lms": "lms",
 }
+
+SCHEDULERS = {
+    "discrete", "karras", "exponential", "ays", "gits", "sgm_uniform", "simple",
+    "smoothstep", "kl_optimal", "lcm", "bong_tangent", "ltx2", "logit_normal",
+    "flux2", "flux", "beta", "normal",
+}
+RNGS = {"std_default", "cuda", "cpu"}
+PREDICTIONS = {"eps", "v", "edm_v", "sd3_flow", "flux_flow", "sefi_flow"}
+WEIGHT_TYPES = {"f32", "f16", "q4_0", "q4_1", "q5_0", "q5_1", "q8_0", "q2_K", "q3_K", "q4_K"}
+CACHE_MODES = {"easycache", "ucache", "dbcache", "taylorseer", "cache-dit", "spectrum"}
+MEMORY_ERROR_MARKERS = (
+    "failed to allocate",
+    "out of memory",
+    "cuda error",
+    "alloc compute buffer failed",
+    "vae decode compute failed",
+    "ggml_gallocr_reserve_n_impl",
+)
 
 
 async def create_job(user_key: str, request: GenerateRequest) -> JobRecord:
@@ -66,11 +101,50 @@ async def create_job(user_key: str, request: GenerateRequest) -> JobRecord:
         steps=request.steps,
         cfg_scale=request.cfg_scale if parameters.get("cfg_scale", True) else float(defaults.get("cfg_scale", 1.0) or 1.0),
         strength=request.strength if parameters.get("strength", False) else 0,
-        sampler=request.sampler,
+        sampler=_string_choice(request.sampler, SAMPLER_MAP, str(defaults.get("sampler", "euler"))),
         seed=request.seed,
         batch_count=request.batch_count if parameters.get("batch_count", True) else 1,
+        scheduler=_runtime_string(request.scheduler, defaults, parameters, "scheduler", SCHEDULERS),
+        clip_skip=_runtime_int(request.clip_skip, defaults, parameters, "clip_skip", -1),
+        guidance=_runtime_float(request.guidance, defaults, parameters, "guidance", 0.0),
+        img_cfg_scale=_runtime_float(request.img_cfg_scale, defaults, parameters, "img_cfg_scale", 0.0),
+        eta=_runtime_float(request.eta, defaults, parameters, "eta", 0.0),
+        flow_shift=_runtime_float(request.flow_shift, defaults, parameters, "flow_shift", 0.0),
+        high_noise_steps=_runtime_int(request.high_noise_steps, defaults, parameters, "high_noise_steps", 0),
+        high_noise_cfg_scale=_runtime_float(request.high_noise_cfg_scale, defaults, parameters, "high_noise_cfg_scale", 0.0),
+        high_noise_sampler=_runtime_string(request.high_noise_sampler, defaults, parameters, "high_noise_sampler", SAMPLER_MAP),
+        slg_scale=_runtime_float(request.slg_scale, defaults, parameters, "slg_scale", 0.0),
+        skip_layer_start=_runtime_float(request.skip_layer_start, defaults, parameters, "skip_layer_start", 0.01),
+        skip_layer_end=_runtime_float(request.skip_layer_end, defaults, parameters, "skip_layer_end", 0.2),
+        rng=_runtime_string(request.rng, defaults, parameters, "rng", RNGS),
+        sampler_rng=_runtime_string(request.sampler_rng, defaults, parameters, "sampler_rng", RNGS),
+        prediction=_runtime_string(request.prediction, defaults, parameters, "prediction", PREDICTIONS),
+        weight_type=_runtime_string(request.weight_type, defaults, parameters, "weight_type", WEIGHT_TYPES),
+        tensor_type_rules=request.tensor_type_rules.strip() if parameters.get("tensor_type_rules", True) else "",
+        cache_mode=_runtime_string(request.cache_mode, defaults, parameters, "cache_mode", CACHE_MODES),
+        cache_option=request.cache_option.strip() if parameters.get("cache_option", True) else "",
+        qwen_image_layers=_runtime_int(request.qwen_image_layers, defaults, parameters, "qwen_image_layers", 0),
+        hires=bool(request.hires) if parameters.get("hires", False) else False,
+        hires_scale=_runtime_float(request.hires_scale, defaults, parameters, "hires_scale", 2.0),
+        hires_width=_runtime_int(request.hires_width, defaults, parameters, "hires_width", 0),
+        hires_height=_runtime_int(request.hires_height, defaults, parameters, "hires_height", 0),
+        hires_steps=_runtime_int(request.hires_steps, defaults, parameters, "hires_steps", 0),
+        hires_denoising_strength=_runtime_float(request.hires_denoising_strength, defaults, parameters, "hires_denoising_strength", 0.7),
         video_frames=effective_video_frames if parameters.get("video_frames", False) else 0,
         fps=(request.fps or int(defaults.get("fps", 0) or 0)) if parameters.get("fps", False) else 0,
+        vae_tiling=_runtime_bool(request.vae_tiling, defaults, parameters, "vae_tiling", False),
+        vae_tile_size=request.vae_tile_size.strip() if parameters.get("vae_tile_size", True) else "",
+        vae_tile_overlap=_runtime_float(request.vae_tile_overlap, defaults, parameters, "vae_tile_overlap", 0.5),
+        temporal_tiling=_runtime_bool(request.temporal_tiling, defaults, parameters, "temporal_tiling", False),
+        temporal_tile_frames=_runtime_int(request.temporal_tile_frames, defaults, parameters, "temporal_tile_frames", 4),
+        temporal_tile_overlap=_runtime_int(request.temporal_tile_overlap, defaults, parameters, "temporal_tile_overlap", 1),
+        max_vram=_runtime_float(request.max_vram, defaults, parameters, "max_vram", 0.0),
+        stream_layers=_runtime_bool(request.stream_layers, defaults, parameters, "stream_layers", False),
+        auto_fit=_runtime_bool(request.auto_fit, defaults, parameters, "auto_fit", False),
+        offload_to_cpu=_runtime_bool(request.offload_to_cpu, defaults, parameters, "offload_to_cpu", False),
+        vae_cpu_fallback=_runtime_bool(request.vae_cpu_fallback, defaults, parameters, "vae_cpu_fallback", False),
+        backend=request.backend.strip() if parameters.get("backend", True) else "",
+        params_backend=request.params_backend.strip() if parameters.get("params_backend", True) else "",
         metadata={
             "init_job_id": request.init_job_id if supports_reference else "",
             "init_filename": request.init_filename if supports_reference else "",
@@ -127,8 +201,16 @@ async def run_job(job: JobRecord) -> None:
 
             if video_mode:
                 # 视频任务固定单输出；batch/strength 等不适用的参数已在装配时忽略
-                output = output_dir / "output.mp4"
-                await run_once(output)
+                output = output_dir / "output.webm"
+                try:
+                    await run_once(output)
+                except RuntimeError as exc:
+                    if not job.vae_cpu_fallback or not _is_memory_error(str(exc)):
+                        raise
+                    job.error = "CUDA/VAE 显存不足，正在切换到 CPU VAE 低显存重试"
+                    job.progress = 0.12
+                    save_job(job)
+                    await run_sd_cpp(job, output, low_memory_retry=True)
                 job.outputs = [output.name]
             else:
                 names = (
@@ -156,7 +238,7 @@ async def run_job(job: JobRecord) -> None:
         save_job(job)
 
 
-def build_sd_args(job: JobRecord, output: Path, seed_offset: int = 0) -> list[str]:
+def build_sd_args(job: JobRecord, output: Path, seed_offset: int = 0, low_memory_retry: bool = False) -> list[str]:
     """按模型家族的 runtime 规格装配 sd-cli 参数。"""
     item = get_model_def(job.model_key)
     runtime = item["runtime"]
@@ -184,12 +266,12 @@ def build_sd_args(job: JobRecord, output: Path, seed_offset: int = 0) -> list[st
     cfg_scale = job.cfg_scale if parameters.get("cfg_scale", True) else defaults.get("cfg_scale", 1.0)
     args.extend(["--cfg-scale", str(cfg_scale)])
     args.extend(["--sampling-method", SAMPLER_MAP.get(job.sampler, job.sampler)])
+    _append_common_generation_args(args, job, parameters)
     if video_mode:
         if job.video_frames > 1:
             args.extend(["--video-frames", str(job.video_frames)])
         if job.fps > 0:
             args.extend(["--fps", str(job.fps)])
-
     init_image = init_image_path(job) if parameters.get("reference_image", False) else None
     if init_image:
         ref_flag = runtime.get("ref_flag", "-i")
@@ -204,13 +286,17 @@ def build_sd_args(job: JobRecord, output: Path, seed_offset: int = 0) -> list[st
         # batch 时固定 seed 逐张 +i，保持可复现的同时避免完全相同的图
         args.extend(["--seed", str(job.seed + seed_offset)])
     args.extend(runtime.get("extra_args") or [])
+    _append_runtime_memory_args(args, job, parameters)
+    if low_memory_retry:
+        _append_unique(args, "--vae-tiling")
+        _append_assignment(args, "--backend", "vae=cpu")
     if settings.sd_cpp_extra_args:
         args.extend(shlex.split(settings.sd_cpp_extra_args))
     return args
 
 
-async def run_sd_cpp(job: JobRecord, output: Path, seed_offset: int = 0) -> None:
-    args = build_sd_args(job, output, seed_offset=seed_offset)
+async def run_sd_cpp(job: JobRecord, output: Path, seed_offset: int = 0, low_memory_retry: bool = False) -> None:
+    args = build_sd_args(job, output, seed_offset=seed_offset, low_memory_retry=low_memory_retry)
     video_mode = get_model_def(job.model_key)["runtime"].get("mode") == "video"
     timeout = settings.video_timeout_seconds if video_mode else settings.default_timeout_seconds
     task_key = (job.user_key, job.job_id)
@@ -235,6 +321,140 @@ async def run_sd_cpp(job: JobRecord, output: Path, seed_offset: int = 0) -> None
         stderr_tail = stderr_text.strip().splitlines()[-6:]
         detail = " | ".join(line.strip() for line in stderr_tail if line.strip())
         raise RuntimeError(f"sd-cli 退出码 {process.returncode}: {detail or '无错误输出'}")
+
+
+def _runtime_string(
+    value: str,
+    defaults: dict,
+    parameters: dict,
+    key: str,
+    choices: set[str] | dict[str, str],
+) -> str:
+    if not parameters.get(key, True):
+        return ""
+    raw = (value or str(defaults.get(key, "") or "")).strip()
+    return _string_choice(raw, choices, "")
+
+
+def _string_choice(value: str, choices: set[str] | dict[str, str], fallback: str) -> str:
+    raw = (value or "").strip()
+    return raw if raw in choices else fallback
+
+
+def _runtime_int(value: int, defaults: dict, parameters: dict, key: str, fallback: int) -> int:
+    if not parameters.get(key, True):
+        return fallback
+    default = defaults.get(key, fallback)
+    return value if value not in (0, -1) else int(default or fallback)
+
+
+def _runtime_float(value: float, defaults: dict, parameters: dict, key: str, fallback: float) -> float:
+    if not parameters.get(key, True):
+        return fallback
+    default = defaults.get(key, fallback)
+    return value if value != 0 else float(default or fallback)
+
+
+def _runtime_bool(value: bool | None, defaults: dict, parameters: dict, key: str, fallback: bool) -> bool:
+    if not parameters.get(key, True):
+        return False
+    if value is not None:
+        return bool(value)
+    return bool(defaults.get(key, fallback))
+
+
+def _append_common_generation_args(args: list[str], job: JobRecord, parameters: dict) -> None:
+    if job.scheduler and parameters.get("scheduler", True):
+        args.extend(["--scheduler", job.scheduler])
+    if job.clip_skip > 0 and parameters.get("clip_skip", True):
+        args.extend(["--clip-skip", str(job.clip_skip)])
+    if job.guidance > 0 and parameters.get("guidance", True):
+        args.extend(["--guidance", str(job.guidance)])
+    if job.img_cfg_scale > 0 and parameters.get("img_cfg_scale", False):
+        args.extend(["--img-cfg-scale", str(job.img_cfg_scale)])
+    if job.eta > 0 and parameters.get("eta", True):
+        args.extend(["--eta", str(job.eta)])
+    if job.flow_shift > 0 and parameters.get("flow_shift", True):
+        args.extend(["--flow-shift", str(job.flow_shift)])
+    if job.high_noise_steps > 0 and parameters.get("high_noise_steps", False):
+        args.extend(["--high-noise-steps", str(job.high_noise_steps)])
+    if job.high_noise_cfg_scale > 0 and parameters.get("high_noise_cfg_scale", False):
+        args.extend(["--high-noise-cfg-scale", str(job.high_noise_cfg_scale)])
+    if job.high_noise_sampler and parameters.get("high_noise_sampler", False):
+        args.extend(["--high-noise-sampling-method", SAMPLER_MAP.get(job.high_noise_sampler, job.high_noise_sampler)])
+    if job.slg_scale > 0 and parameters.get("slg_scale", True):
+        args.extend(["--slg-scale", str(job.slg_scale)])
+        args.extend(["--skip-layer-start", str(job.skip_layer_start)])
+        args.extend(["--skip-layer-end", str(job.skip_layer_end)])
+    if job.rng and parameters.get("rng", True):
+        args.extend(["--rng", job.rng])
+    if job.sampler_rng and parameters.get("sampler_rng", True):
+        args.extend(["--sampler-rng", job.sampler_rng])
+    if job.prediction and parameters.get("prediction", True):
+        args.extend(["--prediction", job.prediction])
+    if job.weight_type and parameters.get("weight_type", True):
+        args.extend(["--type", job.weight_type])
+    if job.tensor_type_rules and parameters.get("tensor_type_rules", True):
+        args.extend(["--tensor-type-rules", job.tensor_type_rules])
+    if job.cache_mode and parameters.get("cache_mode", True):
+        args.extend(["--cache-mode", job.cache_mode])
+    if job.cache_option and parameters.get("cache_option", True):
+        args.extend(["--cache-option", job.cache_option])
+    if job.qwen_image_layers > 0 and parameters.get("qwen_image_layers", False):
+        args.extend(["--qwen-image-layers", str(job.qwen_image_layers)])
+    if job.hires and parameters.get("hires", False):
+        args.append("--hires")
+        args.extend(["--hires-scale", str(job.hires_scale)])
+        if job.hires_width > 0:
+            args.extend(["--hires-width", str(job.hires_width)])
+        if job.hires_height > 0:
+            args.extend(["--hires-height", str(job.hires_height)])
+        if job.hires_steps > 0:
+            args.extend(["--hires-steps", str(job.hires_steps)])
+        args.extend(["--hires-denoising-strength", str(job.hires_denoising_strength)])
+
+
+def _append_runtime_memory_args(args: list[str], job: JobRecord, parameters: dict) -> None:
+    if job.vae_tiling and parameters.get("vae_tiling", True):
+        _append_unique(args, "--vae-tiling")
+        if job.vae_tile_size:
+            args.extend(["--vae-tile-size", job.vae_tile_size])
+        if job.vae_tile_overlap != 0.5:
+            args.extend(["--vae-tile-overlap", str(job.vae_tile_overlap)])
+    if job.temporal_tiling and parameters.get("temporal_tiling", False):
+        _append_unique(args, "--temporal-tiling")
+        tiling_args = f"temporal_tile_frames={job.temporal_tile_frames},temporal_tile_overlap={job.temporal_tile_overlap}"
+        args.extend(["--extra-tiling-args", tiling_args])
+    if job.max_vram != 0 and parameters.get("max_vram", True):
+        args.extend(["--max-vram", str(job.max_vram)])
+    if job.stream_layers and job.max_vram != 0 and parameters.get("stream_layers", True):
+        _append_unique(args, "--stream-layers")
+    if job.auto_fit and parameters.get("auto_fit", True):
+        _append_unique(args, "--auto-fit")
+    if job.offload_to_cpu and parameters.get("offload_to_cpu", True):
+        _append_unique(args, "--offload-to-cpu")
+    if job.backend and parameters.get("backend", True):
+        _append_assignment(args, "--backend", job.backend)
+    if job.params_backend and parameters.get("params_backend", True):
+        _append_assignment(args, "--params-backend", job.params_backend)
+
+
+def _append_unique(args: list[str], flag: str) -> None:
+    if flag not in args:
+        args.append(flag)
+
+
+def _append_assignment(args: list[str], flag: str, value: str) -> None:
+    if flag in args:
+        idx = args.index(flag)
+        args[idx + 1] = f"{args[idx + 1]},{value}"
+        return
+    args.extend([flag, value])
+
+
+def _is_memory_error(message: str) -> bool:
+    lower = message.lower()
+    return any(marker in lower for marker in MEMORY_ERROR_MARKERS)
 
 
 async def _terminate_process(process: asyncio.subprocess.Process) -> None:

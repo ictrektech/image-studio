@@ -58,8 +58,47 @@ export interface GeneratePayload {
   sampler: string
   seed: number
   batch_count: number
+  scheduler: string
+  clip_skip: number
+  guidance: number
+  img_cfg_scale: number
+  eta: number
+  flow_shift: number
+  high_noise_steps: number
+  high_noise_cfg_scale: number
+  high_noise_sampler: string
+  slg_scale: number
+  skip_layer_start: number
+  skip_layer_end: number
+  rng: string
+  sampler_rng: string
+  prediction: string
+  weight_type: string
+  tensor_type_rules: string
+  cache_mode: string
+  cache_option: string
+  qwen_image_layers: number
+  hires: boolean
+  hires_scale: number
+  hires_width: number
+  hires_height: number
+  hires_steps: number
+  hires_denoising_strength: number
   video_frames: number
   fps: number
+  vae_tiling: boolean
+  vae_tile_size: string
+  vae_tile_overlap: number
+  temporal_tiling: boolean
+  temporal_tile_frames: number
+  temporal_tile_overlap: number
+  max_vram: number
+  stream_layers: boolean
+  auto_fit: boolean
+  offload_to_cpu: boolean
+  vae_cpu_fallback: boolean
+  backend: string
+  params_backend: string
 }
 
 export interface JobRecord extends GeneratePayload {

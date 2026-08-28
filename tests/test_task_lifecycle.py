@@ -202,18 +202,22 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
             sampler="euler",
             seed=42,
             batch_count=4,
+            flow_shift=3.0,
             video_frames=120,
             fps=24,
+            vae_tiling=True,
+            max_vram=-2.0,
+            stream_layers=True,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )
 
         with patch.object(generation, "runtime_paths_for", return_value={}):
-            args = generation.build_sd_args(job, Path("/tmp/output.mp4"))
+            args = generation.build_sd_args(job, Path("/tmp/output.webm"))
 
         self.assertIn("-M", args)
         self.assertIn("vid_gen", args)
-        self.assertEqual(args[args.index("-o") + 1], "/tmp/output.mp4")
+        self.assertEqual(args[args.index("-o") + 1], "/tmp/output.webm")
         self.assertEqual(args[args.index("--width") + 1], "832")
         self.assertEqual(args[args.index("--height") + 1], "480")
         self.assertEqual(args[args.index("--steps") + 1], "20")
@@ -222,6 +226,10 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(args[args.index("--seed") + 1], "42")
         self.assertEqual(args[args.index("--video-frames") + 1], "120")
         self.assertEqual(args[args.index("--fps") + 1], "24")
+        self.assertEqual(args[args.index("--flow-shift") + 1], "3.0")
+        self.assertEqual(args[args.index("--max-vram") + 1], "-2.0")
+        self.assertIn("--vae-tiling", args)
+        self.assertIn("--stream-layers", args)
         self.assertNotIn("--strength", args)
 
     async def test_create_job_normalizes_unsupported_parameters(self):
@@ -339,11 +347,15 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
                 batch_count=2,
                 video_frames=int(defaults.get("video_frames", 0)),
                 fps=int(defaults.get("fps", 0)),
+                vae_tiling=bool(defaults.get("vae_tiling", False)),
+                temporal_tiling=bool(defaults.get("temporal_tiling", False)),
+                max_vram=float(defaults.get("max_vram", 0.0)),
+                stream_layers=bool(defaults.get("stream_layers", False)),
                 created_at=now,
                 updated_at=now,
                 metadata={"init_input_id": "in_1"},
             )
-            output = Path("/tmp/output.mp4" if video_mode else "/tmp/output.png")
+            output = Path("/tmp/output.webm" if video_mode else "/tmp/output.png")
 
             with self.subTest(key=item["key"]):
                 with (
@@ -357,6 +369,8 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
                     self.assertIn("vid_gen", args)
                     self.assertIn("--video-frames", args)
                     self.assertIn("--fps", args)
+                    self.assertIn("--vae-tiling", args)
+                    self.assertIn("--max-vram", args)
                 else:
                     self.assertNotIn("vid_gen", args)
                 if params.get("negative_prompt", runtime.get("negative", True)):

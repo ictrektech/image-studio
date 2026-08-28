@@ -112,7 +112,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
                 </div>
 
                 <div className="model-meta">
-                  <div><span>{t.modelVariant}</span><code>{entry.isVariant ? active.name : t.defaultModelVariant}</code></div>
+                  <div><span>{t.modelVariant}</span><code>{entry.isVariant ? `${active.name} (${entry.variantId})` : t.defaultModelVariant}</code></div>
                   <div><span>{t.modelId}</span><code>{active.model_id}</code></div>
                   <div><span>{t.source}</span><code>{active.source}</code></div>
                   <div><span>{t.family}</span><code>{active.family}</code></div>

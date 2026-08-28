@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { KeyRound, ShieldCheck, UserCircle2 } from 'lucide-react'
-import { api, SessionInfo } from '../api/client'
+import { api, ModelInfo, SessionInfo } from '../api/client'
 import { messages } from '../i18n'
 
 type T = typeof messages['zh-CN']
@@ -238,12 +238,43 @@ function GuideCode({ children }: { children: string }) {
   )
 }
 
-export default function ApiPage({ t }: { t: T }) {
+export default function ApiPage({ models, t }: { models: ModelInfo[]; t: T }) {
   const [session, setSession] = useState<SessionInfo | null>(null)
 
   useEffect(() => {
     api.me().then(setSession).catch(() => undefined)
   }, [])
+
+  const modelRows = models.length
+    ? models.flatMap(model => [
+      ...(model.variants || []).map(variant => ({
+        key: model.key,
+        variant: variant.id || '',
+        params: variant.params || model.params || '',
+        family: variant.family || model.family,
+        name: `${model.name} · ${variant.name}`,
+        caps: variant.capabilities || model.capabilities,
+        source: variant.source || model.source,
+      })),
+      {
+        key: model.key,
+        variant: '',
+        params: model.params || '',
+        family: model.family,
+        name: model.name,
+        caps: model.capabilities,
+        source: model.source,
+      },
+    ])
+    : MODEL_KEYS.map(([key, params, family, name, caps]) => ({
+      key,
+      variant: '',
+      params,
+      family,
+      name,
+      caps: caps.split(',').map(item => item.trim()),
+      source: '',
+    }))
 
   return (
     <section className="panel api-panel">
@@ -320,16 +351,18 @@ export default function ApiPage({ t }: { t: T }) {
       <p>{t.apiModelsHelp}</p>
       <table className="api-table api-table-models">
         <thead>
-          <tr><th>{t.apiColKey}</th><th>{t.paramsLabel}</th><th>{t.apiColFamily}</th><th>{t.apiColName}</th><th>{t.apiColCaps}</th></tr>
+          <tr><th>{t.apiColKey}</th><th>{t.apiColVariant}</th><th>{t.paramsLabel}</th><th>{t.source}</th><th>{t.apiColFamily}</th><th>{t.apiColName}</th><th>{t.apiColCaps}</th></tr>
         </thead>
         <tbody>
-          {MODEL_KEYS.map(([key, params, family, name, caps]) => (
-            <tr key={key}>
-              <td><code>{key}</code></td>
-              <td>{params || '—'}</td>
-              <td>{family}</td>
-              <td>{name}</td>
-              <td><span className={caps.includes('video') ? 'api-cap api-cap-video' : 'api-cap'}>{caps}</span></td>
+          {modelRows.map(row => (
+            <tr key={`${row.key}:${row.variant || 'default'}`}>
+              <td><code>{row.key}</code></td>
+              <td><code>{row.variant || '""'}</code></td>
+              <td>{row.params || '—'}</td>
+              <td>{row.source || '—'}</td>
+              <td>{row.family}</td>
+              <td>{row.name}</td>
+              <td><span className={row.caps.includes('video') ? 'api-cap api-cap-video' : 'api-cap'}>{row.caps.join(', ')}</span></td>
             </tr>
           ))}
         </tbody>

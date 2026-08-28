@@ -124,7 +124,7 @@ export default function App() {
         {tab === 'generate' && <GeneratePage models={models} onRefresh={refresh} onOpenModels={() => setTab('models')} t={t} />}
         {tab === 'models' && <ModelsPage models={models} onRefresh={refresh} t={t} />}
         {tab === 'jobs' && <JobsPage t={t} />}
-        {tab === 'api' && <ApiPage t={t} />}
+        {tab === 'api' && <ApiPage models={models} t={t} />}
       </main>
     </div>
   )

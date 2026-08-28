@@ -321,6 +321,17 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertGreater(generation._estimated_sd_cli_seconds(video_job), generation._estimated_sd_cli_seconds(image_job))
 
+    async def test_webm_output_rejects_avi_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "output.webm"
+            output.write_bytes(b"RIFFxxxxAVI ")
+
+            with self.assertRaisesRegex(RuntimeError, "AVI data"):
+                generation._assert_browser_playable_video(output)
+
+            output.write_bytes(b"\x1a\x45\xdf\xa3")
+            generation._assert_browser_playable_video(output)
+
     async def test_video_args_include_base_and_video_parameters(self):
         job = JobRecord(
             job_id="job_video",

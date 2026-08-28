@@ -5,7 +5,7 @@ FROM ${CUDA_DEVEL_BASE_IMAGE} AS sd-cpp-builder
 ARG GITHUB_ACCELERATOR=https://gh-proxy.com/
 ARG SD_CPP_REF=97d2990807fe6d558e395f8764198d7c7e7b411c
 ARG GGML_REF=8e800cef2948046cc47f9db6090491c6128ca42c
-ARG SD_CPP_CMAKE_ARGS="-DSD_CUDA=ON -DSD_WEBP=OFF -DSD_WEBM=OFF"
+ARG SD_CPP_CMAKE_ARGS="-DSD_CUDA=ON -DSD_WEBP=OFF -DSD_WEBM=ON"
 WORKDIR /tmp
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl build-essential cmake tar && rm -rf /var/lib/apt/lists/*
 COPY docker/install_sd_cpp.sh /usr/local/bin/install_sd_cpp.sh

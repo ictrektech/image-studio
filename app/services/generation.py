@@ -218,6 +218,7 @@ async def run_job(job: JobRecord) -> None:
                     job.progress = 0.12
                     save_job(job)
                     await run_sd_cpp(job, output, low_memory_retry=True, progress_base=0.12, progress_span=0.85)
+                _assert_browser_playable_video(output)
                 job.outputs = [output.name]
             else:
                 names = (
@@ -445,6 +446,18 @@ def _estimated_sd_cli_seconds(job: JobRecord) -> float:
         return max(90.0, min(work_units * 0.32, settings.video_timeout_seconds * 0.9))
     work_units = max(job.steps, 1) * max(job.batch_count, 1) * megapixels
     return max(15.0, min(work_units * 0.18, settings.default_timeout_seconds * 0.9))
+
+
+def _assert_browser_playable_video(output: Path) -> None:
+    if output.suffix.lower() != ".webm":
+        return
+    with output.open("rb") as f:
+        header = f.read(4)
+    if header == b"\x1a\x45\xdf\xa3":
+        return
+    if header == b"RIFF":
+        raise RuntimeError("sd-cli produced AVI data for output.webm; rebuild sd.cpp with SD_WEBM=ON")
+    raise RuntimeError("sd-cli produced an invalid output.webm file")
 
 
 def _runtime_string(

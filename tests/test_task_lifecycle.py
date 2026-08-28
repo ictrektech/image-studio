@@ -255,7 +255,17 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(args[args.index("--max-vram") + 1], "-2.0")
         self.assertIn("--vae-tiling", args)
         self.assertIn("--stream-layers", args)
+        self.assertNotIn("--offload-to-cpu", args)
         self.assertNotIn("--strength", args)
+
+        job.offload_to_cpu = True
+        with patch.object(generation, "runtime_paths_for", return_value={}):
+            args = generation.build_sd_args(job, Path("/tmp/output.webm"))
+        self.assertIn("--offload-to-cpu", args)
+
+    async def test_runtime_specs_do_not_force_cpu_offload(self):
+        for item in MODEL_DEFS:
+            self.assertNotIn("--offload-to-cpu", item["runtime"].get("extra_args") or [], item["key"])
 
     async def test_create_job_normalizes_unsupported_parameters(self):
         async def fake_run(_job):

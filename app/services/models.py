@@ -136,8 +136,8 @@ def _runtime(
     }
 
 
-# 拆分式图像家族共用的运行时参数（FLUX / Qwen / Wan 等文本编码器在 CPU 更稳）
-_FA_ARGS = ["--diffusion-fa", "--offload-to-cpu"]
+# 拆分式图像家族共用的运行时参数；CPU offload 只由请求参数显式控制。
+_FA_ARGS = ["--diffusion-fa"]
 
 
 def _with_runtime_defaults(spec: dict[str, Any], **defaults: Any) -> dict[str, Any]:
@@ -448,7 +448,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
             "llm": "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
             "t5xxl": "split_files/text_encoders/byt5_small_glyphxl_fp16.safetensors",
         },
-        extra_args=["--diffusion-fa", "--offload-to-cpu", "--vae-tiling", "-v"],
+        extra_args=["--diffusion-fa", "--vae-tiling", "-v"],
         defaults={"width": 1280, "height": 720, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
         negative=False,
     ),
@@ -461,7 +461,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
             "audio_vae": "vae/minimax_h3_audio_vae_fp32.safetensors",
             "llm": "qwen3vl_32b_minimax_h3-Q4_K_M.gguf",
         },
-        extra_args=["--diffusion-fa", "--offload-to-cpu", "--rng", "cpu", "-v"],
+        extra_args=["--diffusion-fa", "--rng", "cpu", "-v"],
         defaults={"width": 864, "height": 480, "steps": 20, "cfg_scale": 1.0, "sampler": "euler", "video_frames": 56, "fps": 24},
         negative=False,
         parameters={"cfg_scale": False, "reference_image": True},
@@ -541,7 +541,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
             "llm": "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
             "t5xxl": "split_files/text_encoders/byt5_small_glyphxl_fp16.safetensors",
         },
-        extra_args=["--diffusion-fa", "--offload-to-cpu", "--vae-tiling", "-v"],
+        extra_args=["--diffusion-fa", "--vae-tiling", "-v"],
         defaults={"width": 1280, "height": 720, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
         negative=False,
         parameters={"reference_image": True},
@@ -554,7 +554,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
             "llm": "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
             "t5xxl": "split_files/text_encoders/byt5_small_glyphxl_fp16.safetensors",
         },
-        extra_args=["--diffusion-fa", "--offload-to-cpu", "--vae-tiling", "-v"],
+        extra_args=["--diffusion-fa", "--vae-tiling", "-v"],
         defaults={"width": 960, "height": 480, "steps": 20, "cfg_scale": 6.0, "sampler": "euler", "video_frames": 33, "fps": 24},
         negative=False,
     ),
@@ -567,7 +567,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
             "audio_vae": "vae/minimax_h3_audio_vae_fp32.safetensors",
             "llm": "qwen3vl_32b_minimax_h3-Q4_K_M.gguf",
         },
-        extra_args=["--diffusion-fa", "--offload-to-cpu", "--rng", "cpu", "-v"],
+        extra_args=["--diffusion-fa", "--rng", "cpu", "-v"],
         defaults={"width": 864, "height": 480, "steps": 20, "cfg_scale": 1.0, "sampler": "euler", "video_frames": 56, "fps": 24},
         negative=False,
         parameters={"cfg_scale": False, "reference_image": True},

@@ -345,6 +345,7 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("-DSD_WEBM=ON", text)
                 self.assertIn("-DSD_USE_SYSTEM_WEBP=ON", text)
                 self.assertIn("libwebp", text)
+                self.assertIn("pkg-config", text)
                 self.assertIn("libwebpmux3", text)
                 self.assertNotIn("-DSD_WEBP=OFF", text)
                 self.assertNotIn("-DSD_WEBM=OFF", text)

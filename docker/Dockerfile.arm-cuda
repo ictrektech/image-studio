@@ -6,7 +6,7 @@ ARG SD_CPP_REF=97d2990807fe6d558e395f8764198d7c7e7b411c
 ARG GGML_REF=8e800cef2948046cc47f9db6090491c6128ca42c
 ARG SD_CPP_CMAKE_ARGS="-DSD_CUDA=ON -DSD_WEBP=ON -DSD_WEBM=ON -DSD_USE_SYSTEM_WEBP=ON"
 WORKDIR /tmp
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl build-essential cmake tar libwebp-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl build-essential cmake pkg-config tar libwebp-dev && rm -rf /var/lib/apt/lists/*
 COPY docker/install_sd_cpp.sh /usr/local/bin/install_sd_cpp.sh
 RUN chmod +x /usr/local/bin/install_sd_cpp.sh && SD_CPP_INSTALL_DIR=/opt/sd-cpp SD_CPP_SKIP_VERIFY=true /usr/local/bin/install_sd_cpp.sh
 

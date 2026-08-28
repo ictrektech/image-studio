@@ -1,7 +1,7 @@
 import asyncio
 import tempfile
 import unittest
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -204,8 +204,8 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
             batch_count=4,
             video_frames=120,
             fps=24,
-            created_at=datetime.now(UTC),
-            updated_at=datetime.now(UTC),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
 
         with patch.object(generation, "runtime_paths_for", return_value={}):
@@ -301,8 +301,8 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
             sampler="euler",
             seed=-1,
             batch_count=1,
-            created_at=datetime.now(UTC),
-            updated_at=datetime.now(UTC),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
             metadata={"init_input_id": "in_1"},
         )
 
@@ -315,7 +315,7 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("--strength", args)
 
     async def test_all_model_runtime_specs_build_expected_command_shape(self):
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         for item in MODEL_DEFS:
             runtime = item["runtime"]
             defaults = runtime.get("defaults") or {}

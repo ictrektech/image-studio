@@ -4,7 +4,7 @@ import asyncio
 import shlex
 import shutil
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from app.config import settings
@@ -47,7 +47,7 @@ async def create_job(user_key: str, request: GenerateRequest) -> JobRecord:
     parameters = runtime.get("parameters") or {}
     await assert_model_hub_ready(request.model_key)
     model_path = model_path_for(request.model_key)
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     supports_reference = parameters.get("reference_image", False)
     effective_video_frames = request.video_frames or int(defaults.get("video_frames", 0) or 0)
     if video_mode and effective_video_frames <= 1:

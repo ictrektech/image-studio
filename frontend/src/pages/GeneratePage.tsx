@@ -32,6 +32,7 @@ const initialPayload: GeneratePayload = {
   prompt: 'a cozy mountain cabin at dusk, warm lights, snowy pine trees, cinematic lighting, ultra detailed',
   negative_prompt: 'blurry, low quality, watermark, text, deformed',
   model_key: 'sd15',
+  model_variant: '',
   init_job_id: '',
   init_filename: '',
   init_input_id: '',
@@ -99,18 +100,21 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
   const messagesRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-  const imageModels = useMemo(() => models.filter(model =>
-    model.capabilities.includes('txt2img') || model.capabilities.includes('img2img') || model.capabilities.includes('video')), [models])
+  const imageModels = useMemo(() => models
+    .filter(model => model.capabilities.includes('txt2img') || model.capabilities.includes('img2img') || model.capabilities.includes('video'))
+    .sort((a, b) => Number(Boolean(b.variants?.length)) - Number(Boolean(a.variants?.length))), [models])
   const selectedModel = models.find(model => model.key === payload.model_key)
-  const modelReady = selectedModel?.status === 'ready'
-  const isVideoModel = selectedModel?.runtime?.mode === 'video'
-  const supportedParams = selectedModel?.runtime?.parameters || {}
+  const selectedVariant = selectedModel?.variants?.find(variant => variant.id === payload.model_variant)
+  const activeModel = selectedVariant || selectedModel
+  const modelReady = activeModel?.status === 'ready'
+  const isVideoModel = activeModel?.runtime?.mode === 'video'
+  const supportedParams = activeModel?.runtime?.parameters || {}
   const supportsParam = (name: string, fallback = true) => supportedParams[name] ?? fallback
-  const modelUsable = Boolean(selectedModel?.capabilities.includes('txt2img') || selectedModel?.capabilities.includes('img2img')) || isVideoModel
+  const modelUsable = Boolean(activeModel?.capabilities.includes('txt2img') || activeModel?.capabilities.includes('img2img')) || isVideoModel
   const supportsInit = supportsParam('reference_image', !isVideoModel)
-  const isEditModel = selectedModel?.runtime?.ref_flag === '-r'
+  const isEditModel = activeModel?.runtime?.ref_flag === '-r'
   const supportsStrength = supportsParam('strength', !isEditModel && !isVideoModel)
-  const negativeIgnored = !supportsParam('negative_prompt', selectedModel?.runtime?.negative !== false)
+  const negativeIgnored = !supportsParam('negative_prompt', activeModel?.runtime?.negative !== false)
   const hasRunning = jobs.some(job => job.status === 'queued' || job.status === 'running')
   const isImg2Img = Boolean((payload.init_job_id && payload.init_filename) || payload.init_input_id)
   const videoDuration = payload.fps > 0 && payload.video_frames > 0 ? (payload.video_frames / payload.fps).toFixed(1) : ''
@@ -121,19 +125,22 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
       : ''
 
   const modelName = (key: string) => models.find(m => m.key === key)?.name || key
+  const modelVariantName = (key: string, variantId?: string) => {
+    const model = models.find(m => m.key === key)
+    if (!variantId) return model?.name || key
+    const variant = model?.variants?.find(item => item.id === variantId)
+    return variant ? `${model?.name || key} · ${variant.name}` : model?.name || key
+  }
 
-  const switchModel = (key: string) => {
-    const next = models.find(model => model.key === key)
-    const defaults = next?.runtime?.defaults || {}
-    const nextVideoModel = next?.runtime?.mode === 'video'
-    setPayload({
-      ...payload,
-      model_key: key,
-      width: defaults.width ?? payload.width,
-      height: defaults.height ?? payload.height,
-      steps: defaults.steps ?? payload.steps,
-      cfg_scale: defaults.cfg_scale ?? payload.cfg_scale,
-      sampler: defaults.sampler ?? payload.sampler,
+  const applyRuntimeDefaults = (base: GeneratePayload, model: ModelInfo | undefined, nextVideoModel: boolean): GeneratePayload => {
+    const defaults = model?.runtime?.defaults || {}
+    return {
+      ...base,
+      width: defaults.width ?? base.width,
+      height: defaults.height ?? base.height,
+      steps: defaults.steps ?? base.steps,
+      cfg_scale: defaults.cfg_scale ?? base.cfg_scale,
+      sampler: defaults.sampler ?? base.sampler,
       scheduler: defaults.scheduler ?? '',
       clip_skip: defaults.clip_skip ?? -1,
       guidance: defaults.guidance ?? 0,
@@ -160,12 +167,12 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
       hires_height: defaults.hires_height ?? 0,
       hires_steps: defaults.hires_steps ?? 0,
       hires_denoising_strength: defaults.hires_denoising_strength ?? 0.7,
-      video_frames: defaults.video_frames ?? payload.video_frames,
-      fps: defaults.fps ?? payload.fps,
+      video_frames: defaults.video_frames ?? base.video_frames,
+      fps: defaults.fps ?? base.fps,
       vae_tiling: defaults.vae_tiling ?? nextVideoModel,
       vae_tile_size: defaults.vae_tile_size ?? '',
       vae_tile_overlap: defaults.vae_tile_overlap ?? 0.5,
-      temporal_tiling: defaults.temporal_tiling ?? next?.runtime?.parameters?.temporal_tiling ?? false,
+      temporal_tiling: defaults.temporal_tiling ?? model?.runtime?.parameters?.temporal_tiling ?? false,
       temporal_tile_frames: defaults.temporal_tile_frames ?? 4,
       temporal_tile_overlap: defaults.temporal_tile_overlap ?? 1,
       max_vram: defaults.max_vram ?? (nextVideoModel ? -2 : 0),
@@ -175,8 +182,24 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
       vae_cpu_fallback: defaults.vae_cpu_fallback ?? nextVideoModel,
       backend: defaults.backend ?? '',
       params_backend: defaults.params_backend ?? '',
-      batch_count: nextVideoModel ? 1 : payload.batch_count,
-    })
+      batch_count: nextVideoModel ? 1 : base.batch_count,
+    }
+  }
+
+  const switchModel = (key: string) => {
+    const next = models.find(model => model.key === key)
+    const nextVideoModel = next?.runtime?.mode === 'video'
+    setPayload(applyRuntimeDefaults({
+      ...payload,
+      model_key: key,
+      model_variant: '',
+    }, next, Boolean(nextVideoModel)))
+  }
+
+  const switchVariant = (variantId: string) => {
+    const next = variantId ? selectedModel?.variants?.find(variant => variant.id === variantId) : selectedModel
+    const nextVideoModel = next?.runtime?.mode === 'video'
+    setPayload(applyRuntimeDefaults({ ...payload, model_variant: variantId }, next, Boolean(nextVideoModel)))
   }
 
   const loadJobs = async () => {
@@ -278,23 +301,23 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
   }
 
   const downloadModel = async () => {
-    if (!selectedModel || selectedModel.status === 'downloading') return
+    if (!selectedModel || activeModel?.status === 'downloading') return
     try {
-      await api.pullModel(selectedModel.key)
+      await api.pullModel(selectedModel.key, false, payload.model_variant)
       onRefresh()
     } catch { /* 模型管理页有完整反馈，这里静默刷新即可 */ }
   }
 
   const stopModelDownload = async () => {
-    if (!selectedModel || selectedModel.status !== 'downloading') return
+    if (!selectedModel || activeModel?.status !== 'downloading') return
     try {
-      await api.stopModel(selectedModel.key)
+      await api.stopModel(selectedModel.key, payload.model_variant)
       onRefresh()
     } catch { /* 同上 */ }
   }
 
-  const modelDownloading = selectedModel?.status === 'downloading'
-  const modelProgress = modelDownloading ? Math.round((selectedModel?.progress ?? 0) * 100) : 0
+  const modelDownloading = activeModel?.status === 'downloading'
+  const modelProgress = modelDownloading ? Math.round((activeModel?.progress ?? 0) * 100) : 0
 
   const deleteJob = async (job: JobRecord) => {
     const hasVideoOutput = job.outputs.some(isVideoFile)
@@ -311,9 +334,17 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
         <div className="quick-settings-grid">
           <div className="quick-field quick-model-field">
             <label>{t.modelPanelTitle}</label>
-            <select value={payload.model_key} onChange={e => switchModel(e.target.value)}>
-              {imageModels.map(model => <option key={model.key} value={model.key}>{model.name}{model.params ? ` (${model.params})` : ''} · {model.family}</option>)}
-            </select>
+            <div className="quick-model-selectors">
+              <select value={payload.model_key} onChange={e => switchModel(e.target.value)}>
+                {imageModels.map(model => <option key={model.key} value={model.key}>{model.name}{model.params ? ` (${model.params})` : ''} · {model.family}</option>)}
+              </select>
+              {selectedModel && Boolean(selectedModel.variants?.length) && (
+                <select value={payload.model_variant} onChange={e => switchVariant(e.target.value)}>
+                  <option value="">{t.defaultModelVariant}</option>
+                  {selectedModel.variants?.map(variant => <option key={variant.id} value={variant.id}>{variant.name}{variant.params ? ` (${variant.params})` : ''}</option>)}
+                </select>
+              )}
+            </div>
           </div>
           <div className="quick-field"><label>{t.width}</label><input type="number" value={payload.width} onChange={e => setPayload({ ...payload, width: Number(e.target.value) })} /></div>
           <div className="quick-field"><label>{t.height}</label><input type="number" value={payload.height} onChange={e => setPayload({ ...payload, height: Number(e.target.value) })} /></div>
@@ -328,10 +359,10 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
         </div>
         <div className={`quick-model-status ${modelReady ? 'ready' : modelDownloading ? 'downloading' : 'missing'}`}>
           <span className="quick-status-dot" />
-          <strong>{selectedModel?.name || t.noModelsConfigured}</strong>
+          <strong>{activeModel?.name || selectedModel?.name || t.noModelsConfigured}</strong>
           <span>{modelReady ? t.modelReady : modelDownloading ? `${t.modelDownloading} ${modelProgress}%` : modelUsable ? t.modelMissing : t.chooseModelHint}</span>
-          {selectedModel && <code>{selectedModel.source} · {selectedModel.family} · {formatSize(modelSize(selectedModel))}</code>}
-          {!modelReady && selectedModel && (
+          {activeModel && <code>{activeModel.source} · {activeModel.family} · {formatSize(modelSize(activeModel))}</code>}
+          {!modelReady && activeModel && (
             <button className="quiet-button" disabled={modelDownloading} onClick={downloadModel}>
               {modelDownloading ? <Loader2 size={13} className="spin" /> : <DownloadCloud size={13} />}
               {modelDownloading ? `${modelProgress}%` : t.downloadModel}
@@ -390,7 +421,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
                   <div className="chat-bubble">
                     <div className="chat-msg-meta">
                       <span>#{round} {t.meLabel} · {timeOf(job.created_at)}</span>
-                      <span>{modelName(job.model_key)} · {job.width}×{job.height} · {job.steps} steps · cfg {job.cfg_scale} · {job.sampler}{job.seed >= 0 ? ` · seed ${job.seed}` : ''}{job.video_frames > 1 ? ` · ${job.video_frames}f${job.fps ? `@${job.fps}` : ''}` : ''}</span>
+                      <span>{modelVariantName(job.model_key, job.model_variant)} · {job.width}×{job.height} · {job.steps} steps · cfg {job.cfg_scale} · {job.sampler}{job.seed >= 0 ? ` · seed ${job.seed}` : ''}{job.video_frames > 1 ? ` · ${job.video_frames}f${job.fps ? `@${job.fps}` : ''}` : ''}</span>
                       {lineage && <span>↳ {lineage}</span>}
                     </div>
                     {initThumb && <img className="chat-msg-init" src={initThumb} alt="" />}
@@ -400,7 +431,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
                 </div>
                 <div className="chat-msg assistant-msg">
                   <div className={`chat-bubble ${job.status === 'failed' ? 'failed' : ''}`}>
-                    <div className="chat-msg-meta"><span>{modelName(job.model_key)}</span></div>
+                    <div className="chat-msg-meta"><span>{modelVariantName(job.model_key, job.model_variant)}</span></div>
                     {job.status === 'succeeded' && job.outputs.map(output => {
                       const url = api.outputUrl(job.job_id, output)
                       if (isVideoFile(output)) {
@@ -568,7 +599,9 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
                 <div><label>{t.highNoiseSteps}{!supportsParam('high_noise_steps', false) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label><input type="number" min="0" max="150" value={payload.high_noise_steps} disabled={!supportsParam('high_noise_steps', false)} onChange={e => setPayload({ ...payload, high_noise_steps: Number(e.target.value) })} /></div>
                 <div><label>{t.highNoiseCfg}{!supportsParam('high_noise_cfg_scale', false) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label><input type="number" min="0" max="30" step="0.5" value={payload.high_noise_cfg_scale} disabled={!supportsParam('high_noise_cfg_scale', false)} onChange={e => setPayload({ ...payload, high_noise_cfg_scale: Number(e.target.value) })} /></div>
               </div>
-              <div className="control-row"><div><label>{t.highNoiseSampler}</label><select value={payload.high_noise_sampler} disabled={!supportsParam('high_noise_sampler', false)} onChange={e => setPayload({ ...payload, high_noise_sampler: e.target.value })}><option value="">{t.modelDefault}</option>{samplerOptions.map(v => <option value={v} key={v}>{v}</option>)}</select></div></div>
+              <div className="control-row">
+                <div><label>{t.highNoiseSampler}{!supportsParam('high_noise_sampler', false) && <em className="ignored-tag">{t.paramIgnoredTag}</em>}</label><select value={payload.high_noise_sampler} disabled={!supportsParam('high_noise_sampler', false)} onChange={e => setPayload({ ...payload, high_noise_sampler: e.target.value })}><option value="">{t.modelDefault}</option>{samplerOptions.map(v => <option value={v} key={v}>{v}</option>)}</select></div>
+              </div>
               {videoDuration && <span className="video-duration">{t.videoDurationHint} {videoDuration} {t.videoSeconds}</span>}
             </div>
           </details>

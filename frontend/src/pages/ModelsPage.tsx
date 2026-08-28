@@ -1,5 +1,5 @@
 import { CheckCircle2, DownloadCloud, Loader2, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck, Square } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api, ModelInfo } from '../api/client'
 import { messages } from '../i18n'
 
@@ -39,7 +39,12 @@ function sizeDisplay(model: ModelInfo, t: typeof messages['zh-CN']) {
 export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo[]; onRefresh: () => void; t: typeof messages['zh-CN'] }) {
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
+  const [variants, setVariants] = useState<Record<string, string>>({})
   const downloading = models.some(model => model.status === 'downloading')
+  const sortedModels = useMemo(
+    () => [...models].sort((a, b) => Number(Boolean(b.variants?.length)) - Number(Boolean(a.variants?.length))),
+    [models],
+  )
 
   useEffect(() => {
     if (!downloading) return
@@ -47,14 +52,17 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
     return () => clearInterval(timer)
   }, [downloading, onRefresh])
 
-  const run = async (key: string, action: 'pull' | 'pull-force' | 'stop' | 'sync') => {
-    setBusy(`${key}:${action}`)
+  const selectedInfo = (model: ModelInfo) => model.variants?.find(variant => variant.id === variants[model.key]) || model
+
+  const run = async (model: ModelInfo, action: 'pull' | 'pull-force' | 'stop' | 'sync') => {
+    const variant = variants[model.key] || ''
+    setBusy(`${model.key}:${variant}:${action}`)
     setMessage('')
     try {
-      if (action === 'pull') await api.pullModel(key)
-      else if (action === 'pull-force') await api.pullModel(key, true)
-      else if (action === 'stop') await api.stopModel(key)
-      else await api.syncModel(key)
+      if (action === 'pull') await api.pullModel(model.key, false, variant)
+      else if (action === 'pull-force') await api.pullModel(model.key, true, variant)
+      else if (action === 'stop') await api.stopModel(model.key, variant)
+      else await api.syncModel(model.key)
       setMessage(action === 'pull' ? t.pullSubmitted : action === 'pull-force' ? t.pullSubmitted : action === 'stop' ? t.stopSubmitted : t.syncSubmitted)
       onRefresh()
     } catch (e: any) {
@@ -77,10 +85,11 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
         {message && <div className="notice">{message}</div>}
         {models.length === 0 && <div className="empty-small">{t.noModelsConfigured}</div>}
         <div className="model-card-grid">
-          {models.map(model => {
-            const ready = model.status === 'ready'
-            const downloading = model.status === 'downloading'
-            const failed = model.status === 'failed'
+          {sortedModels.map(model => {
+            const active = selectedInfo(model)
+            const ready = active.status === 'ready'
+            const downloading = active.status === 'downloading'
+            const failed = active.status === 'failed'
             return (
               <article className={`managed-model-card ${ready ? 'ready' : 'pending'}`} key={model.key}>
                 <div className="model-card-header">
@@ -92,6 +101,12 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
                       {model.capabilities.map(capability => <span key={capability}>{capability}</span>)}
                     </div>
                     <p>{model.description}</p>
+                    {Boolean(model.variants?.length) && (
+                      <select className="model-variant-select" value={variants[model.key] || ''} onChange={e => setVariants({ ...variants, [model.key]: e.target.value })}>
+                        <option value="">{t.defaultModelVariant}</option>
+                        {model.variants?.map(variant => <option key={variant.id} value={variant.id}>{variant.name}{variant.params ? ` (${variant.params})` : ''}</option>)}
+                      </select>
+                    )}
                   </div>
                   <span className={`model-status ${ready ? 'ready' : 'pending'}`}>
                     {ready && <ShieldCheck size={14} />}
@@ -102,39 +117,40 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
                 </div>
 
                 <div className="model-meta">
-                  <div><span>{t.modelId}</span><code>{model.model_id}</code></div>
-                  <div><span>{t.source}</span><code>{model.source}</code></div>
-                  <div><span>{t.family}</span><code>{model.family}</code></div>
-                  <div><span>{t.paramsLabel}</span><code>{model.params || '-'}</code></div>
-                  <div><span>{t.capabilities}</span><code>{model.capabilities.join(', ')}</code></div>
-                  <div><span>{t.loadPath}</span><code>{model.resolved_path || model.access_path}</code></div>
-                  <div><span>{t.expectedFiles}</span><code>{model.expected_files.join(', ')}</code></div>
-                  <div><span>{t.size}</span><code>{sizeDisplay(model, t)}</code></div>
-                  <div><span>{t.status}</span><code>{model.status}</code></div>
+                  <div><span>{t.modelVariant}</span><code>{variants[model.key] ? active.name : t.defaultModelVariant}</code></div>
+                  <div><span>{t.modelId}</span><code>{active.model_id}</code></div>
+                  <div><span>{t.source}</span><code>{active.source}</code></div>
+                  <div><span>{t.family}</span><code>{active.family}</code></div>
+                  <div><span>{t.paramsLabel}</span><code>{active.params || '-'}</code></div>
+                  <div><span>{t.capabilities}</span><code>{active.capabilities.join(', ')}</code></div>
+                  <div><span>{t.loadPath}</span><code>{active.resolved_path || active.access_path}</code></div>
+                  <div><span>{t.expectedFiles}</span><code>{active.expected_files.join(', ')}</code></div>
+                  <div><span>{t.size}</span><code>{sizeDisplay(active, t)}</code></div>
+                  <div><span>{t.status}</span><code>{active.status}</code></div>
                 </div>
 
-                <progress className="model-progress" max="100" value={percent(model)} />
-                {downloading && model.current_file && (
+                <progress className="model-progress" max="100" value={percent(active)} />
+                {downloading && active.current_file && (
                   <p className="model-current-file">
-                    {t.downloadingFile}: {model.current_file}{bytesText(model) && ` · ${bytesText(model)}`}
+                    {t.downloadingFile}: {active.current_file}{bytesText(active) && ` · ${bytesText(active)}`}
                   </p>
                 )}
-                {failed && model.error && <p className="model-error">{model.error}</p>}
+                {failed && active.error && <p className="model-error">{active.error}</p>}
 
                 <div className="model-actions">
                   <button
                     className="primary-action compact-action"
                     disabled={ready || downloading || Boolean(busy)}
-                    onClick={() => run(model.key, 'pull')}
+                    onClick={() => run(model, 'pull')}
                   >
                     {ready ? <CheckCircle2 size={15} /> : <DownloadCloud size={15} />}
-                    {ready ? t.downloaded : downloading ? `${t.modelDownloading} ${percent(model)}%` : t.downloadModel}
+                    {ready ? t.downloaded : downloading ? `${t.modelDownloading} ${percent(active)}%` : t.downloadModel}
                   </button>
                   {downloading && (
                     <button
                       className="secondary-action compact-action"
                       disabled={Boolean(busy)}
-                      onClick={() => run(model.key, 'stop')}
+                      onClick={() => run(model, 'stop')}
                     >
                       <Square size={15} />{t.stopDownload}
                     </button>
@@ -143,7 +159,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
                     <button
                       className="secondary-action compact-action"
                       disabled={Boolean(busy)}
-                      onClick={() => run(model.key, 'pull-force')}
+                      onClick={() => run(model, 'pull-force')}
                     >
                       <RotateCcw size={15} />{t.redownload}
                     </button>
@@ -151,7 +167,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
                   <button
                     className="secondary-action compact-action"
                     disabled={Boolean(busy)}
-                    onClick={() => run(model.key, 'sync')}
+                    onClick={() => run(model, 'sync')}
                   >
                     <RefreshCw size={15} />{t.syncModel}
                   </button>
@@ -165,7 +181,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
       <section className="panel model-path-panel">
         <div className="panel-title">{t.modelHubPathGuide}</div>
         <p>{t.modelHubPathHelp}</p>
-        {models.map(model => (
+        {sortedModels.map(model => (
           <div className="path-guide" key={model.key}>
             <span>{model.name}</span>
             <code>{model.access_path}</code>

@@ -10,6 +10,7 @@ class GenerateRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=4000)
     negative_prompt: str = ""
     model_key: str = "sd15"
+    model_variant: str = ""
     init_job_id: str = ""
     init_filename: str = ""
     init_input_id: str = ""
@@ -72,6 +73,7 @@ class JobRecord(BaseModel):
     prompt: str
     negative_prompt: str = ""
     model_key: str
+    model_variant: str = ""
     model_path: str
     width: int
     height: int
@@ -144,6 +146,7 @@ class ModelInfo(BaseModel):
     expected_files: list[str]
     params: str = ""
     runtime: dict[str, Any] = Field(default_factory=dict)
+    variants: list[dict[str, Any]] = Field(default_factory=list)
     access_path: str
     resolved_path: str | None = None
     status: Literal["ready", "missing", "downloading", "failed", "unknown"] = "unknown"

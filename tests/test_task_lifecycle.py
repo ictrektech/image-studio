@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from app.models import JobRecord
 from app.services import generation, hf_downloader
-from app.services.models import MODEL_DEFS, MODEL_SCOPE_FILES, MODEL_SIZES, merge_model_hub_state, model_info
+from app.services.models import MODEL_DEFS, MODEL_SCOPE_FILES, MODEL_SIZES, MODEL_VARIANTS, get_model_def, merge_model_hub_state, model_info
 
 
 class ModelRegistryTest(unittest.TestCase):
@@ -49,6 +49,31 @@ class ModelRegistryTest(unittest.TestCase):
 
         self.assertEqual(info["status"], "ready")
         self.assertIsNone(info.get("progress"))
+
+    def test_quantized_variants_preserve_model_count_and_runtime_roles(self):
+        self.assertEqual(len(MODEL_DEFS), 45)
+        self.assertGreaterEqual(sum(len(items) for items in MODEL_VARIANTS.values()), 30)
+
+        for item in MODEL_DEFS:
+            info = model_info(item)
+            with self.subTest(key=item["key"]):
+                self.assertEqual(info.key, item["key"])
+                self.assertEqual(info.model_id, f"vivibit/image-studio-{item['key']}")
+                for variant in info.variants:
+                    effective = get_model_def(item["key"], variant["id"])
+                    self.assertNotEqual(effective["expected_files"], [])
+                    self.assertEqual(variant["model_id"], effective["model_id"])
+                    files = set(effective["expected_files"])
+                    for role_path in (effective["runtime"].get("roles") or {}).values():
+                        self.assertIn(role_path, files)
+
+        wan22 = get_model_def("wan22-t2v-a14b", "q4_k_m")
+        self.assertEqual(wan22["files"][0], "LowNoise/Wan2.2-T2V-A14B-LowNoise-Q4_K_M.gguf")
+        self.assertEqual(
+            wan22["runtime"]["roles"]["high_noise"],
+            "HighNoise/Wan2.2-T2V-A14B-HighNoise-Q4_K_M.gguf",
+        )
+        self.assertEqual(wan22["runtime"]["roles"]["t5xxl"], "umt5-xxl-encoder-Q4_K_M.gguf")
 
 
 class DownloadLifecycleTest(unittest.IsolatedAsyncioTestCase):

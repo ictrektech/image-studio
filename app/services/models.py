@@ -814,6 +814,104 @@ MODEL_SIZES: dict[str, int] = {
 def _ms_source(key: str) -> dict[str, Any]:
     return {"source": "ms", "model_id": f"vivibit/image-studio-{key}", "files": MODEL_SCOPE_FILES[key]}
 
+
+def _ms_repo_source(model_id: str, files: list[str]) -> dict[str, Any]:
+    return {"source": "ms", "model_id": model_id, "files": files}
+
+
+def _variant(
+    variant_id: str,
+    name: str,
+    sources: list[dict[str, Any]],
+    description: str,
+    runtime: dict[str, Any] | None = None,
+    params: str = "",
+    size: int | None = None,
+) -> dict[str, Any]:
+    return {
+        "id": variant_id,
+        "name": name,
+        "sources": sources,
+        "description": description,
+        "runtime": runtime or {},
+        "params": params,
+        "size": size,
+    }
+
+
+MODEL_VARIANTS: dict[str, list[dict[str, Any]]] = {
+    "sd15": [
+        _variant("q4_0", "Q4_0", [_ms_repo_source("gpustack/stable-diffusion-v1-5-GGUF", ["stable-diffusion-v1-5-Q4_0.gguf"])], "ModelScope GGUF Q4_0 checkpoint for sd.cpp.", params="860M"),
+        _variant("q8_0", "Q8_0", [_ms_repo_source("gpustack/stable-diffusion-v1-5-GGUF", ["stable-diffusion-v1-5-Q8_0.gguf"])], "ModelScope GGUF Q8_0 checkpoint for sd.cpp.", params="860M"),
+    ],
+    "sd2": [
+        _variant("q4_0", "Q4_0", [_ms_repo_source("gpustack/stable-diffusion-v2-1-GGUF", ["stable-diffusion-v2-1-Q4_0.gguf"])], "ModelScope GGUF Q4_0 checkpoint for sd.cpp.", params="865M"),
+        _variant("q8_0", "Q8_0", [_ms_repo_source("gpustack/stable-diffusion-v2-1-GGUF", ["stable-diffusion-v2-1-Q8_0.gguf"])], "ModelScope GGUF Q8_0 checkpoint for sd.cpp.", params="865M"),
+    ],
+    "sdxl": [
+        _variant("q4_0", "Q4_0", [_ms_repo_source("gpustack/stable-diffusion-xl-base-1.0-GGUF", ["stable-diffusion-xl-base-1.0-Q4_0.gguf"])], "ModelScope SDXL GGUF Q4_0 checkpoint for sd.cpp.", params="3.5B"),
+        _variant("q8_0", "Q8_0", [_ms_repo_source("gpustack/stable-diffusion-xl-base-1.0-GGUF", ["stable-diffusion-xl-base-1.0-Q8_0.gguf"])], "ModelScope SDXL GGUF Q8_0 checkpoint for sd.cpp.", params="3.5B"),
+    ],
+    "sd3": [
+        _variant("q4_0", "Q4_0", [_ms_repo_source("gpustack/stable-diffusion-v3-medium-GGUF", ["stable-diffusion-v3-medium-Q4_0.gguf"])], "ModelScope SD3 Medium GGUF Q4_0 checkpoint for sd.cpp.", params="2B"),
+        _variant("q8_0", "Q8_0", [_ms_repo_source("gpustack/stable-diffusion-v3-medium-GGUF", ["stable-diffusion-v3-medium-Q8_0.gguf"])], "ModelScope SD3 Medium GGUF Q8_0 checkpoint for sd.cpp.", params="2B"),
+    ],
+    "sd35": [
+        _variant("q4_0", "Q4_0", [_ms_repo_source("gpustack/stable-diffusion-v3-5-large-GGUF", ["stable-diffusion-v3-5-large-Q4_0.gguf"])], "ModelScope SD3.5 Large GGUF Q4_0 checkpoint for sd.cpp.", runtime={"roles": {}}, params="8.1B"),
+        _variant("q8_0", "Q8_0", [_ms_repo_source("gpustack/stable-diffusion-v3-5-large-GGUF", ["stable-diffusion-v3-5-large-Q8_0.gguf"])], "ModelScope SD3.5 Large GGUF Q8_0 checkpoint for sd.cpp.", runtime={"roles": {}}, params="8.1B"),
+    ],
+    "sd35-medium": [
+        _variant("q4_0", "Q4_0", [_ms_repo_source("gpustack/stable-diffusion-v3-5-medium-GGUF", ["stable-diffusion-v3-5-medium-Q4_0.gguf"])], "ModelScope SD3.5 Medium GGUF Q4_0 checkpoint for sd.cpp.", params="2.5B"),
+        _variant("q8_0", "Q8_0", [_ms_repo_source("gpustack/stable-diffusion-v3-5-medium-GGUF", ["stable-diffusion-v3-5-medium-Q8_0.gguf"])], "ModelScope SD3.5 Medium GGUF Q8_0 checkpoint for sd.cpp.", params="2.5B"),
+    ],
+    "flux-schnell": [
+        _variant("q4_k_s", "Q4_K_S", [_ms_repo_source("vivibit/image-studio-flux-schnell-q4ks", ["flux1-schnell-Q4_K_S.gguf", "ae.safetensors", "clip_l.safetensors", "t5xxl_fp16.safetensors"])], "Dedicated vivibit ModelScope repo mirrored from HF city96/FLUX.1-schnell-gguf plus required sd.cpp auxiliary files.", params="12B"),
+    ],
+    "flux-dev": [
+        _variant("q4_0", "Q4_0", [_ms_repo_source("gpustack/FLUX.1-dev-GGUF", ["FLUX.1-dev-Q4_0.gguf"]), _ms_source("flux-dev")], "ModelScope FLUX.1 Dev GGUF Q4_0 main model with existing vivibit auxiliary files.", params="12B"),
+        _variant("q8_0", "Q8_0", [_ms_repo_source("gpustack/FLUX.1-dev-GGUF", ["FLUX.1-dev-Q8_0.gguf"]), _ms_source("flux-dev")], "ModelScope FLUX.1 Dev GGUF Q8_0 main model with existing vivibit auxiliary files.", params="12B"),
+    ],
+    "qwen-image": [
+        _variant("q4_k_m", "Q4_K_M", [_ms_repo_source("city96/Qwen-Image-gguf", ["qwen-image-Q4_K_M.gguf"]), _ms_source("qwen-image")], "ModelScope Qwen Image GGUF Q4_K_M main model with existing vivibit VAE/text encoder files.", params="20B"),
+        _variant("q8_0", "Q8_0", [_ms_repo_source("city96/Qwen-Image-gguf", ["qwen-image-Q8_0.gguf"]), _ms_source("qwen-image")], "ModelScope Qwen Image GGUF Q8_0 main model with existing vivibit VAE/text encoder files.", params="20B"),
+    ],
+    "qwen-image-edit": [
+        _variant("q4_k_m", "Q4_K_M", [_ms_repo_source("QuantStack/Qwen-Image-Edit-2509-GGUF", ["Qwen-Image-Edit-2509-Q4_K_M.gguf"]), _ms_source("qwen-image-edit")], "ModelScope Qwen Image Edit 2509 GGUF Q4_K_M main model with existing vivibit VAE/text encoder files.", params="20B"),
+        _variant("q8_0", "Q8_0", [_ms_repo_source("QuantStack/Qwen-Image-Edit-2509-GGUF", ["Qwen-Image-Edit-2509-Q8_0.gguf"]), _ms_source("qwen-image-edit")], "ModelScope Qwen Image Edit 2509 GGUF Q8_0 main model with existing vivibit VAE/text encoder files.", params="20B"),
+    ],
+    "wan21": [
+        _variant("q4_k_m", "Q4_K_M", [_ms_repo_source("calcuis/wan-1.3b-gguf", ["wan2.1_t2v_1.3b-q4_k_m.gguf", "umt5-xxl-encoder-q4_k_m.gguf", "pig_wan_vae_fp32-f16.gguf"])], "ModelScope Wan 2.1 T2V 1.3B GGUF Q4_K_M package with matching T5/VAE files.", runtime={"roles": {"vae": "pig_wan_vae_fp32-f16.gguf", "t5xxl": "umt5-xxl-encoder-q4_k_m.gguf"}}, params="1.3B"),
+        _variant("q8_0", "Q8_0", [_ms_repo_source("calcuis/wan-1.3b-gguf", ["wan2.1_t2v_1.3b-q8_0.gguf", "umt5-xxl-encoder-q4_k_m.gguf", "pig_wan_vae_fp32-f16.gguf"])], "ModelScope Wan 2.1 T2V 1.3B GGUF Q8_0 main model with Q4_K_M T5 and matching VAE.", runtime={"roles": {"vae": "pig_wan_vae_fp32-f16.gguf", "t5xxl": "umt5-xxl-encoder-q4_k_m.gguf"}}, params="1.3B"),
+    ],
+    "wan22": [
+        _variant("q4_k_m", "Q4_K_M", [_ms_repo_source("QuantStack/Wan2.2-TI2V-5B-GGUF", ["Wan2.2-TI2V-5B-Q4_K_M.gguf", "VAE/Wan2.2_VAE.safetensors"]), _ms_repo_source("city96/umt5-xxl-encoder-gguf", ["umt5-xxl-encoder-Q4_K_M.gguf"])], "ModelScope Wan 2.2 TI2V 5B GGUF Q4_K_M main model with quantized umT5 encoder.", runtime={"roles": {"vae": "VAE/Wan2.2_VAE.safetensors", "t5xxl": "umt5-xxl-encoder-Q4_K_M.gguf"}}, params="5B"),
+        _variant("q8_0", "Q8_0", [_ms_repo_source("QuantStack/Wan2.2-TI2V-5B-GGUF", ["Wan2.2-TI2V-5B-Q8_0.gguf", "VAE/Wan2.2_VAE.safetensors"]), _ms_repo_source("city96/umt5-xxl-encoder-gguf", ["umt5-xxl-encoder-Q8_0.gguf"])], "ModelScope Wan 2.2 TI2V 5B GGUF Q8_0 main model with quantized umT5 encoder.", runtime={"roles": {"vae": "VAE/Wan2.2_VAE.safetensors", "t5xxl": "umt5-xxl-encoder-Q8_0.gguf"}}, params="5B"),
+    ],
+    "wan21-t2v-14b": [
+        _variant("q4_k_m", "Q4_K_M", [_ms_repo_source("city96/Wan2.1-T2V-14B-gguf", ["wan2.1-t2v-14b-Q4_K_M.gguf"]), _ms_repo_source("city96/umt5-xxl-encoder-gguf", ["umt5-xxl-encoder-Q4_K_M.gguf"]), _ms_source("wan21-t2v-14b")], "ModelScope Wan 2.1 T2V 14B GGUF Q4_K_M main model with quantized umT5 encoder.", runtime={"roles": {"vae": "split_files/vae/wan_2.1_vae.safetensors", "t5xxl": "umt5-xxl-encoder-Q4_K_M.gguf"}}, params="14B"),
+        _variant("q8_0", "Q8_0", [_ms_repo_source("city96/Wan2.1-T2V-14B-gguf", ["wan2.1-t2v-14b-Q8_0.gguf"]), _ms_repo_source("city96/umt5-xxl-encoder-gguf", ["umt5-xxl-encoder-Q8_0.gguf"]), _ms_source("wan21-t2v-14b")], "ModelScope Wan 2.1 T2V 14B GGUF Q8_0 main model with quantized umT5 encoder.", runtime={"roles": {"vae": "split_files/vae/wan_2.1_vae.safetensors", "t5xxl": "umt5-xxl-encoder-Q8_0.gguf"}}, params="14B"),
+    ],
+    "wan21-i2v-14b": [
+        _variant("q4_k_m", "Q4_K_M", [_ms_repo_source("city96/Wan2.1-I2V-14B-480P-gguf", ["wan2.1-i2v-14b-480p-Q4_K_M.gguf"]), _ms_repo_source("city96/umt5-xxl-encoder-gguf", ["umt5-xxl-encoder-Q4_K_M.gguf"]), _ms_source("wan21-i2v-14b")], "ModelScope Wan 2.1 I2V 14B 480P GGUF Q4_K_M main model with quantized umT5 encoder.", runtime={"roles": {"vae": "split_files/vae/wan_2.1_vae.safetensors", "t5xxl": "umt5-xxl-encoder-Q4_K_M.gguf", "clip_vision": "split_files/clip_vision/clip_vision_h.safetensors"}}, params="14B"),
+        _variant("q8_0", "Q8_0", [_ms_repo_source("city96/Wan2.1-I2V-14B-480P-gguf", ["wan2.1-i2v-14b-480p-Q8_0.gguf"]), _ms_repo_source("city96/umt5-xxl-encoder-gguf", ["umt5-xxl-encoder-Q8_0.gguf"]), _ms_source("wan21-i2v-14b")], "ModelScope Wan 2.1 I2V 14B 480P GGUF Q8_0 main model with quantized umT5 encoder.", runtime={"roles": {"vae": "split_files/vae/wan_2.1_vae.safetensors", "t5xxl": "umt5-xxl-encoder-Q8_0.gguf", "clip_vision": "split_files/clip_vision/clip_vision_h.safetensors"}}, params="14B"),
+    ],
+    "wan22-t2v-a14b": [
+        _variant("q4_k_m", "Q4_K_M", [_ms_repo_source("QuantStack/Wan2.2-T2V-A14B-GGUF", ["LowNoise/Wan2.2-T2V-A14B-LowNoise-Q4_K_M.gguf", "HighNoise/Wan2.2-T2V-A14B-HighNoise-Q4_K_M.gguf", "VAE/Wan2.1_VAE.safetensors"]), _ms_repo_source("city96/umt5-xxl-encoder-gguf", ["umt5-xxl-encoder-Q4_K_M.gguf"])], "ModelScope Wan 2.2 T2V A14B GGUF Q4_K_M low/high-noise pair with quantized umT5 encoder.", runtime={"roles": {"high_noise": "HighNoise/Wan2.2-T2V-A14B-HighNoise-Q4_K_M.gguf", "vae": "VAE/Wan2.1_VAE.safetensors", "t5xxl": "umt5-xxl-encoder-Q4_K_M.gguf"}}, params="14B×2"),
+        _variant("q8_0", "Q8_0", [_ms_repo_source("QuantStack/Wan2.2-T2V-A14B-GGUF", ["LowNoise/Wan2.2-T2V-A14B-LowNoise-Q8_0.gguf", "HighNoise/Wan2.2-T2V-A14B-HighNoise-Q8_0.gguf", "VAE/Wan2.1_VAE.safetensors"]), _ms_repo_source("city96/umt5-xxl-encoder-gguf", ["umt5-xxl-encoder-Q8_0.gguf"])], "ModelScope Wan 2.2 T2V A14B GGUF Q8_0 low/high-noise pair with quantized umT5 encoder.", runtime={"roles": {"high_noise": "HighNoise/Wan2.2-T2V-A14B-HighNoise-Q8_0.gguf", "vae": "VAE/Wan2.1_VAE.safetensors", "t5xxl": "umt5-xxl-encoder-Q8_0.gguf"}}, params="14B×2"),
+    ],
+    "wan22-i2v-a14b": [
+        _variant("q4_k_m", "Q4_K_M", [_ms_repo_source("QuantStack/Wan2.2-I2V-A14B-GGUF", ["LowNoise/Wan2.2-I2V-A14B-LowNoise-Q4_K_M.gguf", "HighNoise/Wan2.2-I2V-A14B-HighNoise-Q4_K_M.gguf", "VAE/Wan2.1_VAE.safetensors"]), _ms_repo_source("city96/umt5-xxl-encoder-gguf", ["umt5-xxl-encoder-Q4_K_M.gguf"])], "ModelScope Wan 2.2 I2V A14B GGUF Q4_K_M low/high-noise pair with quantized umT5 encoder.", runtime={"roles": {"high_noise": "HighNoise/Wan2.2-I2V-A14B-HighNoise-Q4_K_M.gguf", "vae": "VAE/Wan2.1_VAE.safetensors", "t5xxl": "umt5-xxl-encoder-Q4_K_M.gguf"}}, params="14B×2"),
+        _variant("q8_0", "Q8_0", [_ms_repo_source("QuantStack/Wan2.2-I2V-A14B-GGUF", ["LowNoise/Wan2.2-I2V-A14B-LowNoise-Q8_0.gguf", "HighNoise/Wan2.2-I2V-A14B-HighNoise-Q8_0.gguf", "VAE/Wan2.1_VAE.safetensors"]), _ms_repo_source("city96/umt5-xxl-encoder-gguf", ["umt5-xxl-encoder-Q8_0.gguf"])], "ModelScope Wan 2.2 I2V A14B GGUF Q8_0 low/high-noise pair with quantized umT5 encoder.", runtime={"roles": {"high_noise": "HighNoise/Wan2.2-I2V-A14B-HighNoise-Q8_0.gguf", "vae": "VAE/Wan2.1_VAE.safetensors", "t5xxl": "umt5-xxl-encoder-Q8_0.gguf"}}, params="14B×2"),
+    ],
+    "lens": [
+        _variant("turbo_q4_0", "Turbo Q4_0", [_ms_repo_source("gguf-org/lens-gguf", ["lens_turbo-q4_0.gguf", "pig_flux2_vae_fp32-f16.gguf"]), _ms_source("lens")], "ModelScope Lens Turbo GGUF Q4_0 main model; kept as an explicit non-default variant until smoke-tested.", runtime={"roles": {"vae": "pig_flux2_vae_fp32-f16.gguf", "llm": "gpt-oss-20b-UD-Q8_K_XL.gguf"}}, params=""),
+    ],
+    "z-image": [
+        _variant("q4_k", "Q4_K", [_ms_repo_source("hf/leejet-Z-Image-Turbo-GGUF", ["z_image_turbo-Q4_K.gguf"]), _ms_source("z-image")], "ModelScope Z-Image Turbo GGUF Q4_K main model with existing vivibit VAE/text encoder files.", params="6B"),
+        _variant("q8_0", "Q8_0", [_ms_repo_source("hf/leejet-Z-Image-Turbo-GGUF", ["z_image_turbo-Q8_0.gguf"]), _ms_source("z-image")], "ModelScope Z-Image Turbo GGUF Q8_0 main model with existing vivibit VAE/text encoder files.", params="6B"),
+    ],
+}
+
 MODEL_DEFS = [
     _model(
         'sd15',
@@ -1193,11 +1291,56 @@ def get_model(key: str) -> ModelInfo:
     raise KeyError(key)
 
 
-def get_model_def(key: str) -> dict[str, Any]:
+def get_model_def(key: str, variant_id: str = "") -> dict[str, Any]:
     for item in MODEL_DEFS:
         if item["key"] == key:
-            return item
+            return _effective_model_item(item, variant_id)
     raise KeyError(key)
+
+
+def _effective_model_item(item: dict[str, Any], variant_id: str = "") -> dict[str, Any]:
+    variant_id = (variant_id or "").strip()
+    if not variant_id:
+        return item
+    for variant in MODEL_VARIANTS.get(item["key"], []):
+        if variant["id"] != variant_id:
+            continue
+        effective = dict(item)
+        sources = variant["sources"]
+        runtime = dict(item["runtime"])
+        variant_runtime = variant.get("runtime") or {}
+        for key, value in variant_runtime.items():
+            if key == "roles":
+                runtime[key] = dict(value)
+            elif isinstance(value, dict) and isinstance(runtime.get(key), dict):
+                merged = dict(runtime[key])
+                merged.update(value)
+                runtime[key] = merged
+            else:
+                runtime[key] = value
+        required_files: list[str] = []
+        for source in sources:
+            for filename in source.get("files") or []:
+                if filename not in required_files:
+                    required_files.append(filename)
+        effective.update(
+            {
+                "variant": variant,
+                "variant_id": variant_id,
+                "model_id": sources[0]["model_id"],
+                "source": sources[0]["source"],
+                "sources": sources,
+                "files": sources[0].get("files") or [],
+                "expected_files": required_files,
+                "runtime": runtime,
+                "description": variant.get("description") or item["description"],
+                "params": variant.get("params") or item.get("params", ""),
+            }
+        )
+        if variant.get("size"):
+            effective["expected_size"] = variant["size"]
+        return effective
+    raise ValueError(f"unknown model variant: {variant_id}")
 
 
 def _relative_candidates(item: dict[str, Any]) -> list[str]:
@@ -1210,9 +1353,13 @@ def _relative_candidates(item: dict[str, Any]) -> list[str]:
 
 
 def model_info(item: dict[str, Any]) -> ModelInfo:
+    return ModelInfo(**_model_payload(item, include_variants=True))
+
+
+def _model_payload(item: dict[str, Any], include_variants: bool = False) -> dict[str, Any]:
     resolved = None
     size = None
-    expected_size = MODEL_SIZES.get(item["key"])
+    expected_size = item.get("expected_size") or MODEL_SIZES.get(item["key"])
     registered_files = list(item.get("files") or [])
     for rel in _relative_candidates(item):
         candidate = settings.modelhub_root / rel
@@ -1238,6 +1385,7 @@ def model_info(item: dict[str, Any]) -> ModelInfo:
         "runtime": item["runtime"],
         "description": item["description"],
         "expected_files": item["expected_files"],
+        "variants": _variant_payloads(item) if include_variants else [],
         "access_path": str(fallback),
         "resolved_path": str(resolved) if resolved else None,
         "status": "ready" if resolved else ("failed" if dirty_partial else "missing"),
@@ -1246,7 +1394,23 @@ def model_info(item: dict[str, Any]) -> ModelInfo:
     }
     if dirty_partial and not resolved:
         info["error"] = "发现上次未完成下载残留，请重新下载以清理后重新拉取"
-    return ModelInfo(**info)
+    return info
+
+
+def _variant_payloads(item: dict[str, Any]) -> list[dict[str, Any]]:
+    variants = []
+    for variant in MODEL_VARIANTS.get(item["key"], []):
+        effective = _effective_model_item(item, variant["id"])
+        payload = _model_payload(effective)
+        payload.update(
+            {
+                "id": variant["id"],
+                "name": variant["name"],
+                "description": variant["description"],
+            }
+        )
+        variants.append(payload)
+    return variants
 
 
 def _has_incomplete_markers(item: dict[str, Any]) -> bool:
@@ -1260,7 +1424,7 @@ def _has_incomplete_markers(item: dict[str, Any]) -> bool:
     return False
 
 
-def runtime_paths_for(key: str) -> dict[str, Path]:
+def runtime_paths_for(key: str, variant_id: str = "") -> dict[str, Path]:
     """按 runtime 角色解析辅助文件（VAE / 文本编码器等）的实际路径。
 
     角色值是仓库内相对路径。优先在各来源的 current 目录下查找；若未命中
@@ -1268,7 +1432,7 @@ def runtime_paths_for(key: str) -> dict[str, Path]:
     下到了 main/其他 revision 目录），回退扫描该仓库所有 snapshot 目录，
     命中即用，避免"同仓库多文件分散到不同 snapshot 导致辅助文件缺失"。
     """
-    item = get_model_def(key)
+    item = get_model_def(key, variant_id)
     roles: dict[str, Path] = {}
     missing: list[str] = []
     for role, rel in (item["runtime"].get("roles") or {}).items():
@@ -1321,40 +1485,52 @@ def _is_model_file(path: Path) -> bool:
     return path.suffix.lower() in {".safetensors", ".ckpt", ".pt", ".pth", ".gguf"}
 
 
-async def pull_model(key: str, force: bool = False) -> dict[str, Any]:
-    item = get_model_def(key)
-    primary = item["sources"][0]
-    payload = {
-        "source": "ms",
-        "model_id": primary["model_id"],
-        "name": item["name"],
-        "force": force,
-        "files": primary.get("files"),
-    }
+async def pull_model(key: str, force: bool = False, variant_id: str = "") -> dict[str, Any]:
+    item = get_model_def(key, variant_id)
+    submitted = []
     async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(f"{settings.model_hub_api_url}/api/v1/models/pull", json=payload)
-        if resp.status_code == 409:
-            return {"status": "active", "model_id": primary["model_id"], "detail": resp.json().get("detail", "")}
-        resp.raise_for_status()
-        return {"status": "submitted", "model_id": primary["model_id"], "task": resp.json()}
+        for spec in item["sources"]:
+            payload = {
+                "source": spec["source"],
+                "model_id": spec["model_id"],
+                "name": item["name"],
+                "force": force,
+                "files": spec.get("files"),
+            }
+            resp = await client.post(f"{settings.model_hub_api_url}/api/v1/models/pull", json=payload)
+            if resp.status_code == 409:
+                submitted.append({"status": "active", "model_id": spec["model_id"], "detail": resp.json().get("detail", "")})
+                continue
+            resp.raise_for_status()
+            submitted.append({"status": "submitted", "model_id": spec["model_id"], "task": resp.json()})
+    return {
+        "status": "submitted",
+        "model_id": item["model_id"],
+        "variant": item.get("variant_id", ""),
+        "sources": submitted,
+    }
 
 
-async def stop_model(key: str) -> dict[str, Any]:
-    model_id = get_model_def(key)["model_id"]
+async def stop_model(key: str, variant_id: str = "") -> dict[str, Any]:
+    item = get_model_def(key, variant_id)
+    model_ids = {spec["model_id"] for spec in item["sources"]}
+    cancelled = []
     async with httpx.AsyncClient(timeout=30) as client:
         tasks_resp = await client.get(f"{settings.model_hub_api_url}/api/v1/tasks")
         tasks_resp.raise_for_status()
         for task in tasks_resp.json():
             task_model_id = str(task.get("model_id", "")).replace("ms://", "").replace("hf://", "")
             phase = task.get("phase")
-            if task_model_id == model_id and phase in {"PENDING", "DOWNLOADING", "VERIFYING"}:
+            if task_model_id in model_ids and phase in {"PENDING", "DOWNLOADING", "VERIFYING"}:
                 task_id = str(task.get("task_id", ""))
                 if not task_id:
                     continue
                 cancel_resp = await client.post(f"{settings.model_hub_api_url}/api/v1/tasks/{quote(task_id, safe='')}/cancel")
                 cancel_resp.raise_for_status()
-                return {"status": "cancelled", "model_id": model_id, "task": cancel_resp.json()}
-    return {"status": "not_running", "model_id": model_id}
+                cancelled.append({"model_id": task_model_id, "task": cancel_resp.json()})
+    if cancelled:
+        return {"status": "cancelled", "model_id": item["model_id"], "variant": item.get("variant_id", ""), "tasks": cancelled}
+    return {"status": "not_running", "model_id": item["model_id"], "variant": item.get("variant_id", "")}
 
 
 async def sync_model_hub() -> dict[str, Any]:
@@ -1438,6 +1614,17 @@ def merge_model_hub_state(hub_state: dict[str, Any] | None, info: dict[str, Any]
         info["error"] = hub_state.get("error") or ""
 
 
+def merge_item_hub_states(item: dict[str, Any], hub_states: dict[str, dict[str, Any]], info: dict[str, Any]) -> None:
+    for index, spec in enumerate(item["sources"]):
+        before_status = info.get("status")
+        before_access = info.get("access_path")
+        merge_model_hub_state(hub_states.get(spec["model_id"]), info)
+        if index > 0 and before_access:
+            info["access_path"] = before_access
+        if before_status == "ready" and info.get("status") not in ("downloading", "failed"):
+            info["status"] = "ready"
+
+
 async def list_model_defs_with_hub_state() -> list[ModelInfo]:
     """列出模型并合并双端下载状态：本应用 HF 任务 + Model Hub 拉取任务。"""
     hub_states = await fetch_model_hub_states()
@@ -1445,14 +1632,17 @@ async def list_model_defs_with_hub_state() -> list[ModelInfo]:
     for item in MODEL_DEFS:
         info = model_info(item)
         payload = info.model_dump()
-        merge_model_hub_state(hub_states.get(info.model_id), payload)
+        merge_item_hub_states(item, hub_states, payload)
+        for variant in payload.get("variants", []):
+            variant_item = get_model_def(item["key"], variant.get("id", ""))
+            merge_item_hub_states(variant_item, hub_states, variant)
         info = ModelInfo(**payload)
         result.append(info)
     return result
 
 
-async def assert_model_hub_ready(key: str) -> None:
-    item = get_model_def(key)
+async def assert_model_hub_ready(key: str, variant_id: str = "") -> None:
+    item = get_model_def(key, variant_id)
     hub_states = await fetch_model_hub_states()
     for spec in item["sources"]:
         state = hub_states.get(spec["model_id"])
@@ -1461,12 +1651,13 @@ async def assert_model_hub_ready(key: str) -> None:
         status = state.get("status")
         if status in ("pulling", "PULLING"):
             raise FileNotFoundError(f"Model Hub 仍在下载: {spec['model_id']}")
-    model_path_for(key)
-    runtime_paths_for(key)
+    model_path_for(key, variant_id)
+    runtime_paths_for(key, variant_id)
 
 
-def model_path_for(key: str) -> Path:
-    info = get_model(key)
+def model_path_for(key: str, variant_id: str = "") -> Path:
+    item = get_model_def(key, variant_id)
+    info = ModelInfo(**_model_payload(item))
     if not info.resolved_path:
         raise FileNotFoundError(info.access_path)
     return Path(info.resolved_path)

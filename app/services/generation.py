@@ -76,12 +76,12 @@ MEMORY_ERROR_MARKERS = (
 
 
 async def create_job(user_key: str, request: GenerateRequest) -> JobRecord:
-    runtime = get_model_def(request.model_key)["runtime"]
+    runtime = get_model_def(request.model_key, request.model_variant)["runtime"]
     video_mode = runtime.get("mode") == "video"
     defaults = runtime.get("defaults") or {}
     parameters = runtime.get("parameters") or {}
-    await assert_model_hub_ready(request.model_key)
-    model_path = model_path_for(request.model_key)
+    await assert_model_hub_ready(request.model_key, request.model_variant)
+    model_path = model_path_for(request.model_key, request.model_variant)
     now = datetime.now(timezone.utc)
     supports_reference = parameters.get("reference_image", False)
     effective_video_frames = request.video_frames or int(defaults.get("video_frames", 0) or 0)
@@ -95,6 +95,7 @@ async def create_job(user_key: str, request: GenerateRequest) -> JobRecord:
         prompt=request.prompt,
         negative_prompt=request.negative_prompt if parameters.get("negative_prompt", runtime.get("negative", True)) else "",
         model_key=request.model_key,
+        model_variant=request.model_variant,
         model_path=str(model_path),
         width=request.width,
         height=request.height,
@@ -187,7 +188,7 @@ async def run_job(job: JobRecord) -> None:
             job.status = "running"
             job.progress = 0.1
             save_job(job)
-            video_mode = get_model_def(job.model_key)["runtime"].get("mode") == "video"
+            video_mode = get_model_def(job.model_key, job.model_variant)["runtime"].get("mode") == "video"
             output_dir = job_dir(job.user_key, job.job_id)
             has_bin = bool(shutil.which(settings.sd_cpp_bin))
             if not has_bin and not settings.mock_when_runtime_missing:
@@ -240,12 +241,12 @@ async def run_job(job: JobRecord) -> None:
 
 def build_sd_args(job: JobRecord, output: Path, seed_offset: int = 0, low_memory_retry: bool = False) -> list[str]:
     """按模型家族的 runtime 规格装配 sd-cli 参数。"""
-    item = get_model_def(job.model_key)
+    item = get_model_def(job.model_key, job.model_variant)
     runtime = item["runtime"]
     video_mode = runtime.get("mode") == "video"
     defaults = runtime.get("defaults") or {}
     parameters = runtime.get("parameters") or {}
-    role_paths = runtime_paths_for(job.model_key)
+    role_paths = runtime_paths_for(job.model_key, job.model_variant)
 
     args = [settings.sd_cpp_bin]
     if video_mode:
@@ -297,7 +298,7 @@ def build_sd_args(job: JobRecord, output: Path, seed_offset: int = 0, low_memory
 
 async def run_sd_cpp(job: JobRecord, output: Path, seed_offset: int = 0, low_memory_retry: bool = False) -> None:
     args = build_sd_args(job, output, seed_offset=seed_offset, low_memory_retry=low_memory_retry)
-    video_mode = get_model_def(job.model_key)["runtime"].get("mode") == "video"
+    video_mode = get_model_def(job.model_key, job.model_variant)["runtime"].get("mode") == "video"
     timeout = settings.video_timeout_seconds if video_mode else settings.default_timeout_seconds
     task_key = (job.user_key, job.job_id)
     process = await asyncio.create_subprocess_exec(

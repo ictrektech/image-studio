@@ -95,6 +95,13 @@ All models resolve through the same shared-root convention:
 /modelhub/export/ms/vivibit/image-studio-<key>/current/
 ```
 
+Quantized alternatives are exposed as model variants, not extra top-level
+models: `GET /api/v1/models` still returns the 45 base model entries, and each
+entry may include a `variants` list. Pass `model_variant` to generation or
+`variant` to pull/stop APIs to use one of those quantized variants. Empty means
+the default full-precision model. Variants can point to one or more ModelScope
+repositories when a GGUF main model needs separate VAE or text-encoder files.
+
 When a model is ready, Image Studio resolves the largest compatible model file
 under that directory (`.safetensors`, `.ckpt`, `.pt`, `.pth`, or `.gguf`) and
 passes it to `sd-cli`.
@@ -168,8 +175,9 @@ the matching host:
 | Profile | Host | Base image tags |
 | --- | --- | --- |
 | `amd`, `amd-cuda` | `tc232` | image tags `amd_YYYYMMDD` / `amd_cu128_YYYYMMDD` |
-| `arm`, `arm-cuda`, `l4t` | `tc192` | image tags `arm_YYYYMMDD` / `arm_cu128_YYYYMMDD` / `l4t_YYYYMMDD` |
-| `thor` | `tc97` | image tag `thor_YYYYMMDD` |
+| `arm`, `arm-cuda` | `tc35` | image tags `arm_YYYYMMDD` / `arm_cu128_YYYYMMDD` |
+| `l4t` | `tc912` | image tag `l4t_YYYYMMDD` |
+| `thor` | explicit Thor build host only | image tag `thor_YYYYMMDD` |
 
 Build script entrypoint:
 

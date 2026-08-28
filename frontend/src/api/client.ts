@@ -19,6 +19,7 @@ export interface ModelRuntime {
 }
 
 export interface ModelInfo {
+  id?: string
   key: string
   name: string
   model_id: string
@@ -32,6 +33,7 @@ export interface ModelInfo {
   expected_files: string[]
   params?: string
   runtime?: ModelRuntime
+  variants?: ModelInfo[]
   access_path: string
   resolved_path?: string
   status: 'ready' | 'missing' | 'downloading' | 'failed' | 'unknown'
@@ -47,6 +49,7 @@ export interface GeneratePayload {
   prompt: string
   negative_prompt: string
   model_key: string
+  model_variant: string
   init_job_id: string
   init_filename: string
   init_input_id: string
@@ -190,8 +193,14 @@ export const api = {
   settings: () => request<UserSettings>('/api/v1/settings'),
   updateSettings: (payload: UserSettings) => request<UserSettings>('/api/v1/settings', { method: 'PUT', body: JSON.stringify(payload) }),
   listModels: () => request<ModelInfo[]>('/api/v1/models'),
-  pullModel: (key: string, force = false) => request(`/api/v1/models/${key}/pull${force ? '?force=true' : ''}`, { method: 'POST' }),
-  stopModel: (key: string) => request(`/api/v1/models/${key}/stop`, { method: 'POST' }),
+  pullModel: (key: string, force = false, variant = '') => {
+    const params = new URLSearchParams()
+    if (force) params.set('force', 'true')
+    if (variant) params.set('variant', variant)
+    const query = params.toString()
+    return request(`/api/v1/models/${key}/pull${query ? `?${query}` : ''}`, { method: 'POST' })
+  },
+  stopModel: (key: string, variant = '') => request(`/api/v1/models/${key}/stop${variant ? `?variant=${encodeURIComponent(variant)}` : ''}`, { method: 'POST' }),
   syncModel: (key: string) => request(`/api/v1/models/${key}/sync`, { method: 'POST' }),
   generate: (payload: GeneratePayload) => request<JobRecord>('/api/v1/generate', { method: 'POST', body: JSON.stringify(payload) }),
   listJobs: () => request<JobRecord[]>('/api/v1/jobs'),

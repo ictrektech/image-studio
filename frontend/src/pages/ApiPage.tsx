@@ -57,6 +57,7 @@ const MODEL_KEYS: [string, string, string, string, string][] = [
 const PARAMS: [string, string, string, keyof T & string][] = [
   ['prompt', 'string · 1~4000 字符', '必填', 'apiP_prompt'],
   ['model_key', 'string', 'sd15', 'apiP_model_key'],
+  ['model_variant', 'string', '""', 'apiP_model_variant'],
   ['negative_prompt', 'string', '""', 'apiP_negative_prompt'],
   ['width / height', 'int · 256~2048', '768', 'apiP_size'],
   ['steps', 'int · 1~150', '30', 'apiP_steps'],

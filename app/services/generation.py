@@ -325,6 +325,7 @@ async def run_sd_cpp(
     output_tail: deque[str] = deque(maxlen=80)
     stdout_task = asyncio.create_task(_consume_sd_cli_stream(process.stdout, job, output_tail, progress_base, progress_span))
     stderr_task = asyncio.create_task(_consume_sd_cli_stream(process.stderr, job, output_tail, progress_base, progress_span))
+    heartbeat_task = asyncio.create_task(_estimate_sd_cli_progress(job, progress_base, progress_span, timeout))
     try:
         await asyncio.wait_for(process.wait(), timeout=timeout)
         await asyncio.gather(stdout_task, stderr_task)
@@ -332,15 +333,19 @@ async def run_sd_cpp(
         await _terminate_process(process)
         stdout_task.cancel()
         stderr_task.cancel()
-        await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
+        heartbeat_task.cancel()
+        await asyncio.gather(stdout_task, stderr_task, heartbeat_task, return_exceptions=True)
         raise
     except asyncio.TimeoutError as exc:
         await _terminate_process(process)
         stdout_task.cancel()
         stderr_task.cancel()
-        await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
+        heartbeat_task.cancel()
+        await asyncio.gather(stdout_task, stderr_task, heartbeat_task, return_exceptions=True)
         raise RuntimeError(f"sd-cli 超时（{timeout}s）") from exc
     finally:
+        heartbeat_task.cancel()
+        await asyncio.gather(heartbeat_task, return_exceptions=True)
         _job_processes.pop(task_key, None)
     if process.returncode != 0:
         detail = " | ".join(line.strip() for line in list(output_tail)[-6:] if line.strip())
@@ -419,6 +424,27 @@ def _apply_sd_cli_progress(job: JobRecord, raw_progress: float, progress_base: f
     current.updated_at = datetime.now(timezone.utc)
     save_job(current)
     job.progress = current.progress
+
+
+async def _estimate_sd_cli_progress(job: JobRecord, progress_base: float, progress_span: float, timeout: int) -> None:
+    estimated_seconds = _estimated_sd_cli_seconds(job)
+    started = asyncio.get_running_loop().time()
+    while True:
+        await asyncio.sleep(5)
+        elapsed = asyncio.get_running_loop().time() - started
+        raw_progress = min(elapsed / estimated_seconds, 0.92)
+        _apply_sd_cli_progress(job, raw_progress, progress_base, progress_span)
+        if elapsed >= timeout:
+            return
+
+
+def _estimated_sd_cli_seconds(job: JobRecord) -> float:
+    megapixels = max(job.width * job.height / (512 * 512), 0.25)
+    if job.video_frames > 1:
+        work_units = max(job.steps, 1) * max(job.video_frames, 1) * megapixels
+        return max(90.0, min(work_units * 0.32, settings.video_timeout_seconds * 0.9))
+    work_units = max(job.steps, 1) * max(job.batch_count, 1) * megapixels
+    return max(15.0, min(work_units * 0.18, settings.default_timeout_seconds * 0.9))
 
 
 def _runtime_string(

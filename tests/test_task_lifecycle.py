@@ -292,6 +292,35 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(pending, "")
         self.assertGreater(stored.progress, 0.3)
 
+    async def test_sd_cli_estimated_progress_uses_video_work_size(self):
+        image_job = JobRecord(
+            job_id="job_image_estimate",
+            user_key="user",
+            status="running",
+            prompt="prompt",
+            model_key="sd15",
+            model_path="/models/sd15.safetensors",
+            width=512,
+            height=512,
+            steps=20,
+            cfg_scale=7.0,
+            sampler="euler",
+            seed=-1,
+            batch_count=1,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        video_job = image_job.model_copy(update={
+            "job_id": "job_video_estimate",
+            "width": 832,
+            "height": 480,
+            "steps": 10,
+            "video_frames": 48,
+            "fps": 24,
+        })
+
+        self.assertGreater(generation._estimated_sd_cli_seconds(video_job), generation._estimated_sd_cli_seconds(image_job))
+
     async def test_video_args_include_base_and_video_parameters(self):
         job = JobRecord(
             job_id="job_video",

@@ -37,7 +37,8 @@ Image Studio 是基于 `stable-diffusion.cpp` 的本地图像生成工作台，�
 
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
-| `IMAGE_STUDIO_DATA_PATH` | `/data/vos_workspace/image_studio` | 保存用户会话、生成任务、上传参考图和输出文件 |
 | `MODEL_HUB_SHARED_MODELS_PATH` | `/data/vos_workspace/model_hub` | Model Hub 共享模型根目录；安装时应选择与 Model Hub 相同的公共目录 |
 | `MODEL_HUB_API_URL` | `http://model-hub-backend:5005` | VOS 网络内 Model Hub 后端 API 地址 |
 | `IMAGE_STUDIO_HF_ENDPOINT` | `https://hf-mirror.com` | HuggingFace 直连下载端点 |
+
+用户会话、生成任务、上传参考图和输出文件写入 VOS 自动分配的 `${VOS_APP_STORAGE_PATH}/data`，不再作为公共目录显示在安装表单中。

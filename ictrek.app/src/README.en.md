@@ -43,7 +43,8 @@ compute profile, and runtime parameters.
 
 | Parameter | Default | Description |
 | --- | --- | --- |
-| `IMAGE_STUDIO_DATA_PATH` | `/data/vos_workspace/image_studio` | Stores user sessions, generation jobs, uploaded references, and output files |
 | `MODEL_HUB_SHARED_MODELS_PATH` | `/data/vos_workspace/model_hub` | Model Hub shared model root; select the same public directory as Model Hub |
 | `MODEL_HUB_API_URL` | `http://model-hub-backend:5005` | Model Hub backend API inside the VOS network |
 | `IMAGE_STUDIO_HF_ENDPOINT` | `https://hf-mirror.com` | HuggingFace endpoint for direct downloads |
+
+User sessions, generation jobs, uploaded references, and outputs are stored in `${VOS_APP_STORAGE_PATH}/data`, assigned by VOS, and are no longer exposed as a public directory in the install form.

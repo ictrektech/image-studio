@@ -1,15 +1,4 @@
 configs:
-  - name: IMAGE_STUDIO_DATA_PATH
-    type: path
-    title:
-      zh-CN: Image Studio 数据目录
-      en: Image Studio Data Path
-    description:
-      zh-CN: 保存用户会话、生成任务和输出文件。不同 VOS 用户会在该目录下自动分隔。
-      en: Stores sessions, generation jobs, and output files. VOS users are separated automatically inside this path.
-    default: /data/vos_workspace/image_studio
-    hints: [com.ictrek.ai.generated-assets]
-
   - name: MODEL_HUB_SHARED_MODELS_PATH
     type: path
     title:

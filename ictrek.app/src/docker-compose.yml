@@ -49,7 +49,7 @@ x-image-studio-backend-base: &image-studio-backend-base
         - image-studio-backend
   environment: *image-studio-backend-env
   volumes:
-    - ${IMAGE_STUDIO_DATA_PATH:-/data/vos_workspace/image_studio}:/data
+    - ${VOS_APP_STORAGE_PATH}/data:/data
     - ${MODEL_HUB_SHARED_MODELS_PATH:-/data/vos_workspace/model_hub}:/modelhub
   labels:
     - "traefik.enable=true"

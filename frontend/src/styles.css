@@ -483,8 +483,8 @@ pre { background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 14px; ov
 .quick-model-status.downloading .quick-status-dot { background: #0ea5e9; box-shadow: 0 0 0 3px #e0f2fe; }
 .chat-workspace { grid-template-columns: minmax(0, 3fr) minmax(300px, 1fr); align-items: stretch; }
 .chat-panel { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
-.chat-workspace .chat-panel { grid-column: 1; grid-row: 1; min-height: max(620px, calc(100vh - 350px)); }
-.chat-workspace .detail-panel { grid-column: 2; grid-row: 1; min-height: auto; padding: 15px; }
+.chat-workspace .chat-panel { grid-column: 1; grid-row: 1; height: clamp(420px, calc(100vh - 360px), 660px); min-height: 0; }
+.chat-workspace .detail-panel { grid-column: 2; grid-row: 1; height: clamp(420px, calc(100vh - 360px), 660px); min-height: 0; overflow-y: auto; padding: 15px; }
 .chat-workspace .detail-panel .panel-heading { margin-bottom: 8px; }
 .parameter-section {
   margin-top: 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface);
@@ -509,7 +509,7 @@ pre { background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 14px; ov
 .chat-toolbar .icon-button { margin-left: auto; }
 .chat-messages {
   flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px;
-  background: var(--bg); min-height: 280px; max-height: none;
+  background: var(--bg); min-height: 0;
 }
 .chat-empty {
   margin: auto; text-align: center; color: var(--muted); display: flex; flex-direction: column;
@@ -589,7 +589,6 @@ pre { background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 14px; ov
   .quick-settings-grid { grid-template-columns: minmax(250px, 2fr) repeat(3, minmax(90px, 1fr)); }
   .quick-actions { justify-content: flex-end; }
   .chat-workspace { grid-template-columns: minmax(0, 2.4fr) minmax(290px, 1fr); }
-  .chat-messages { max-height: calc(100vh - 520px); }
 }
 @media (max-width: 860px) {
   .quick-settings-grid { grid-template-columns: 1fr 1fr; }
@@ -600,11 +599,11 @@ pre { background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 14px; ov
   .quick-model-status .quiet-button { margin-left: 0; }
   .chat-workspace { grid-template-columns: 1fr; }
   .chat-workspace .chat-panel,
-  .chat-workspace .detail-panel { grid-column: 1; grid-row: auto; }
+  .chat-workspace .detail-panel { grid-column: 1; grid-row: auto; height: auto; }
+  .chat-workspace .chat-panel { height: min(620px, calc(100vh - 190px)); }
   .chat-composer { grid-template-columns: 1fr; }
   .composer-image { order: 3; }
   .img-slot { height: 110px; }
-  .chat-messages { max-height: 55vh; }
 }
 .api-recipe-title { margin: 18px 0 4px; font-size: 13.5px; font-weight: 760; color: var(--text); }
 .api-err-list { white-space: pre-wrap; color: var(--muted); font-size: 12.5px; line-height: 1.8; margin: 6px 0 0; background: none; padding: 0; }

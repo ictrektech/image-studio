@@ -70,7 +70,8 @@ export default function App() {
     return () => window.removeEventListener('keydown', closeOnEscape)
   }, [aboutOpen])
 
-  const readyCount = models.filter(model => model.status === 'ready').length
+  const visibleModels = models.flatMap(model => [...(model.variants || []), model])
+  const readyCount = visibleModels.filter(model => model.status === 'ready').length
 
   return (
     <div className="app-shell">
@@ -84,7 +85,7 @@ export default function App() {
         </div>
         <div className="status-strip">
           <div><Cpu size={16} /><span>{about?.profile || 'local'}</span></div>
-          <div><Database size={16} /><span>{readyCount}/{models.length || 1} models</span></div>
+          <div><Database size={16} /><span>{readyCount}/{visibleModels.length || 1} models</span></div>
           <div><PlugZap size={16} /><span>{about?.sd_cpp_bin || 'sd-cli'}</span></div>
           <button className="about-button" onClick={() => setAboutOpen(true)}><Info size={16} /><span>{t.about}</span></button>
           <select className="language-select" value={language} onChange={e => changeLanguage(e.target.value as Language)}>

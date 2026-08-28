@@ -39,10 +39,12 @@ function sizeDisplay(model: ModelInfo, t: typeof messages['zh-CN']) {
 export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo[]; onRefresh: () => void; t: typeof messages['zh-CN'] }) {
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
-  const [variants, setVariants] = useState<Record<string, string>>({})
-  const downloading = models.some(model => model.status === 'downloading')
-  const sortedModels = useMemo(
-    () => [...models].sort((a, b) => Number(Boolean(b.variants?.length)) - Number(Boolean(a.variants?.length))),
+  const downloading = models.some(model => model.status === 'downloading' || model.variants?.some(variant => variant.status === 'downloading'))
+  const modelEntries = useMemo(
+    () => models.flatMap(model => [
+      ...(model.variants || []).map(variant => ({ base: model, active: variant, variantId: variant.id || '', isVariant: true })),
+      { base: model, active: model, variantId: '', isVariant: false },
+    ]),
     [models],
   )
 
@@ -52,10 +54,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
     return () => clearInterval(timer)
   }, [downloading, onRefresh])
 
-  const selectedInfo = (model: ModelInfo) => model.variants?.find(variant => variant.id === variants[model.key]) || model
-
-  const run = async (model: ModelInfo, action: 'pull' | 'pull-force' | 'stop' | 'sync') => {
-    const variant = variants[model.key] || ''
+  const run = async (model: ModelInfo, variant: string, action: 'pull' | 'pull-force' | 'stop' | 'sync') => {
     setBusy(`${model.key}:${variant}:${action}`)
     setMessage('')
     try {
@@ -85,28 +84,24 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
         {message && <div className="notice">{message}</div>}
         {models.length === 0 && <div className="empty-small">{t.noModelsConfigured}</div>}
         <div className="model-card-grid">
-          {sortedModels.map(model => {
-            const active = selectedInfo(model)
+          {modelEntries.map(entry => {
+            const model = entry.base
+            const active = entry.active
             const ready = active.status === 'ready'
             const downloading = active.status === 'downloading'
             const failed = active.status === 'failed'
             return (
-              <article className={`managed-model-card ${ready ? 'ready' : 'pending'}`} key={model.key}>
+              <article className={`managed-model-card ${ready ? 'ready' : 'pending'} ${entry.isVariant ? 'variant-card' : ''}`} key={`${model.key}:${entry.variantId || 'default'}`}>
                 <div className="model-card-header">
                   <div>
-                    <h3>{model.name}</h3>
+                    <h3>{entry.isVariant ? `${model.name} · ${active.name}` : model.name}</h3>
                     <div className="model-badges">
-                      {model.preferred && <span>{t.preferredModel}</span>}
-                      <span>{model.family}</span>
-                      {model.capabilities.map(capability => <span key={capability}>{capability}</span>)}
+                      {entry.isVariant && <span>{t.modelVariant}</span>}
+                      {active.preferred && <span>{t.preferredModel}</span>}
+                      <span>{active.family}</span>
+                      {active.capabilities.map(capability => <span key={capability}>{capability}</span>)}
                     </div>
-                    <p>{model.description}</p>
-                    {Boolean(model.variants?.length) && (
-                      <select className="model-variant-select" value={variants[model.key] || ''} onChange={e => setVariants({ ...variants, [model.key]: e.target.value })}>
-                        <option value="">{t.defaultModelVariant}</option>
-                        {model.variants?.map(variant => <option key={variant.id} value={variant.id}>{variant.name}{variant.params ? ` (${variant.params})` : ''}</option>)}
-                      </select>
-                    )}
+                    <p>{active.description}</p>
                   </div>
                   <span className={`model-status ${ready ? 'ready' : 'pending'}`}>
                     {ready && <ShieldCheck size={14} />}
@@ -117,7 +112,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
                 </div>
 
                 <div className="model-meta">
-                  <div><span>{t.modelVariant}</span><code>{variants[model.key] ? active.name : t.defaultModelVariant}</code></div>
+                  <div><span>{t.modelVariant}</span><code>{entry.isVariant ? active.name : t.defaultModelVariant}</code></div>
                   <div><span>{t.modelId}</span><code>{active.model_id}</code></div>
                   <div><span>{t.source}</span><code>{active.source}</code></div>
                   <div><span>{t.family}</span><code>{active.family}</code></div>
@@ -141,7 +136,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
                   <button
                     className="primary-action compact-action"
                     disabled={ready || downloading || Boolean(busy)}
-                    onClick={() => run(model, 'pull')}
+                    onClick={() => run(model, entry.variantId, 'pull')}
                   >
                     {ready ? <CheckCircle2 size={15} /> : <DownloadCloud size={15} />}
                     {ready ? t.downloaded : downloading ? `${t.modelDownloading} ${percent(active)}%` : t.downloadModel}
@@ -150,7 +145,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
                     <button
                       className="secondary-action compact-action"
                       disabled={Boolean(busy)}
-                      onClick={() => run(model, 'stop')}
+                      onClick={() => run(model, entry.variantId, 'stop')}
                     >
                       <Square size={15} />{t.stopDownload}
                     </button>
@@ -159,7 +154,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
                     <button
                       className="secondary-action compact-action"
                       disabled={Boolean(busy)}
-                      onClick={() => run(model, 'pull-force')}
+                      onClick={() => run(model, entry.variantId, 'pull-force')}
                     >
                       <RotateCcw size={15} />{t.redownload}
                     </button>
@@ -167,7 +162,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
                   <button
                     className="secondary-action compact-action"
                     disabled={Boolean(busy)}
-                    onClick={() => run(model, 'sync')}
+                    onClick={() => run(model, entry.variantId, 'sync')}
                   >
                     <RefreshCw size={15} />{t.syncModel}
                   </button>
@@ -181,10 +176,10 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
       <section className="panel model-path-panel">
         <div className="panel-title">{t.modelHubPathGuide}</div>
         <p>{t.modelHubPathHelp}</p>
-        {sortedModels.map(model => (
-          <div className="path-guide" key={model.key}>
-            <span>{model.name}</span>
-            <code>{model.access_path}</code>
+        {modelEntries.map(entry => (
+          <div className="path-guide" key={`${entry.base.key}:${entry.variantId || 'default'}`}>
+            <span>{entry.isVariant ? `${entry.base.name} · ${entry.active.name}` : entry.base.name}</span>
+            <code>{entry.active.access_path}</code>
           </div>
         ))}
       </section>

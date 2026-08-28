@@ -32,7 +32,7 @@ const initialPayload: GeneratePayload = {
   prompt: 'a cozy mountain cabin at dusk, warm lights, snowy pine trees, cinematic lighting, ultra detailed',
   negative_prompt: 'blurry, low quality, watermark, text, deformed',
   model_key: 'sd15',
-  model_variant: '',
+  model_variant: 'q4_0',
   init_job_id: '',
   init_filename: '',
   init_input_id: '',
@@ -102,7 +102,10 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
 
   const imageModels = useMemo(() => models
     .filter(model => model.capabilities.includes('txt2img') || model.capabilities.includes('img2img') || model.capabilities.includes('video'))
-    .sort((a, b) => Number(Boolean(b.variants?.length)) - Number(Boolean(a.variants?.length))), [models])
+    .flatMap(model => [
+      ...(model.variants || []).map(variant => ({ base: model, active: variant, variantId: variant.id || '', label: `${model.name} · ${variant.name}${variant.params ? ` (${variant.params})` : ''}` })),
+      { base: model, active: model, variantId: '', label: `${model.name}${model.params ? ` (${model.params})` : ''}` },
+    ]), [models])
   const selectedModel = models.find(model => model.key === payload.model_key)
   const selectedVariant = selectedModel?.variants?.find(variant => variant.id === payload.model_variant)
   const activeModel = selectedVariant || selectedModel
@@ -124,7 +127,6 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
       ? api.outputUrl(payload.init_job_id, payload.init_filename)
       : ''
 
-  const modelName = (key: string) => models.find(m => m.key === key)?.name || key
   const modelVariantName = (key: string, variantId?: string) => {
     const model = models.find(m => m.key === key)
     if (!variantId) return model?.name || key
@@ -186,20 +188,16 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
     }
   }
 
-  const switchModel = (key: string) => {
-    const next = models.find(model => model.key === key)
+  const switchModelEntry = (value: string) => {
+    const [key, variantId = ''] = value.split('::')
+    const base = models.find(model => model.key === key)
+    const next = variantId ? base?.variants?.find(variant => variant.id === variantId) : base
     const nextVideoModel = next?.runtime?.mode === 'video'
     setPayload(applyRuntimeDefaults({
       ...payload,
       model_key: key,
-      model_variant: '',
+      model_variant: variantId,
     }, next, Boolean(nextVideoModel)))
-  }
-
-  const switchVariant = (variantId: string) => {
-    const next = variantId ? selectedModel?.variants?.find(variant => variant.id === variantId) : selectedModel
-    const nextVideoModel = next?.runtime?.mode === 'video'
-    setPayload(applyRuntimeDefaults({ ...payload, model_variant: variantId }, next, Boolean(nextVideoModel)))
   }
 
   const loadJobs = async () => {
@@ -334,17 +332,9 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
         <div className="quick-settings-grid">
           <div className="quick-field quick-model-field">
             <label>{t.modelPanelTitle}</label>
-            <div className="quick-model-selectors">
-              <select value={payload.model_key} onChange={e => switchModel(e.target.value)}>
-                {imageModels.map(model => <option key={model.key} value={model.key}>{model.name}{model.params ? ` (${model.params})` : ''} · {model.family}</option>)}
-              </select>
-              {selectedModel && Boolean(selectedModel.variants?.length) && (
-                <select value={payload.model_variant} onChange={e => switchVariant(e.target.value)}>
-                  <option value="">{t.defaultModelVariant}</option>
-                  {selectedModel.variants?.map(variant => <option key={variant.id} value={variant.id}>{variant.name}{variant.params ? ` (${variant.params})` : ''}</option>)}
-                </select>
-              )}
-            </div>
+            <select value={`${payload.model_key}::${payload.model_variant}`} onChange={e => switchModelEntry(e.target.value)}>
+              {imageModels.map(entry => <option key={`${entry.base.key}:${entry.variantId || 'default'}`} value={`${entry.base.key}::${entry.variantId}`}>{entry.label} · {entry.active.family}</option>)}
+            </select>
           </div>
           <div className="quick-field"><label>{t.width}</label><input type="number" value={payload.width} onChange={e => setPayload({ ...payload, width: Number(e.target.value) })} /></div>
           <div className="quick-field"><label>{t.height}</label><input type="number" value={payload.height} onChange={e => setPayload({ ...payload, height: Number(e.target.value) })} /></div>

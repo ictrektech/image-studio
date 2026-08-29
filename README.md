@@ -121,6 +121,10 @@ Video families (`wan21`, `wan22`, `wan21-t2v-14b`, `wan21-i2v-14b`,
 `-M vid_gen`, passes the supported base parameters (`width`, `height`, `steps`,
 `cfg_scale`, `sampler`, `seed`) plus `--video-frames` / `--fps`, and produces a
 single browser-playable `output.webm`.
+If sd-cli writes WebM-compatible VP8/VP9/AV1 frames with a Matroska container
+doctype, the backend remuxes the file with ffmpeg before exposing it to the
+browser; invalid AVI or non-WebM video payloads fail the job instead of being
+served as `output.webm`.
 
 Each model's `runtime.parameters` is the shared contract used by both frontend
 controls and backend sd-cli argument assembly. Pure T2V models do not accept a

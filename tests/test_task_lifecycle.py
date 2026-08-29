@@ -327,10 +327,36 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
             output.write_bytes(b"RIFFxxxxAVI ")
 
             with self.assertRaisesRegex(RuntimeError, "AVI data"):
-                generation._assert_browser_playable_video(output)
+                generation._ensure_browser_playable_video(output)
 
-            output.write_bytes(b"\x1a\x45\xdf\xa3")
-            generation._assert_browser_playable_video(output)
+    async def test_webm_output_accepts_webm_doctype(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "output.webm"
+            output.write_bytes(b"\x1a\x45\xdf\xa3\xa3\x42\x82\x84webm\x86V_VP8")
+
+            generation._ensure_browser_playable_video(output)
+
+    async def test_webm_output_remuxes_matroska_doctype(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "output.webm"
+            output.write_bytes(b"\x1a\x45\xdf\xa3\xa3\x42\x82\x88matroska\x86V_VP8")
+
+            def fake_run(cmd, **kwargs):
+                Path(cmd[-1]).write_bytes(b"\x1a\x45\xdf\xa3\xa3\x42\x82\x84webm\x86V_VP8")
+
+            with patch.object(generation.shutil, "which", return_value="/usr/bin/ffmpeg"), patch.object(generation.subprocess, "run", fake_run):
+                generation._ensure_browser_playable_video(output)
+
+            self.assertEqual(generation._webm_doc_type(output.read_bytes()), b"webm")
+
+    async def test_webm_output_rejects_matroska_without_ffmpeg(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "output.webm"
+            output.write_bytes(b"\x1a\x45\xdf\xa3\xa3\x42\x82\x88matroska\x86V_VP8")
+
+            with patch.object(generation.shutil, "which", return_value=None):
+                with self.assertRaisesRegex(RuntimeError, "ffmpeg is not available"):
+                    generation._ensure_browser_playable_video(output)
 
     async def test_backend_dockerfiles_enable_webm_for_video_outputs(self):
         root = Path(__file__).resolve().parents[1]
@@ -347,6 +373,7 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("libwebp", text)
                 self.assertIn("pkg-config", text)
                 self.assertIn("libwebpmux3", text)
+                self.assertIn("ffmpeg", text)
                 self.assertNotIn("-DSD_WEBP=OFF", text)
                 self.assertNotIn("-DSD_WEBM=OFF", text)
         install_script = (root / "docker" / "install_sd_cpp.sh").read_text(encoding="utf-8")

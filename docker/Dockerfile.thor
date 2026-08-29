@@ -15,7 +15,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     IMAGE_STUDIO_MOCK_WHEN_RUNTIME_MISSING=false
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libgomp1 libwebp7 libwebpmux3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates ffmpeg libgomp1 libwebp7 libwebpmux3 && rm -rf /var/lib/apt/lists/*
 COPY --from=sd-cpp-builder /opt/sd-cpp/bin/sd-cli /usr/local/bin/sd-cli
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

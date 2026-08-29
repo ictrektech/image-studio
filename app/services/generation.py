@@ -4,6 +4,7 @@ import asyncio
 import re
 import shlex
 import shutil
+import subprocess
 import uuid
 from collections import deque
 from datetime import datetime, timezone
@@ -218,7 +219,7 @@ async def run_job(job: JobRecord) -> None:
                     job.progress = 0.12
                     save_job(job)
                     await run_sd_cpp(job, output, low_memory_retry=True, progress_base=0.12, progress_span=0.85)
-                _assert_browser_playable_video(output)
+                await asyncio.to_thread(_ensure_browser_playable_video, output)
                 job.outputs = [output.name]
             else:
                 names = (
@@ -448,16 +449,73 @@ def _estimated_sd_cli_seconds(job: JobRecord) -> float:
     return max(15.0, min(work_units * 0.18, settings.default_timeout_seconds * 0.9))
 
 
-def _assert_browser_playable_video(output: Path) -> None:
+def _ensure_browser_playable_video(output: Path) -> None:
     if output.suffix.lower() != ".webm":
         return
     with output.open("rb") as f:
-        header = f.read(4)
+        data = f.read(65536)
+    header = data[:4]
     if header == b"\x1a\x45\xdf\xa3":
-        return
+        doc_type = _webm_doc_type(data[:4096])
+        if doc_type == b"webm":
+            return
+        if doc_type == b"matroska" and _has_webm_video_codec(data[:65536]):
+            _remux_matroska_to_webm(output)
+            _assert_webm_doc_type(output)
+            return
+        actual = doc_type.decode("ascii", errors="replace") if doc_type else "unknown"
+        raise RuntimeError(f"sd-cli produced {actual} data for output.webm; expected WebM")
     if header == b"RIFF":
         raise RuntimeError("sd-cli produced AVI data for output.webm; rebuild sd.cpp with SD_WEBM=ON")
     raise RuntimeError("sd-cli produced an invalid output.webm file")
+
+
+def _assert_webm_doc_type(output: Path) -> None:
+    with output.open("rb") as f:
+        doc_type = _webm_doc_type(f.read(4096))
+    if doc_type != b"webm":
+        actual = doc_type.decode("ascii", errors="replace") if doc_type else "unknown"
+        raise RuntimeError(f"video remux did not produce WebM output; got {actual}")
+
+
+def _webm_doc_type(data: bytes) -> bytes | None:
+    marker = data.find(b"\x42\x82")
+    if marker < 0 or marker + 3 >= len(data):
+        return None
+    size_byte = data[marker + 2]
+    if not size_byte & 0x80:
+        return None
+    size = size_byte & 0x7F
+    start = marker + 3
+    end = start + size
+    if size <= 0 or end > len(data):
+        return None
+    return data[start:end]
+
+
+def _has_webm_video_codec(data: bytes) -> bool:
+    return any(codec in data for codec in (b"V_VP8", b"V_VP9", b"V_AV1"))
+
+
+def _remux_matroska_to_webm(output: Path) -> None:
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("sd-cli produced Matroska data for output.webm and ffmpeg is not available for remuxing")
+    tmp = output.with_name(f"{output.stem}.remux{output.suffix}")
+    try:
+        subprocess.run(
+            [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-i", str(output), "-c", "copy", "-f", "webm", str(tmp)],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        tmp.replace(output)
+    except subprocess.CalledProcessError as exc:
+        message = (exc.stderr or exc.stdout or "").strip()
+        raise RuntimeError(f"failed to remux Matroska output to WebM: {message or exc}") from exc
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def _runtime_string(

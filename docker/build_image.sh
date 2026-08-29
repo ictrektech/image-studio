@@ -430,23 +430,28 @@ if [[ ${#COMPONENTS[@]} -eq 0 ]]; then
   COMPONENTS=("backend" "frontend")
 fi
 
-for sheet in "${TARGET_SHEETS[@]}"; do
-  if [[ "$HOST_ARCH" == "amd" ]]; then
-    contains "$sheet" "AMD_with_cuda" "AMD_with_mxn100" || die "sheet ${sheet} is not valid for tc232/amd"
-  else
-    contains "$sheet" "ARM_without_cuda" "SOPHON_bm1688" "ARM_with_cuda" "l4t" "thor_spark" || die "sheet ${sheet} is not valid for arm/thor hosts"
-    if [[ "$sheet" == "l4t" ]] && ! is_l4t_host; then
-      die "sheet l4t must be built on an L4T/Tegra host"
-    fi
-  fi
-  sheet_spec "$sheet" >/dev/null || die "unsupported sheet: $sheet"
-done
-
 for component in "${COMPONENTS[@]}"; do
   case "$component" in
     backend|frontend) ;;
     *) die "unsupported component: $component" ;;
   esac
+done
+
+BUILDS_BACKEND=false
+if contains "backend" "${COMPONENTS[@]}"; then
+  BUILDS_BACKEND=true
+fi
+
+for sheet in "${TARGET_SHEETS[@]}"; do
+  if [[ "$HOST_ARCH" == "amd" ]]; then
+    contains "$sheet" "AMD_with_cuda" "AMD_with_mxn100" || die "sheet ${sheet} is not valid for tc232/amd"
+  else
+    contains "$sheet" "ARM_without_cuda" "SOPHON_bm1688" "ARM_with_cuda" "l4t" "thor_spark" || die "sheet ${sheet} is not valid for arm/thor hosts"
+    if [[ "$BUILDS_BACKEND" == "true" && "$sheet" == "l4t" ]] && ! is_l4t_host; then
+      die "sheet l4t must be built on an L4T/Tegra host"
+    fi
+  fi
+  sheet_spec "$sheet" >/dev/null || die "unsupported sheet: $sheet"
 done
 
 require_cmd curl

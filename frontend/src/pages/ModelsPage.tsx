@@ -3,6 +3,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { api, ModelInfo } from '../api/client'
 import { messages } from '../i18n'
 
+type T = typeof messages['zh-CN']
+type ModelEntry = { base: ModelInfo; active: ModelInfo; variantId: string; isVariant: boolean }
+
+const CAPABILITY_ORDER = ['txt2img', 'img2img', 'edit', 'txt2video', 'img2video', 'video']
+
 function percent(model: ModelInfo) {
   if (model.status === 'ready') return 100
   if (model.status === 'downloading') return Math.round((model.progress ?? 0) * 100)
@@ -36,9 +41,42 @@ function sizeDisplay(model: ModelInfo, t: typeof messages['zh-CN']) {
   return '-'
 }
 
+function entryCapabilities(entry: ModelEntry) {
+  const caps = new Set(entry.active.capabilities || [])
+  const runtime = entry.active.runtime
+  const isVideo = runtime?.mode === 'video' || caps.has('video')
+  if (isVideo) {
+    caps.add('txt2video')
+    if (runtime?.ref_flag || runtime?.parameters?.reference_image) caps.add('img2video')
+  }
+  return Array.from(caps)
+}
+
+function displayCapabilities(caps: string[]) {
+  const filtered = caps.filter(capability => capability !== 'video')
+  return filtered.length ? filtered : caps
+}
+
+function capabilityLabel(capability: string, t: T) {
+  const key = `capability_${capability}` as keyof T
+  return typeof t[key] === 'string' ? t[key] : capability
+}
+
+function sortCapabilities(caps: string[]) {
+  return [...caps].sort((a, b) => {
+    const ai = CAPABILITY_ORDER.indexOf(a)
+    const bi = CAPABILITY_ORDER.indexOf(b)
+    if (ai === -1 && bi === -1) return a.localeCompare(b)
+    if (ai === -1) return 1
+    if (bi === -1) return -1
+    return ai - bi
+  })
+}
+
 export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo[]; onRefresh: () => void; t: typeof messages['zh-CN'] }) {
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
+  const [selectedCapabilities, setSelectedCapabilities] = useState<string[]>([])
   const downloading = models.some(model => model.status === 'downloading' || model.variants?.some(variant => variant.status === 'downloading'))
   const modelEntries = useMemo(
     () => models.flatMap(model => [
@@ -47,6 +85,27 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
     ]),
     [models],
   )
+  const capabilityOptions = useMemo(
+    () => sortCapabilities(Array.from(new Set(modelEntries.flatMap(entry => displayCapabilities(entryCapabilities(entry)))))),
+    [modelEntries],
+  )
+  const filteredEntries = useMemo(
+    () => selectedCapabilities.length === 0
+      ? modelEntries
+      : modelEntries.filter(entry => {
+        const caps = entryCapabilities(entry)
+        return selectedCapabilities.every(capability => caps.includes(capability))
+      }),
+    [modelEntries, selectedCapabilities],
+  )
+
+  const toggleCapability = (capability: string) => {
+    setSelectedCapabilities(current =>
+      current.includes(capability)
+        ? current.filter(item => item !== capability)
+        : [...current, capability],
+    )
+  }
 
   useEffect(() => {
     if (!downloading) return
@@ -83,10 +142,39 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
         </div>
         {message && <div className="notice">{message}</div>}
         {models.length === 0 && <div className="empty-small">{t.noModelsConfigured}</div>}
+        {capabilityOptions.length > 0 && (
+          <div className="capability-filter">
+            <div className="capability-filter-heading">
+              <div>
+                <strong>{t.capabilityFilter}</strong>
+                <span>{t.capabilityFilterHelp}</span>
+              </div>
+              {selectedCapabilities.length > 0 && (
+                <button type="button" className="quiet-button" onClick={() => setSelectedCapabilities([])}>
+                  {t.clearCapabilityFilters}
+                </button>
+              )}
+            </div>
+            <div className="capability-filter-options">
+              {capabilityOptions.map(capability => (
+                <label className="capability-check" key={capability}>
+                  <input
+                    type="checkbox"
+                    checked={selectedCapabilities.includes(capability)}
+                    onChange={() => toggleCapability(capability)}
+                  />
+                  <span>{capabilityLabel(capability, t)}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+        {models.length > 0 && filteredEntries.length === 0 && <div className="empty-small">{t.noModelsMatchFilter}</div>}
         <div className="model-card-grid">
-          {modelEntries.map(entry => {
+          {filteredEntries.map(entry => {
             const model = entry.base
             const active = entry.active
+            const capabilities = displayCapabilities(entryCapabilities(entry))
             const ready = active.status === 'ready'
             const downloading = active.status === 'downloading'
             const failed = active.status === 'failed'
@@ -99,7 +187,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
                       {entry.isVariant && <span>{t.modelVariant}</span>}
                       {active.preferred && <span>{t.preferredModel}</span>}
                       <span>{active.family}</span>
-                      {active.capabilities.map(capability => <span key={capability}>{capability}</span>)}
+                      {capabilities.map(capability => <span key={capability}>{capabilityLabel(capability, t)}</span>)}
                     </div>
                     <p>{active.description}</p>
                   </div>
@@ -117,7 +205,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
                   <div><span>{t.source}</span><code>{active.source}</code></div>
                   <div><span>{t.family}</span><code>{active.family}</code></div>
                   <div><span>{t.paramsLabel}</span><code>{active.params || '-'}</code></div>
-                  <div><span>{t.capabilities}</span><code>{active.capabilities.join(', ')}</code></div>
+                  <div><span>{t.capabilities}</span><code>{capabilities.map(capability => capabilityLabel(capability, t)).join(', ')}</code></div>
                   <div><span>{t.loadPath}</span><code>{active.resolved_path || active.access_path}</code></div>
                   <div><span>{t.expectedFiles}</span><code>{active.expected_files.join(', ')}</code></div>
                   <div><span>{t.size}</span><code>{sizeDisplay(active, t)}</code></div>
@@ -176,7 +264,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
       <section className="panel model-path-panel">
         <div className="panel-title">{t.modelHubPathGuide}</div>
         <p>{t.modelHubPathHelp}</p>
-        {modelEntries.map(entry => (
+        {filteredEntries.map(entry => (
           <div className="path-guide" key={`${entry.base.key}:${entry.variantId || 'default'}`}>
             <span>{entry.isVariant ? `${entry.base.name} · ${entry.active.name}` : entry.base.name}</span>
             <code>{entry.active.access_path}</code>

@@ -72,6 +72,10 @@ are stored under that user's key:
 registry exposes the sd.cpp-supported image, image-edit, and video model
 families. The UI shows every managed entry with its family, capabilities,
 shared path, and download/sync actions.
+The model management page can filter entries by supported capabilities such as
+text-to-image, image-to-image, text-to-video, and image-to-video. Selecting
+multiple capabilities uses AND semantics, so only model entries that support
+every selected capability remain visible.
 
 All built-in entries are pulled by Model Hub from dedicated ModelScope runtime
 repositories under `vivibit/image-studio-*`. Each repository contains the
@@ -181,7 +185,7 @@ the matching host:
 | --- | --- | --- |
 | `amd`, `amd-cuda` | `tc232` | image tags `amd_YYYYMMDD` / `amd_cu128_YYYYMMDD` |
 | `arm`, `arm-cuda` | `tc35` | image tags `arm_YYYYMMDD` / `arm_cu128_YYYYMMDD` |
-| `l4t` | `tc912` | image tag `l4t_YYYYMMDD` |
+| `l4t` | `tc192` | image tag `l4t_YYYYMMDD` |
 | `thor` | explicit Thor build host only | image tag `thor_YYYYMMDD` |
 
 Build script entrypoint:
@@ -197,7 +201,9 @@ Build script entrypoint:
 
 Backend tags remain profile-specific. The frontend is architecture-only: one
 `amd_<date>` image is written to every selected AMD sheet, and one `arm_<date>`
-image is written to every selected ARM, L4T, Thor, and SOPHON sheet.
+image is written to every selected ARM, L4T, Thor, and SOPHON sheet. The L4T
+host check only applies when building the backend; frontend-only runs may update
+the shared ARM frontend tag for L4T and Thor sheets from an ARM build host.
 
 ## VOS Package
 

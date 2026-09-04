@@ -7,7 +7,12 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     proxy: {
-      '/api': 'http://127.0.0.1:5000',
+      // 生产环境由 VOS 网关剥掉 /api/com.ictrek.image-studio 前缀；
+      // 本地开发由代理完成同样的前缀剥离，再转发给 uvicorn。
+      '/api': {
+        target: 'http://127.0.0.1:5000',
+        rewrite: (path) => path.replace('/api/com.ictrek.image-studio', ''),
+      },
     },
   },
 })

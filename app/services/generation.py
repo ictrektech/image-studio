@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 import shlex
 import shutil
@@ -14,6 +15,8 @@ from app.config import settings
 from app.models import GenerateRequest, JobRecord
 from app.services.models import assert_model_hub_ready, get_model_def, model_path_for, runtime_paths_for
 from app.services.storage import input_path, job_dir, load_job, save_job, user_dir
+logger = logging.getLogger("image-studio.sd")
+
 
 _semaphore = asyncio.Semaphore(settings.max_concurrency)
 _job_tasks: dict[tuple[str, str], asyncio.Task] = {}
@@ -315,6 +318,7 @@ async def run_sd_cpp(
     progress_span: float = 0.87,
 ) -> None:
     args = build_sd_args(job, output, seed_offset=seed_offset, low_memory_retry=low_memory_retry)
+    logger.info("sd-cli 启动 (job=%s run=%s): %s", job.job_id, seed_offset, shlex.join(args))
     video_mode = get_model_def(job.model_key, job.model_variant)["runtime"].get("mode") == "video"
     timeout = settings.video_timeout_seconds if video_mode else settings.default_timeout_seconds
     task_key = (job.user_key, job.job_id)
@@ -351,6 +355,7 @@ async def run_sd_cpp(
         _job_processes.pop(task_key, None)
     if process.returncode != 0:
         detail = " | ".join(line.strip() for line in list(output_tail)[-6:] if line.strip())
+        logger.error("sd-cli 失败 (job=%s code=%s): %s", job.job_id, process.returncode, shlex.join(args))
         raise RuntimeError(f"sd-cli 退出码 {process.returncode}: {detail or '无错误输出'}")
 
 

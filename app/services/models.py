@@ -213,9 +213,22 @@ def _model(
 # （仓库内相对路径）、家族级附加参数、默认采样参数、是否支持负向提示词。
 # 路径均相对 export/<source>/<org>/<repo>/current 解析。
 RUNTIME_SPECS: dict[str, dict[str, Any]] = {
-    "sd15": _runtime(defaults={"width": 512, "height": 512, "steps": 30, "cfg_scale": 7.0, "sampler": "euler_a"}),
-    "sd2": _runtime(defaults={"width": 512, "height": 512, "steps": 30, "cfg_scale": 7.0, "sampler": "euler_a"}),
-    "sd-turbo": _runtime(defaults={"steps": 4, "cfg_scale": 1.0, "sampler": "euler_a"}, parameters={"cfg_scale": False}),
+    "sd15": _runtime(defaults={"width": 512, "height": 512, "steps": 20, "cfg_scale": 7.0, "sampler": "euler_a"}),
+    "sd2": _runtime(defaults={"width": 512, "height": 512, "steps": 20, "cfg_scale": 7.0, "sampler": "euler_a"}),
+    # NX 实测（results/nx_model_report.md）：f16 + diffusion-fa + vae-tiling 采样 2.45->1.68s，显存 3.7->2.6GB
+    "sd-turbo": _runtime(
+        extra_args=["--type", "f16", *_FA_ARGS],
+        defaults={
+            "width": 512,
+            "height": 512,
+            "steps": 4,
+            "cfg_scale": 1.0,
+            "sampler": "euler_a",
+            "vae_tiling": True,
+            "vae_tile_size": "128x128",
+        },
+        parameters={"cfg_scale": False},
+    ),
     "sdxl": _runtime(defaults={"steps": 30, "cfg_scale": 7.0, "sampler": "euler_a"}),
     "sdxl-turbo": _runtime(defaults={"steps": 4, "cfg_scale": 1.0, "sampler": "euler_a"}, parameters={"cfg_scale": False}),
     "sd3": _runtime(
@@ -840,12 +853,13 @@ def _variant(
 
 MODEL_VARIANTS: dict[str, list[dict[str, Any]]] = {
     "sd15": [
-        _variant("q4_0", "Q4_0", [_ms_repo_source("gpustack/stable-diffusion-v1-5-GGUF", ["stable-diffusion-v1-5-Q4_0.gguf"])], "ModelScope GGUF Q4_0 checkpoint for sd.cpp.", params="860M"),
+        # q8_0 优先：NX 实测 q8 速度/显存/质量均优于 q4，q4 仅作显存极紧时的备选
         _variant("q8_0", "Q8_0", [_ms_repo_source("gpustack/stable-diffusion-v1-5-GGUF", ["stable-diffusion-v1-5-Q8_0.gguf"])], "ModelScope GGUF Q8_0 checkpoint for sd.cpp.", params="860M"),
+        _variant("q4_0", "Q4_0", [_ms_repo_source("gpustack/stable-diffusion-v1-5-GGUF", ["stable-diffusion-v1-5-Q4_0.gguf"])], "ModelScope GGUF Q4_0 checkpoint for sd.cpp.", params="860M"),
     ],
     "sd2": [
-        _variant("q4_0", "Q4_0", [_ms_repo_source("gpustack/stable-diffusion-v2-1-GGUF", ["stable-diffusion-v2-1-Q4_0.gguf"])], "ModelScope GGUF Q4_0 checkpoint for sd.cpp.", params="865M"),
         _variant("q8_0", "Q8_0", [_ms_repo_source("gpustack/stable-diffusion-v2-1-GGUF", ["stable-diffusion-v2-1-Q8_0.gguf"])], "ModelScope GGUF Q8_0 checkpoint for sd.cpp.", params="865M"),
+        _variant("q4_0", "Q4_0", [_ms_repo_source("gpustack/stable-diffusion-v2-1-GGUF", ["stable-diffusion-v2-1-Q4_0.gguf"])], "ModelScope GGUF Q4_0 checkpoint for sd.cpp.", params="865M"),
     ],
     "sdxl": [
         _variant("q4_0", "Q4_0", [_ms_repo_source("gpustack/stable-diffusion-xl-base-1.0-GGUF", ["stable-diffusion-xl-base-1.0-Q4_0.gguf"])], "ModelScope SDXL GGUF Q4_0 checkpoint for sd.cpp.", params="3.5B"),

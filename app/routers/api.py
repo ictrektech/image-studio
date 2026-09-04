@@ -7,6 +7,7 @@ from app.config import settings as app_settings
 from app.models import GenerateRequest
 from app.services.generation import cancel_job, create_job
 from app.services.models import get_model, get_model_def, list_model_defs_with_hub_state, model_info, pull_model, stop_model, sync_model_hub
+from app.services.templates import delete_template, default_template_id, list_templates, rename_template, save_template
 from app.services.session import bearer_token, current_user_key
 from app.services.storage import (
     delete_input,
@@ -36,6 +37,35 @@ async def about():
         "sd_cpp_bin": app_settings.sd_cpp_bin,
         "max_concurrency": app_settings.max_concurrency,
     }
+
+
+@router.get("/templates")
+async def templates_list():
+    return {"templates": list_templates(), "default_template": default_template_id()}
+
+
+@router.post("/templates")
+async def templates_create(payload: dict):
+    name = str(payload.get("name") or "")
+    body = payload.get("payload")
+    if not isinstance(body, dict) or not body:
+        raise HTTPException(status_code=422, detail="payload 不能为空")
+    return save_template(name, body)
+
+
+@router.patch("/templates/{template_id}")
+async def templates_rename(template_id: str, payload: dict):
+    renamed = rename_template(template_id, str(payload.get("name") or ""))
+    if not renamed:
+        raise HTTPException(status_code=404, detail="模板不存在")
+    return renamed
+
+
+@router.delete("/templates/{template_id}")
+async def templates_delete(template_id: str):
+    if not delete_template(template_id):
+        raise HTTPException(status_code=404, detail="模板不存在")
+    return {"ok": True}
 
 
 @router.get("/me")

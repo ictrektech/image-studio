@@ -131,6 +131,13 @@ export interface SessionInfo {
   authenticated: boolean
 }
 
+export interface TemplateInfo {
+  id: string
+  name: string
+  description: string
+  payload: Partial<GeneratePayload>
+}
+
 export interface AboutInfo {
   app_id: string
   app_version: string
@@ -190,6 +197,12 @@ function errorMessage(resp: Response, text: string): string {
 
 export const api = {
   about: () => request<AboutInfo>('/api/v1/about'),
+  listTemplates: () => request<{ templates: TemplateInfo[]; default_template: string | null }>('/api/v1/templates'),
+  saveTemplate: (name: string, payload: Partial<GeneratePayload>) =>
+    request<TemplateInfo>('/api/v1/templates', { method: 'POST', body: JSON.stringify({ name, payload }) }),
+  renameTemplate: (id: string, name: string) =>
+    request<TemplateInfo>(`/api/v1/templates/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+  deleteTemplate: (id: string) => request<{ ok: boolean }>(`/api/v1/templates/${id}`, { method: 'DELETE' }),
   me: () => request<SessionInfo>('/api/v1/me'),
   settings: () => request<UserSettings>('/api/v1/settings'),
   updateSettings: (payload: UserSettings) => request<UserSettings>('/api/v1/settings', { method: 'PUT', body: JSON.stringify(payload) }),

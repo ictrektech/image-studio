@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, Database, Download, DownloadCloud, AlertTriangle, ImageIcon, Loader2, Play, RefreshCw, RotateCcw, Sparkles, Square, Trash2, UserCircle2, Wand2, X } from 'lucide-react'
-import { api, GeneratePayload, InputItem, JobRecord, ModelInfo, SessionInfo } from '../api/client'
+import { ChevronDown, Database, Download, DownloadCloud, AlertTriangle, Check, ImageIcon, Loader2, Pencil, Play, Plus, RefreshCw, RotateCcw, Sparkles, Square, Trash2, UserCircle2, Wand2, X } from 'lucide-react'
+import { api, GeneratePayload, InputItem, JobRecord, ModelInfo, SessionInfo, TemplateInfo } from '../api/client'
 import { messages } from '../i18n'
 
 function formatSize(bytes?: number) {
@@ -121,6 +121,11 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [templates, setTemplates] = useState<TemplateInfo[]>([])
+  const [defaultTplId, setDefaultTplId] = useState('')
+  const [savingTemplate, setSavingTemplate] = useState(false)
+  const [templateName, setTemplateName] = useState('')
+  const [renamingId, setRenamingId] = useState('')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [playingUrl, setPlayingUrl] = useState('')
   const messagesRef = useRef<HTMLDivElement | null>(null)
@@ -231,6 +236,63 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
     const first = imageModels[0]
     setPayload(applyRuntimeDefaults({ ...payload, model_key: first.base.key, model_variant: first.variantId }, first.active, first.active.runtime?.mode === 'video'))
   }, [imageModels, payload])
+
+  const applyTemplate = (tpl: TemplateInfo) => {
+    const key = tpl.payload.model_key || payload.model_key
+    const variant = tpl.payload.model_variant || ''
+    const entry = imageModels.find(e => e.base.key === key && e.variantId === variant)
+    setPayload(applyRuntimeDefaults({ ...payload, ...tpl.payload, model_key: key, model_variant: variant }, entry?.active, entry?.active?.runtime?.mode === 'video'))
+  }
+
+  useEffect(() => {
+    api.listTemplates().then(data => {
+      setTemplates(data.templates)
+      setDefaultTplId(data.default_template || '')
+      // 首次使用（无本地选择记录）时应用平台默认模板
+      const pristine = !localStorage.getItem(SELECTED_MODEL_STORAGE_KEY)
+      const tpl = data.default_template ? data.templates.find(item => item.id === data.default_template) : null
+      if (pristine && tpl) applyTemplate(tpl)
+    }).catch(() => { /* 模板加载失败不阻塞主流程 */ })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const confirmSaveTemplate = async () => {
+    const name = templateName.trim()
+    if (!name) return
+    try {
+      const entry = await api.saveTemplate(name, payload)
+      setTemplates(ts => [entry, ...ts.filter(t => t.name !== entry.name)])
+      setSavingTemplate(false)
+      setTemplateName('')
+    } catch {
+      alert(t.templateSaveFailed)
+    }
+  }
+
+  const removeTemplate = async (tpl: TemplateInfo) => {
+    if (!window.confirm(`${t.templateDeleteTitle}: ${tpl.name}?`)) return
+    try {
+      await api.deleteTemplate(tpl.id)
+      setTemplates(ts => ts.filter(t => t.id !== tpl.id))
+    } catch { /* 删除失败保持原列表 */ }
+  }
+
+  const startRename = (tpl: TemplateInfo) => {
+    setRenamingId(tpl.id)
+    setTemplateName(tpl.name)
+  }
+
+  const confirmRenameTemplate = async () => {
+    const name = templateName.trim()
+    if (!renamingId || !name) return
+    try {
+      const renamed = await api.renameTemplate(renamingId, name)
+      setTemplates(ts => ts.map(x => (x.id === renamingId ? renamed : x)))
+    } catch {
+      alert(t.templateSaveFailed)
+    }
+    setRenamingId('')
+  }
 
   const switchModelEntry = (value: string) => {
     const [key, variantId = ''] = value.split('::')
@@ -391,6 +453,49 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
   return (
     <div className="page-stack">
       <section className="panel quick-settings-panel">
+        {templates.length > 0 && (
+          <div className="template-row">
+            {templates.map(tpl => (
+              <span key={tpl.id} className={`template-chip${tpl.id === defaultTplId ? ' is-default' : ''}${renamingId === tpl.id ? ' template-save-form' : ''}`} title={tpl.description || tpl.name}>
+                {renamingId === tpl.id ? (
+                  <>
+                    <input
+                      autoFocus
+                      value={templateName}
+                      onChange={e => setTemplateName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') confirmRenameTemplate(); if (e.key === 'Escape') setRenamingId('') }}
+                    />
+                    <button className="template-apply" onClick={confirmRenameTemplate}><Check size={12} /></button>
+                    <button className="template-delete" onClick={() => setRenamingId('')}><X size={11} /></button>
+                  </>
+                ) : (
+                  <>
+                    <button className="template-apply" onClick={() => applyTemplate(tpl)}>{tpl.name}</button>
+                    <button className="template-delete" title={t.templateRename} onClick={() => startRename(tpl)}><Pencil size={11} /></button>
+                    <button className="template-delete" title={t.templateDeleteTitle} onClick={() => removeTemplate(tpl)}><X size={11} /></button>
+                  </>
+                )}
+              </span>
+            ))}
+            {savingTemplate ? (
+              <span className="template-chip template-save-form">
+                <input
+                  autoFocus
+                  value={templateName}
+                  placeholder={t.templateNameLabel}
+                  onChange={e => setTemplateName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') confirmSaveTemplate(); if (e.key === 'Escape') setSavingTemplate(false) }}
+                />
+                <button className="template-apply" onClick={confirmSaveTemplate}><Check size={12} /></button>
+                <button className="template-delete" onClick={() => setSavingTemplate(false)}><X size={11} /></button>
+              </span>
+            ) : (
+              <button className="template-chip template-add" onClick={() => { setTemplateName(''); setSavingTemplate(true) }}>
+                <Plus size={12} />{t.templateSave}
+              </button>
+            )}
+          </div>
+        )}
         <div className="quick-settings-grid">
           <div className="quick-field quick-model-field">
             <label>{t.modelPanelTitle}</label>

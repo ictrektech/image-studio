@@ -246,10 +246,42 @@ function GuideCode({ children }: { children: string }) {
 
 export default function ApiPage({ models, t }: { models: ModelInfo[]; t: T }) {
   const [session, setSession] = useState<SessionInfo | null>(null)
+  const [immichUrl, setImmichUrl] = useState('')
+  const [immichKey, setImmichKey] = useState('')
+  const [immichVerifySsl, setImmichVerifySsl] = useState(true)
+  const [immichConfigured, setImmichConfigured] = useState(false)
+  const [immichSaving, setImmichSaving] = useState(false)
+  const [immichMessage, setImmichMessage] = useState('')
+
+  const loadImmich = () => api.immichSettings().then(config => {
+    setImmichUrl(config.api_url)
+    setImmichVerifySsl(config.verify_ssl)
+    setImmichConfigured(config.configured)
+  }).catch(() => undefined)
 
   useEffect(() => {
     api.me().then(setSession).catch(() => undefined)
+    loadImmich()
   }, [])
+
+  const saveImmich = async () => {
+    setImmichSaving(true)
+    setImmichMessage('')
+    try {
+      const config = await api.updateImmichSettings({
+        api_url: immichUrl,
+        ...(immichKey ? { api_key: immichKey } : {}),
+        verify_ssl: immichVerifySsl,
+      })
+      setImmichKey('')
+      setImmichConfigured(config.configured)
+      setImmichMessage(t.immichSaved)
+    } catch (error: any) {
+      setImmichMessage(error.message || t.immichSaveFailed)
+    } finally {
+      setImmichSaving(false)
+    }
+  }
 
   const modelRows = models.length
     ? models.flatMap(model => [
@@ -286,6 +318,17 @@ export default function ApiPage({ models, t }: { models: ModelInfo[]; t: T }) {
     <section className="panel api-panel">
       <div className="panel-title">{t.api}</div>
       <p>{t.apiHelp}</p>
+      <div className="auth-section-label" style={{ marginTop: 20 }}>{t.immichTitle}</div>
+      <p>{t.immichHelp}</p>
+      <div className="auth-card">
+        <label htmlFor="immich-api-url">{t.immichApiUrl}</label>
+        <input id="immich-api-url" value={immichUrl} onChange={event => setImmichUrl(event.target.value)} placeholder="https://immich.example.com/api" />
+        <label htmlFor="immich-api-key">{t.immichApiKey}</label>
+        <input id="immich-api-key" type="password" value={immichKey} onChange={event => setImmichKey(event.target.value)} placeholder={immichConfigured ? t.immichKeyKeep : t.immichKeyPlaceholder} autoComplete="new-password" />
+        <label className="checkbox-row"><input type="checkbox" checked={immichVerifySsl} onChange={event => setImmichVerifySsl(event.target.checked)} />{t.immichVerifySsl}</label>
+        <button className="secondary-action" onClick={saveImmich} disabled={immichSaving || !immichUrl.trim() || (!immichConfigured && !immichKey.trim())}>{immichSaving ? t.submitting : t.immichSave}</button>
+        {immichMessage && <p className="api-note" role="status">{immichMessage}</p>}
+      </div>
       <div className="endpoint-grid">
         <div><span>{t.baseUrl}</span><code>/api/com.ictrek.image-studio</code></div>
         <div><span>{t.createImage}</span><code>POST /api/v1/generate</code></div>

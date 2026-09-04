@@ -67,6 +67,27 @@ class GenerateRequest(BaseModel):
     params_backend: str = Field(default="", max_length=200)
 
 
+class ImmichSettingsUpdate(BaseModel):
+    api_url: str = Field(default="", max_length=500)
+    api_key: str | None = Field(default=None, max_length=500)
+    verify_ssl: bool = True
+
+
+class ImmichSettingsResponse(BaseModel):
+    api_url: str = ""
+    configured: bool = False
+    verify_ssl: bool = True
+
+
+class ImmichUploadRecord(BaseModel):
+    status: Literal["queued", "uploading", "uploaded", "duplicate", "failed"]
+    checksum: str = ""
+    asset_id: str | None = None
+    attempts: int = 0
+    error: str = ""
+    updated_at: datetime
+
+
 class JobRecord(BaseModel):
     job_id: str
     user_key: str
@@ -132,6 +153,7 @@ class JobRecord(BaseModel):
     created_at: datetime
     updated_at: datetime
     metadata: dict[str, Any] = Field(default_factory=dict)
+    immich_uploads: dict[str, ImmichUploadRecord] = Field(default_factory=dict)
 
 
 class ModelInfo(BaseModel):

@@ -95,25 +95,40 @@ def settings_path(user_key: str) -> Path:
     return user_dir(user_key) / "settings.json"
 
 
-def load_settings(user_key: str) -> dict:
+def _load_settings_raw(user_key: str) -> dict:
     path = settings_path(user_key)
     if not path.exists():
-        return {"language": "zh-CN"}
+        return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {"language": "zh-CN"}
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def load_settings(user_key: str) -> dict:
+    data = _load_settings_raw(user_key)
     language = data.get("language")
     return {"language": language if language in {"zh-CN", "en"} else "zh-CN"}
 
 
 def save_settings(user_key: str, data: dict) -> dict:
-    current = load_settings(user_key)
+    current = _load_settings_raw(user_key)
     language = data.get("language")
     if language in {"zh-CN", "en"}:
         current["language"] = language
     settings_path(user_key).write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
-    return current
+    return load_settings(user_key)
+
+
+def load_settings_file(user_key: str) -> dict:
+    """读取用户 settings.json 原始内容（领域模块用，如 Immich 设置）。"""
+    return _load_settings_raw(user_key)
+
+
+def save_settings_file(user_key: str, data: dict) -> None:
+    """整体写回用户 settings.json，与语言设置共用同一文档。"""
+    settings_path(user_key).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def inputs_dir(user_key: str) -> Path:

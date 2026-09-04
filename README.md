@@ -48,6 +48,47 @@ Main endpoints:
 | `POST` | `/api/v1/models/{key}/pull` | Trigger Model Hub pull from ModelScope |
 | `POST` | `/api/v1/models/{key}/stop` | Stop an in-flight download (resumable) |
 | `POST` | `/api/v1/models/{key}/sync` | Ask Model Hub to sync local model registry |
+| `GET` | `/api/v1/immich` | Read per-user Immich settings (never returns the API key) |
+| `PUT` | `/api/v1/immich` | Save per-user Immich base URL / API key (key is stored server-side, never returned) |
+| `POST` | `/api/v1/jobs/{job_id}/immich-upload` | Queue a succeeded job's outputs for upload to Immich (`?force=true` re-queues already completed outputs) |
+| `POST` | `/api/v1/jobs/{job_id}/immich-upload/retry` | Re-queue failed outputs |
+
+## Immich Integration
+
+Image Studio can upload completed images and videos to a self-hosted Immich
+instance. The browser never talks to Immich directly — the backend holds the
+credentials and performs the upload.
+
+- Configure the **Immich API base URL** (e.g. `https://host/app/com.ictrek.ai-album/api`)
+  and a scoped **API key** in the frontend (`API` → `Immich settings`), or via
+  `PUT /api/v1/immich`.
+- The API key is stored in the per-user settings file and is never returned by
+  any endpoint.
+- `GET /api/v1/immich` never returns the key; it only reports whether a key is
+  configured.
+- Self-signed certificates (common for Immich on a private network) are rejected
+  by default. Uncheck **Verify HTTPS certificate** in the frontend Immich
+  settings for a single user. Disabling verification exposes uploads to
+  man-in-the-middle interception — prefer installing the Immich CA certificate
+  instead when possible.
+- A generation job must be `succeeded` before its outputs can be uploaded.
+  Each output is uploaded through:
+  1. `POST /assets/bulk-upload-check` (SHA-1 dedupe),
+  2. `POST /assets` only when the server reports the asset is new.
+- Uploads run in a single background worker with a bounded retry for transient
+  errors; status is persisted on the `JobRecord` (`immich_uploads`), and
+  unfinished uploads are re-queued after a restart.
+- Deleting a job removes its local queued uploads but never deletes remote
+  Immich assets.
+- Duplicate detection has three layers:
+  1. Outputs already `queued`, `uploading`, `uploaded`, or `duplicate` on the
+     `JobRecord` are skipped without contacting Immich.
+  2. The SHA-1 checksum is checked with `POST /assets/bulk-upload-check`, so
+     byte-identical outputs from *different* jobs are only stored once.
+  3. Immich itself keys assets by `(deviceId, deviceAssetId)`.
+- Because layer 1 is local state, deleting an asset in Immich does not make the
+  job re-uploadable by default. Pass `?force=true` (the frontend asks for
+  confirmation first) to re-queue completed outputs.
 
 ### Authentication and user isolation
 

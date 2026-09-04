@@ -116,6 +116,7 @@ export interface JobRecord extends GeneratePayload {
   created_at: string
   updated_at: string
   metadata?: { init_job_id?: string; init_filename?: string; init_input_id?: string }
+  immich_uploads?: Record<string, ImmichUploadRecord>
 }
 
 export interface InputItem {
@@ -153,6 +154,21 @@ export interface UserSettings {
   language: 'zh-CN' | 'en'
 }
 
+export interface ImmichSettings {
+  api_url: string
+  configured: boolean
+  verify_ssl: boolean
+}
+
+export interface ImmichUploadRecord {
+  status: 'queued' | 'uploading' | 'uploaded' | 'duplicate' | 'failed'
+  checksum: string
+  asset_id?: string | null
+  attempts: number
+  error: string
+  updated_at: string
+}
+
 async function requestOnce<T>(path: string, init?: RequestInit): Promise<Response> {
   const token = await getVOSBearerToken().catch(() => null)
   const headers = {
@@ -160,7 +176,8 @@ async function requestOnce<T>(path: string, init?: RequestInit): Promise<Respons
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(init?.headers || {}),
   }
-  return fetch(`${API_BASE}${path}`, { headers, ...init })
+  // 轮询任务/上传状态时不能拿到浏览器或网关缓存的旧响应。
+  return fetch(`${API_BASE}${path}`, { cache: 'no-store', headers, ...init })
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -206,6 +223,9 @@ export const api = {
   me: () => request<SessionInfo>('/api/v1/me'),
   settings: () => request<UserSettings>('/api/v1/settings'),
   updateSettings: (payload: UserSettings) => request<UserSettings>('/api/v1/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+  immichSettings: () => request<ImmichSettings>('/api/v1/immich'),
+  updateImmichSettings: (payload: { api_url: string; api_key?: string; verify_ssl: boolean }) =>
+    request<ImmichSettings>('/api/v1/immich', { method: 'PUT', body: JSON.stringify(payload) }),
   listModels: () => request<ModelInfo[]>('/api/v1/models'),
   pullModel: (key: string, force = false, variant = '') => {
     const params = new URLSearchParams()
@@ -220,6 +240,9 @@ export const api = {
   listJobs: () => request<JobRecord[]>('/api/v1/jobs'),
   getJob: (jobId: string) => request<JobRecord>(`/api/v1/jobs/${jobId}`),
   deleteJob: (jobId: string) => request<{ deleted: boolean; job_id: string }>(`/api/v1/jobs/${jobId}`, { method: 'DELETE' }),
+  uploadJobToImmich: (jobId: string, force = false) =>
+    request<JobRecord>(`/api/v1/jobs/${jobId}/immich-upload${force ? '?force=true' : ''}`, { method: 'POST' }),
+  retryImmichUpload: (jobId: string) => request<JobRecord>(`/api/v1/jobs/${jobId}/immich-upload/retry`, { method: 'POST' }),
   outputUrl: (jobId: string, filename: string) => {
     const token = getCachedVOSBearerToken()
     const suffix = token ? `?access_token=${encodeURIComponent(token)}` : ''

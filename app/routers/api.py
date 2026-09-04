@@ -4,8 +4,17 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 
 from app.config import settings as app_settings
-from app.models import GenerateRequest
+from app.models import GenerateRequest, ImmichSettingsResponse, ImmichSettingsUpdate
 from app.services.generation import cancel_job, create_job
+from app.services.immich import (
+    ImmichUploadError,
+    cancel_job_uploads,
+    enqueue_job as enqueue_immich_job,
+    load_immich_settings,
+    normalize_base_url,
+    retry_job as retry_immich_job,
+    save_immich_settings,
+)
 from app.services.models import get_model, get_model_def, list_model_defs_with_hub_state, model_info, pull_model, stop_model, sync_model_hub
 from app.services.templates import delete_template, default_template_id, list_templates, rename_template, save_template
 from app.services.session import bearer_token, current_user_key
@@ -84,6 +93,33 @@ async def update_settings(request: Request, payload: dict):
     return save_settings(await current_user_key(request), payload)
 
 
+@router.get("/immich", response_model=ImmichSettingsResponse)
+async def immich_settings(request: Request):
+    config = load_immich_settings(await current_user_key(request))
+    return ImmichSettingsResponse(
+        api_url=config["api_url"],
+        configured=config["configured"],
+        verify_ssl=config["verify_ssl"],
+    )
+
+
+@router.put("/immich", response_model=ImmichSettingsResponse)
+async def update_immich_settings(request: Request, payload: ImmichSettingsUpdate):
+    user_key = await current_user_key(request)
+    current = load_immich_settings(user_key)
+    api_key = payload.api_key if payload.api_key is not None else current["api_key"]
+    try:
+        api_url = normalize_base_url(payload.api_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    config = save_immich_settings(user_key, api_url, api_key, payload.verify_ssl)
+    return ImmichSettingsResponse(
+        api_url=config["api_url"],
+        configured=config["configured"],
+        verify_ssl=config["verify_ssl"],
+    )
+
+
 @router.post("/generate")
 async def generate(request: Request, payload: GenerateRequest):
     user_key = await current_user_key(request)
@@ -103,6 +139,24 @@ async def jobs(request: Request):
     return list_jobs(await current_user_key(request))
 
 
+@router.post("/jobs/{job_id}/immich-upload", status_code=202)
+async def upload_job_to_immich(request: Request, job_id: str, force: bool = False):
+    try:
+        return await enqueue_immich_job(await current_user_key(request), job_id, force=force)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ImmichUploadError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
+@router.post("/jobs/{job_id}/immich-upload/retry", status_code=202)
+async def retry_job_immich_upload(request: Request, job_id: str):
+    try:
+        return await retry_immich_job(await current_user_key(request), job_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
 @router.get("/jobs/{job_id}")
 async def job(request: Request, job_id: str):
     item = load_job(await current_user_key(request), job_id)
@@ -115,6 +169,7 @@ async def job(request: Request, job_id: str):
 async def delete_generation_job(request: Request, job_id: str):
     user_key = await current_user_key(request)
     await cancel_job(user_key, job_id)
+    await cancel_job_uploads(user_key, job_id)
     deleted = delete_job(user_key, job_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="job not found")

@@ -407,6 +407,9 @@ progress { width: 100%; height: 8px; accent-color: var(--accent); margin: 8px 0;
 .auth-card.warn { background: #fff7ed; border-color: #fed7aa; }
 .auth-card-title { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 13px; margin-bottom: 6px; }
 .auth-card p { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+.auth-card > input { margin: 4px 0 8px; }
+.checkbox-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-weight: 600; }
+.checkbox-row input { width: 16px; height: 16px; margin: 0; }
 .api-session-now { margin-top: 14px; font-size: 12px; }
 .api-session-now code {
   margin: 0 6px; padding: 3px 8px; border-radius: 6px; background: #f1f5f9; font-size: 12px;
@@ -462,6 +465,9 @@ progress { width: 100%; height: 8px; accent-color: var(--accent); margin: 8px 0;
   grid-template-columns: 74px 92px minmax(180px, 0.75fr) 92px 82px minmax(220px, 1fr) 78px;
 }
 .job-row p { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.immich-upload-status { grid-column: 1 / -1; font-size: 11px; color: var(--muted); }
+.immich-upload-status.uploaded, .immich-upload-status.duplicate { color: var(--success); }
+.immich-upload-status.failed { color: var(--danger); }
 .job-thumb {
   width: 64px;
   height: 64px;

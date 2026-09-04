@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.routers.api import router
+from app.services.immich import start as start_immich_uploads, stop as stop_immich_uploads
 from app.services.storage import ensure_storage
 
 logging.basicConfig(
@@ -27,6 +28,12 @@ app.include_router(router)
 @app.on_event("startup")
 async def startup() -> None:
     ensure_storage()
+    await start_immich_uploads()
+
+
+@app.on_event("shutdown")
+async def shutdown() -> None:
+    stop_immich_uploads()
 
 
 @app.get("/health")

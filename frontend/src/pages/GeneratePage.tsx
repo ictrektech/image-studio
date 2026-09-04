@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, Database, Download, DownloadCloud, AlertTriangle, Check, ImageIcon, Loader2, Pencil, Play, Plus, RefreshCw, RotateCcw, Sparkles, Square, Trash2, UserCircle2, Wand2, X } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, CloudUpload, Database, Download, DownloadCloud, ImageIcon, Loader2, Pencil, Play, Plus, RefreshCw, RotateCcw, Sparkles, Square, Trash2, UserCircle2, Wand2, X } from 'lucide-react'
 import { api, GeneratePayload, InputItem, JobRecord, ModelInfo, SessionInfo, TemplateInfo } from '../api/client'
 import { messages } from '../i18n'
+import { hasFailedUpload, hasPendingUploads, ImmichUploadStatus, useImmichUploads } from '../immichUploads'
 
 function formatSize(bytes?: number) {
   if (!bytes) return '-'
@@ -150,6 +151,8 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
   const supportsStrength = supportsParam('strength', !isEditModel && !isVideoModel)
   const negativeIgnored = !supportsParam('negative_prompt', activeModel?.runtime?.negative !== false)
   const hasRunning = jobs.some(job => job.status === 'queued' || job.status === 'running')
+  // 上传由后端 worker 异步完成，生成早已结束，必须单独驱动轮询，否则状态会一直停在「上传中」。
+  const pendingUploads = hasPendingUploads(jobs)
   const isImg2Img = Boolean((payload.init_job_id && payload.init_filename) || payload.init_input_id)
   const videoDuration = payload.fps > 0 && payload.video_frames > 0 ? (payload.video_frames / payload.fps).toFixed(1) : ''
   const initPreviewUrl = payload.init_input_id
@@ -368,10 +371,10 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
   }
 
   useEffect(() => {
-    if (!hasRunning) return
+    if (!hasRunning && !pendingUploads) return
     const timer = window.setInterval(() => loadJobs().catch(() => undefined), 2500)
     return () => window.clearInterval(timer)
-  }, [hasRunning])
+  }, [hasRunning, pendingUploads])
 
   const submit = async () => {
     setSubmitting(true)
@@ -440,6 +443,8 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
 
   const modelDownloading = activeModel?.status === 'downloading'
   const modelProgress = modelDownloading ? Math.round((activeModel?.progress ?? 0) * 100) : 0
+
+  const { upload: uploadJob, retry: retryImmich } = useImmichUploads(t, loadJobs, message => setError(message))
 
   const deleteJob = async (job: JobRecord) => {
     const hasVideoOutput = job.outputs.some(isVideoFile)
@@ -618,8 +623,11 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
                     <div className="chat-msg-actions">
                       {job.outputs[0] && !isVideoFile(job.outputs[0]) && <button className="quiet-button" onClick={() => reuseOutput(job, job.outputs[0])}><Wand2 size={14} />{t.continueThread}</button>}
                       {job.outputs[0] && <a className="quiet-button" href={api.outputUrl(job.job_id, job.outputs[0])} download><Download size={14} />{t.downloadOutput}</a>}
+                      {job.status === 'succeeded' && <button className="quiet-button" onClick={() => uploadJob(job)}><CloudUpload size={14} />{t.immichUpload}</button>}
+                      {hasFailedUpload(job) && <button className="quiet-button" onClick={() => retryImmich(job)}><RotateCcw size={14} />{t.immichRetry}</button>}
                       <button className="quiet-button danger-action" onClick={() => deleteJob(job)}><Trash2 size={14} />{job.outputs.some(isVideoFile) ? t.deleteVideoOutput : t.deleteOutput}</button>
                     </div>
+                    <ImmichUploadStatus job={job} t={t} />
                   </div>
                 </div>
               </div>

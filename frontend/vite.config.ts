@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 // 后端端口统一配置在仓库根 .env.dev 的 IMAGE_STUDIO_PORT，与 run_dev.sh 共用同一来源；
 // BACKEND_ORIGIN 环境变量仍可整体覆盖代理目标（后端不在本机时使用，见 AGENTS.md 多机共享一节）。
@@ -26,7 +27,12 @@ const backendOrigin = process.env.BACKEND_ORIGIN || `http://127.0.0.1:${readDevE
 
 export default defineConfig({
   base: '/app/com.ictrek.image-studio/',
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   server: {
     host: '0.0.0.0',
     proxy: {

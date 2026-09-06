@@ -1,5 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { KeyRound, ShieldCheck, UserCircle2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { CheckRow, Field } from '@/components/app/field'
+import { Panel, PanelTitle } from '@/components/app/panel'
 import { api, ModelInfo, SessionInfo } from '../api/client'
 import { messages } from '../i18n'
 
@@ -226,21 +235,40 @@ curl -X POST "https://<vos-host>/api/com.ictrek.image-studio/api/v1/models/qwen-
 curl https://<vos-host>/api/com.ictrek.image-studio/api/v1/models \\
   -H "Authorization: Bearer <token>" | jq '.[] | select(.key=="flux-schnell") | {status,progress,downloaded_bytes,total_bytes}'`
 
-function GuideCode({ children }: { children: string }) {
-  const [copied, setCopied] = useState(false)
+const preCode = 'mt-3.5 overflow-auto rounded-lg bg-slate-900 p-3.5 font-mono text-xs text-slate-200'
+
+function GuideCode({ children, t }: { children: string; t: T }) {
   return (
     <pre
-      className="api-guide-code"
-      title={copied ? '✓' : 'copy'}
+      className={`${preCode} cursor-pointer`}
+      title="copy"
       onClick={() => {
         navigator.clipboard?.writeText(children).then(() => {
-          setCopied(true)
-          setTimeout(() => setCopied(false), 1500)
+          toast.success(t.copiedToClipboard)
         }, () => {})
       }}
     >
       {children}
     </pre>
+  )
+}
+
+function SectionHeading({ children }: { children: ReactNode }) {
+  return (
+    <div className="mt-5">
+      <Separator className="mb-3" />
+      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function AuthCard({ warn, children }: { warn?: boolean; children: ReactNode }) {
+  return (
+    <Card className={`mt-3 gap-0 rounded-lg py-3 ${warn ? 'border-orange-200 bg-orange-50' : 'bg-secondary'}`}>
+      {children}
+    </Card>
   )
 }
 
@@ -314,131 +342,153 @@ export default function ApiPage({ models, t }: { models: ModelInfo[]; t: T }) {
       source: '',
     }))
 
+  const endpoints: [string, string[]][] = [
+    [t.baseUrl, ['/api/com.ictrek.image-studio']],
+    [t.createImage, ['POST /api/v1/generate']],
+    [t.jobList, ['GET /api/v1/jobs']],
+    ['Job', ['GET /api/v1/jobs/<job_id>', 'DELETE …']],
+    [t.outputFile, ['GET /api/v1/outputs/<job_id>/<filename>']],
+    ['Outputs', ['GET /api/v1/outputs']],
+    ['Pull', ['POST /api/v1/models/<key>/pull?variant=&force=', 'POST …/stop?variant=']],
+    ['Upload input', ['POST /api/v1/inputs', 'GET /api/v1/inputs']],
+    [t.modelList, ['GET /api/v1/models']],
+    [t.sessionUser, ['GET /api/v1/me']],
+    [t.healthCheck, ['GET /health']],
+  ]
+
   return (
-    <section className="panel api-panel">
-      <div className="panel-title">{t.api}</div>
-      <p>{t.apiHelp}</p>
-      <div className="auth-section-label" style={{ marginTop: 20 }}>{t.immichTitle}</div>
-      <p>{t.immichHelp}</p>
-      <div className="auth-card">
-        <label htmlFor="immich-api-url">{t.immichApiUrl}</label>
-        <input id="immich-api-url" value={immichUrl} onChange={event => setImmichUrl(event.target.value)} placeholder="https://immich.example.com/api" />
-        <label htmlFor="immich-api-key">{t.immichApiKey}</label>
-        <input id="immich-api-key" type="password" value={immichKey} onChange={event => setImmichKey(event.target.value)} placeholder={immichConfigured ? t.immichKeyKeep : t.immichKeyPlaceholder} autoComplete="new-password" />
-        <label className="checkbox-row"><input type="checkbox" checked={immichVerifySsl} onChange={event => setImmichVerifySsl(event.target.checked)} />{t.immichVerifySsl}</label>
-        <button className="secondary-action" onClick={saveImmich} disabled={immichSaving || !immichUrl.trim() || (!immichConfigured && !immichKey.trim())}>{immichSaving ? t.submitting : t.immichSave}</button>
-        {immichMessage && <p className="api-note" role="status">{immichMessage}</p>}
-      </div>
-      <div className="endpoint-grid">
-        <div><span>{t.baseUrl}</span><code>/api/com.ictrek.image-studio</code></div>
-        <div><span>{t.createImage}</span><code>POST /api/v1/generate</code></div>
-        <div><span>{t.jobList}</span><code>GET /api/v1/jobs</code></div>
-        <div><span>Job</span><code>GET /api/v1/jobs/&lt;job_id&gt;</code> <code>DELETE …</code></div>
-        <div><span>{t.outputFile}</span><code>GET /api/v1/outputs/&lt;job_id&gt;/&lt;filename&gt;</code></div>
-        <div><span>Outputs</span><code>GET /api/v1/outputs</code></div>
-        <div><span>Pull</span><code>POST /api/v1/models/&lt;key&gt;/pull?variant=&amp;force=</code> <code>POST …/stop?variant=</code></div>
-        <div><span>Upload input</span><code>POST /api/v1/inputs</code> <code>GET /api/v1/inputs</code></div>
-        <div><span>{t.modelList}</span><code>GET /api/v1/models</code></div>
-        <div><span>{t.sessionUser}</span><code>GET /api/v1/me</code></div>
-        <div><span>{t.healthCheck}</span><code>GET /health</code></div>
-      </div>
+    <Panel className="mx-auto max-w-[980px] p-3">
+      <PanelTitle>{t.api}</PanelTitle>
+      <p className="mt-0.5 text-xs text-muted-foreground">{t.apiHelp}</p>
 
-      <div className="auth-section-label" style={{ marginTop: 20 }}>{t.apiFlowTitle}</div>
-      <p>{t.apiFlowHelp}</p>
-      <p className="api-note">{t.apiStatusNote}</p>
-      <GuideCode>{SETUP_EXAMPLE}</GuideCode>
-      <p className="api-note">{t.apiSetupNote}</p>
+      <SectionHeading>{t.immichTitle}</SectionHeading>
+      <p className="mt-0.5 text-xs text-muted-foreground">{t.immichHelp}</p>
+      <AuthCard>
+        <Field label={t.immichApiUrl} className="mb-1">
+          <Input id="immich-api-url" value={immichUrl} onChange={event => setImmichUrl(event.target.value)} placeholder="https://immich.example.com/api" />
+        </Field>
+        <Field label={t.immichApiKey} className="mb-1">
+          <Input id="immich-api-key" type="password" value={immichKey} onChange={event => setImmichKey(event.target.value)} placeholder={immichConfigured ? t.immichKeyKeep : t.immichKeyPlaceholder} autoComplete="new-password" />
+        </Field>
+        <CheckRow className="my-2">
+          <Checkbox checked={immichVerifySsl} onCheckedChange={checked => setImmichVerifySsl(checked === true)} />
+          <span>{t.immichVerifySsl}</span>
+        </CheckRow>
+        <Button variant="outline" onClick={saveImmich} disabled={immichSaving || !immichUrl.trim() || (!immichConfigured && !immichKey.trim())}>{immichSaving ? t.submitting : t.immichSave}</Button>
+        {immichMessage && <p className="mt-2 text-xs text-muted-foreground" role="status">{immichMessage}</p>}
+      </AuthCard>
 
-      <h4 className="api-recipe-title">{t.apiRecipeA}</h4>
-      <GuideCode>{RECIPE_A}</GuideCode>
-      <h4 className="api-recipe-title">{t.apiRecipeB}</h4>
-      <p className="api-note">{t.apiRecipeBNote}</p>
-      <GuideCode>{RECIPE_B}</GuideCode>
-      <h4 className="api-recipe-title">{t.apiRecipeC}</h4>
-      <p className="api-note">{t.apiRecipeCNote}</p>
-      <GuideCode>{RECIPE_C}</GuideCode>
-      <h4 className="api-recipe-title">{t.apiRecipeD}</h4>
-      <p className="api-note">{t.apiRecipeDNote}</p>
-      <GuideCode>{RECIPE_D}</GuideCode>
-      <h4 className="api-recipe-title">{t.apiRecipeE}</h4>
-      <p className="api-note">{t.apiRecipeENote}</p>
-      <GuideCode>{RECIPE_E}</GuideCode>
-      <h4 className="api-recipe-title">{t.apiRecipeF}</h4>
-      <GuideCode>{RECIPE_F}</GuideCode>
-      <h4 className="api-recipe-title">{t.apiRecipeG}</h4>
-      <p className="api-note">{t.apiRecipeGNote}</p>
-      <GuideCode>{RECIPE_G}</GuideCode>
-      <h4 className="api-recipe-title">{t.apiRecipeH}</h4>
-      <p className="api-note">{t.apiRecipeHNote}</p>
-      <GuideCode>{RECIPE_H}</GuideCode>
+      <Table className="mt-3.5 text-xs">
+        <TableBody>
+          {endpoints.map(([label, codes]) => (
+            <TableRow key={label}>
+              <TableCell className="w-[96px] align-middle text-muted-foreground">{label}</TableCell>
+              <TableCell className="py-2.5">
+                <span className="flex min-w-0 flex-wrap gap-1.5">
+                  {codes.map(code => <code className="min-w-0 truncate rounded border bg-secondary px-1.5 py-0.5 font-mono" key={code}>{code}</code>)}
+                </span>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
 
-      <h4 className="api-recipe-title">{t.apiErrorsTitle}</h4>
-      <pre className="api-err-list">{t.apiErrList}</pre>
+      <SectionHeading>{t.apiFlowTitle}</SectionHeading>
+      <p className="mt-0.5 text-xs text-muted-foreground">{t.apiFlowHelp}</p>
+      <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">{t.apiStatusNote}</p>
+      <GuideCode t={t}>{SETUP_EXAMPLE}</GuideCode>
+      <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">{t.apiSetupNote}</p>
 
-      <div className="auth-section-label" style={{ marginTop: 20 }}>{t.apiParamsTitle}</div>
-      <p>{t.apiParamsHelp}</p>
-      <table className="api-table">
-        <thead>
-          <tr><th>{t.apiColParam}</th><th>{t.apiColType}</th><th>{t.apiColDefault}</th><th>{t.apiColDesc}</th></tr>
-        </thead>
-        <tbody>
+      <h4 className="mt-4 mb-1 text-[13.5px] font-bold">{t.apiRecipeA}</h4>
+      <GuideCode t={t}>{RECIPE_A}</GuideCode>
+      <h4 className="mt-4 mb-1 text-[13.5px] font-bold">{t.apiRecipeB}</h4>
+      <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">{t.apiRecipeBNote}</p>
+      <GuideCode t={t}>{RECIPE_B}</GuideCode>
+      <h4 className="mt-4 mb-1 text-[13.5px] font-bold">{t.apiRecipeC}</h4>
+      <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">{t.apiRecipeCNote}</p>
+      <GuideCode t={t}>{RECIPE_C}</GuideCode>
+      <h4 className="mt-4 mb-1 text-[13.5px] font-bold">{t.apiRecipeD}</h4>
+      <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">{t.apiRecipeDNote}</p>
+      <GuideCode t={t}>{RECIPE_D}</GuideCode>
+      <h4 className="mt-4 mb-1 text-[13.5px] font-bold">{t.apiRecipeE}</h4>
+      <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">{t.apiRecipeENote}</p>
+      <GuideCode t={t}>{RECIPE_E}</GuideCode>
+      <h4 className="mt-4 mb-1 text-[13.5px] font-bold">{t.apiRecipeF}</h4>
+      <GuideCode t={t}>{RECIPE_F}</GuideCode>
+      <h4 className="mt-4 mb-1 text-[13.5px] font-bold">{t.apiRecipeG}</h4>
+      <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">{t.apiRecipeGNote}</p>
+      <GuideCode t={t}>{RECIPE_G}</GuideCode>
+      <h4 className="mt-4 mb-1 text-[13.5px] font-bold">{t.apiRecipeH}</h4>
+      <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">{t.apiRecipeHNote}</p>
+      <GuideCode t={t}>{RECIPE_H}</GuideCode>
+
+      <h4 className="mt-4 mb-1 text-[13.5px] font-bold">{t.apiErrorsTitle}</h4>
+      <pre className="mt-1.5 whitespace-pre-wrap font-sans text-[12.5px] leading-loose text-muted-foreground">{t.apiErrList}</pre>
+
+      <SectionHeading>{t.apiParamsTitle}</SectionHeading>
+      <p className="mt-0.5 text-xs text-muted-foreground">{t.apiParamsHelp}</p>
+      <Table className="mt-2 text-[13px]">
+        <TableHeader>
+          <TableRow><TableHead>{t.apiColParam}</TableHead><TableHead>{t.apiColType}</TableHead><TableHead>{t.apiColDefault}</TableHead><TableHead>{t.apiColDesc}</TableHead></TableRow>
+        </TableHeader>
+        <TableBody>
           {PARAMS.map(([p, ty, d, descKey]) => (
-            <tr key={p}>
-              <td><code>{p}</code></td>
-              <td>{ty}</td>
-              <td><code>{d}</code></td>
-              <td>{t[descKey]}</td>
-            </tr>
+            <TableRow key={p}>
+              <TableCell><code className="rounded border bg-secondary px-1.5 py-0.5 font-mono text-xs">{p}</code></TableCell>
+              <TableCell>{ty}</TableCell>
+              <TableCell><code className="rounded border bg-secondary px-1.5 py-0.5 font-mono text-xs">{d}</code></TableCell>
+              <TableCell>{t[descKey]}</TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
-      <h4 className="api-recipe-title">{t.apiModelShapeTitle}</h4>
-      <p className="api-note">{t.apiModelShapeNote}</p>
-      <GuideCode>{MODEL_SHAPE_EXAMPLE}</GuideCode>
+        </TableBody>
+      </Table>
+      <h4 className="mt-4 mb-1 text-[13.5px] font-bold">{t.apiModelShapeTitle}</h4>
+      <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">{t.apiModelShapeNote}</p>
+      <GuideCode t={t}>{MODEL_SHAPE_EXAMPLE}</GuideCode>
 
-      <div className="auth-section-label" style={{ marginTop: 20 }}>{t.apiModelsTitle}</div>
-      <p>{t.apiModelsHelp}</p>
-      <table className="api-table api-table-models">
-        <thead>
-          <tr><th>{t.apiColKey}</th><th>{t.apiColVariant}</th><th>{t.paramsLabel}</th><th>{t.source}</th><th>{t.apiColFamily}</th><th>{t.apiColName}</th><th>{t.apiColCaps}</th></tr>
-        </thead>
-        <tbody>
+      <SectionHeading>{t.apiModelsTitle}</SectionHeading>
+      <p className="mt-0.5 text-xs text-muted-foreground">{t.apiModelsHelp}</p>
+      <Table className="mt-2 text-[13px]">
+        <TableHeader>
+          <TableRow><TableHead>{t.apiColKey}</TableHead><TableHead>{t.apiColVariant}</TableHead><TableHead>{t.paramsLabel}</TableHead><TableHead>{t.source}</TableHead><TableHead>{t.apiColFamily}</TableHead><TableHead>{t.apiColName}</TableHead><TableHead>{t.apiColCaps}</TableHead></TableRow>
+        </TableHeader>
+        <TableBody>
           {modelRows.map(row => (
-            <tr key={`${row.key}:${row.variant || 'default'}`}>
-              <td><code>{row.key}</code></td>
-              <td><code>{row.variant || '""'}</code></td>
-              <td>{row.params || '—'}</td>
-              <td>{row.source || '—'}</td>
-              <td>{row.family}</td>
-              <td>{row.name}</td>
-              <td><span className={row.caps.includes('video') ? 'api-cap api-cap-video' : 'api-cap'}>{row.caps.join(', ')}</span></td>
-            </tr>
+            <TableRow key={`${row.key}:${row.variant || 'default'}`}>
+              <TableCell><code className="rounded border bg-secondary px-1.5 py-0.5 font-mono text-xs">{row.key}</code></TableCell>
+              <TableCell className="whitespace-nowrap"><code className="rounded border bg-secondary px-1.5 py-0.5 font-mono text-xs">{row.variant || '""'}</code></TableCell>
+              <TableCell className="whitespace-nowrap">{row.params || '—'}</TableCell>
+              <TableCell className="whitespace-nowrap">{row.source || '—'}</TableCell>
+              <TableCell>{row.family}</TableCell>
+              <TableCell>{row.name}</TableCell>
+              <TableCell className={row.caps.includes('video') ? 'opacity-70' : ''}>{row.caps.join(', ')}</TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
-      <p className="api-note">{t.apiVideoNote}</p>
+        </TableBody>
+      </Table>
+      <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">{t.apiVideoNote}</p>
 
-      <div className="auth-section-label" style={{ marginTop: 20 }}>{t.apiPullTitle}</div>
-      <p>{t.apiPullHelp}</p>
-      <GuideCode>{PULL_EXAMPLE}</GuideCode>
+      <SectionHeading>{t.apiPullTitle}</SectionHeading>
+      <p className="mt-0.5 text-xs text-muted-foreground">{t.apiPullHelp}</p>
+      <GuideCode t={t}>{PULL_EXAMPLE}</GuideCode>
 
-      <div className="auth-section-label" style={{ marginTop: 20 }}><KeyRound size={15} /> {t.authGuide}</div>
-      <p>{t.authIntro}</p>
+      <SectionHeading><KeyRound size={15} /> {t.authGuide}</SectionHeading>
+      <p className="mt-0.5 text-xs text-muted-foreground">{t.authIntro}</p>
 
-      <div className="auth-card">
-        <div className="auth-card-title"><ShieldCheck size={15} /> {t.authSameAccountTitle}</div>
-        <p>{t.authSameAccountBody}</p>
-        <pre>{`# VOS 内同账户前端 / app 直接携带当前登录用户的 token：
+      <AuthCard>
+        <div className="mb-1.5 flex items-center gap-1.5 text-[13px] font-bold"><ShieldCheck size={15} /> {t.authSameAccountTitle}</div>
+        <p className="mb-2 text-xs text-muted-foreground">{t.authSameAccountBody}</p>
+        <pre className={preCode}>{`# VOS 内同账户前端 / app 直接携带当前登录用户的 token：
 curl -X POST /api/com.ictrek.image-studio/api/v1/generate \\
   -H "Authorization: Bearer <当前VOS用户的access_token>" \\
   -H "Content-Type: application/json" \\
   -d '{"prompt":"a quiet tea house by the lake","model_key":"sd15","width":768,"height":768}'`}</pre>
-      </div>
+      </AuthCard>
 
-      <div className="auth-card">
-        <div className="auth-card-title"><UserCircle2 size={15} /> {t.authExternalTitle}</div>
-        <p>{t.authExternalBody}</p>
-        <pre>{`# VOS 外部调用：换成 VOS 网关域名即可，token 决定数据归属账户
+      <AuthCard>
+        <div className="mb-1.5 flex items-center gap-1.5 text-[13px] font-bold"><UserCircle2 size={15} /> {t.authExternalTitle}</div>
+        <p className="mb-2 text-xs text-muted-foreground">{t.authExternalBody}</p>
+        <pre className={preCode}>{`# VOS 外部调用：换成 VOS 网关域名即可，token 决定数据归属账户
 curl -X POST https://<vos-host>/api/com.ictrek.image-studio/api/v1/generate \\
   -H "Authorization: Bearer <目标账户的VOS access_token>" \\
   -H "Content-Type: application/json" \\
@@ -450,18 +500,18 @@ curl https://<vos-host>/api/com.ictrek.image-studio/api/v1/jobs \\
 
 # 图片直链下载（浏览器场景可用 access_token 查询参数）：
 https://<vos-host>/api/com.ictrek.image-studio/api/v1/outputs/<job_id>/output.png?access_token=<token>`}</pre>
-      </div>
+      </AuthCard>
 
-      <div className="auth-card warn">
-        <div className="auth-card-title">{t.authAnonymousTitle}</div>
-        <p>{t.authAnonymousBody}</p>
-      </div>
+      <AuthCard warn>
+        <div className="mb-1.5 text-[13px] font-bold">{t.authAnonymousTitle}</div>
+        <p className="text-xs text-muted-foreground">{t.authAnonymousBody}</p>
+      </AuthCard>
 
-      <p className="api-session-now">
+      <p className="mt-3.5 text-xs">
         {t.apiCurrentSession}
-        <code>{session ? session.user_key : '...'}</code>
-        {session && !session.authenticated && <span className="tag-anonymous">{t.anonymousSession}</span>}
+        <code className="mx-1.5 rounded bg-secondary px-2 py-0.5 font-mono text-xs">{session ? session.user_key : '...'}</code>
+        {session && !session.authenticated && <span className="ml-1.5 rounded-full bg-orange-100 px-1.5 py-px text-[10px] font-bold text-orange-900">{t.anonymousSession}</span>}
       </p>
-    </section>
+    </Panel>
   )
 }

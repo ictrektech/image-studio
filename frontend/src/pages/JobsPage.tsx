@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
 import { CloudUpload, Download, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Panel, PanelTitle } from '@/components/app/panel'
+import { StatusBadge } from '@/components/app/status-badge'
+import { useConfirm } from '@/components/app/confirm'
 import { api, JobRecord } from '../api/client'
 import { messages } from '../i18n'
 import { hasFailedUpload, hasPendingUpload, hasPendingUploads, ImmichUploadStatus, useImmichUploads } from '../immichUploads'
@@ -8,10 +14,11 @@ export default function JobsPage({ t }: { t: typeof messages['zh-CN'] }) {
   const [jobs, setJobs] = useState<JobRecord[]>([])
 
   const load = async () => setJobs(await api.listJobs())
-  const { upload, retry, busy } = useImmichUploads(t, load, message => alert(message))
+  const { confirm, confirmElement } = useConfirm(t)
+  const { upload, retry, busy } = useImmichUploads(t, load, confirm)
 
   const remove = async (jobId: string) => {
-    if (!window.confirm(t.confirmDelete)) return
+    if (!(await confirm(t.confirmDelete))) return
     await api.deleteJob(jobId)
     await load()
   }
@@ -30,50 +37,71 @@ export default function JobsPage({ t }: { t: typeof messages['zh-CN'] }) {
   }, [pendingUploads])
 
   return (
-    <section className="panel">
-      <div className="model-header">
+    <Panel className="p-3">
+      {confirmElement}
+      <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <div className="panel-title">{t.jobs}</div>
-          <p>{t.jobsHelp}</p>
+          <PanelTitle>{t.jobs}</PanelTitle>
+          <p className="mt-0.5 text-xs text-muted-foreground">{t.jobsHelp}</p>
         </div>
-        <button className="secondary-action" onClick={load}><RefreshCw size={15} />{t.refresh}</button>
+        <Button variant="outline" onClick={load}><RefreshCw size={15} />{t.refresh}</Button>
       </div>
-      <div className="job-list">
+      <div className="grid gap-2">
         {jobs.map(job => {
           const output = job.outputs[0]
           const isVideo = output ? /\.(mp4|webm|mov)$/i.test(output) : false
           const pending = hasPendingUpload(job)
           const failed = hasFailedUpload(job)
           return (
-            <div className="job-row rich" key={job.job_id}>
-              <div className="job-thumb">
+            <div
+              className="grid items-center gap-2.5 rounded-lg border p-2.5 text-xs max-md:grid-cols-1 md:grid-cols-[74px_92px_minmax(180px,0.75fr)_92px_82px_minmax(220px,1fr)_78px]"
+              key={job.job_id}
+            >
+              <div className="grid size-16 place-items-center overflow-hidden rounded-md border bg-secondary text-[11px] text-muted-foreground">
                 {output && isVideo ? (
-                  <video src={api.outputUrl(job.job_id, output)} preload="metadata" muted />
+                  <video className="size-full object-cover" src={api.outputUrl(job.job_id, output)} preload="metadata" muted />
                 ) : output ? (
-                  <img src={api.outputUrl(job.job_id, output)} alt="" />
+                  <img className="size-full object-cover" src={api.outputUrl(job.job_id, output)} alt="" />
                 ) : (
                   <span>{job.status}</span>
                 )}
               </div>
-              <span className={`job-status ${job.status}`}>{job.status}</span>
-              <code>{job.job_id}</code>
+              <StatusBadge status={job.status}>{job.status}</StatusBadge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <code className="truncate font-mono">{job.job_id}</code>
+                </TooltipTrigger>
+                <TooltipContent>{job.job_id}</TooltipContent>
+              </Tooltip>
               <span>{job.width} x {job.height}</span>
               <span>{job.steps} steps</span>
-              <p>{job.prompt}</p>
-              <div className="row-actions">
-                {output && <a className="icon-button" href={api.outputUrl(job.job_id, output)} download title={t.downloadOutput}><Download size={15} /></a>}
-                {job.status === 'succeeded' && !pending && !failed && (
-                  <button className="icon-button" onClick={() => upload(job)} disabled={busy === job.job_id} title={t.immichUpload}><CloudUpload size={15} /></button>
+              <p className="truncate">{job.prompt}</p>
+              <div className="flex gap-1.5">
+                {output && (
+                  <Button variant="outline" size="icon" asChild>
+                    <a href={api.outputUrl(job.job_id, output)} download title={t.downloadOutput}><Download size={15} /></a>
+                  </Button>
                 )}
-                {failed && <button className="icon-button" onClick={() => retry(job)} disabled={busy === job.job_id} title={t.immichRetry}><RotateCcw size={15} /></button>}
-                <button className="icon-button" onClick={() => remove(job.job_id)} title={t.deleteJob}><Trash2 size={15} /></button>
+                {job.status === 'succeeded' && !pending && !failed && (
+                  <Button variant="outline" size="icon" onClick={() => upload(job)} disabled={busy === job.job_id} title={t.immichUpload}><CloudUpload size={15} /></Button>
+                )}
+                {failed && (
+                  <Button variant="outline" size="icon" onClick={() => retry(job)} disabled={busy === job.job_id} title={t.immichRetry}><RotateCcw size={15} /></Button>
+                )}
+                <Button variant="outline" size="icon" className="text-destructive hover:text-destructive" onClick={() => remove(job.job_id)} title={t.deleteJob}><Trash2 size={15} /></Button>
               </div>
               <ImmichUploadStatus job={job} t={t} />
             </div>
           )
         })}
-        {jobs.length === 0 && <div className="empty-small">{t.noTask}</div>}
+        {jobs.length === 0 && (
+          <Empty className="border-0 py-6">
+            <EmptyHeader>
+              <EmptyTitle>{t.noTask}</EmptyTitle>
+            </EmptyHeader>
+          </Empty>
+        )}
       </div>
-    </section>
+    </Panel>
   )
 }

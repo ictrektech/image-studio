@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Cpu, Database, ImageIcon, Info, ListChecks, PlugZap, X } from 'lucide-react'
+import { AlertTriangle, Cpu, Database, ImageIcon, Info, ListChecks, PlugZap } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Toaster } from '@/components/ui/sonner'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { api, AboutInfo, ModelInfo } from './api/client'
 import GeneratePage from './pages/GeneratePage'
 import ModelsPage from './pages/ModelsPage'
@@ -9,6 +17,13 @@ import { Language, messages } from './i18n'
 import appIcon from './assets/icon.png'
 
 type Tab = 'generate' | 'models' | 'jobs' | 'api'
+
+const tabs: { key: Tab; icon: typeof ImageIcon; labelKey: 'generate' | 'models' | 'jobs' | 'api' }[] = [
+  { key: 'generate', icon: ImageIcon, labelKey: 'generate' },
+  { key: 'models', icon: Database, labelKey: 'models' },
+  { key: 'jobs', icon: ListChecks, labelKey: 'jobs' },
+  { key: 'api', icon: PlugZap, labelKey: 'api' },
+]
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('generate')
@@ -61,71 +76,101 @@ export default function App() {
       .catch(() => undefined)
   }, [])
 
-  useEffect(() => {
-    if (!aboutOpen) return
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setAboutOpen(false)
-    }
-    window.addEventListener('keydown', closeOnEscape)
-    return () => window.removeEventListener('keydown', closeOnEscape)
-  }, [aboutOpen])
-
   const visibleModels = models.flatMap(model => [...(model.variants || []), model])
   const readyCount = visibleModels.filter(model => model.status === 'ready').length
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <img className="brand-mark" src={appIcon} alt="" />
+    <TooltipProvider delayDuration={200}>
+    <div className="flex h-svh flex-col overflow-hidden">
+      <header className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-2 border-b bg-card px-4 py-2.5 md:h-[68px] md:flex-nowrap md:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <img className="block size-[42px] rounded-[10px] object-cover shadow-[0_8px_20px_rgba(8,60,80,0.14)]" src={appIcon} alt="" />
           <div>
-            <h1>Image Studio</h1>
-            <p>{t.appSubtitle}</p>
+            <h1 className="text-xl font-bold leading-tight">Image Studio</h1>
+            <p className="mt-1 text-xs text-muted-foreground">{t.appSubtitle}</p>
           </div>
         </div>
-        <div className="status-strip">
-          <div><Cpu size={16} /><span>{about?.profile || 'local'}</span></div>
-          <div><Database size={16} /><span>{readyCount}/{visibleModels.length || 1} models</span></div>
-          <div><PlugZap size={16} /><span>{about?.sd_cpp_bin || 'sd-cli'}</span></div>
-          <button className="about-button" onClick={() => setAboutOpen(true)}><Info size={16} /><span>{t.about}</span></button>
-          <select className="language-select" value={language} onChange={e => changeLanguage(e.target.value as Language)}>
-            <option value="zh-CN">中文</option>
-            <option value="en">English</option>
-          </select>
+        <div className="ml-auto flex flex-wrap items-center gap-2.5">
+          <Badge variant="outline" className="h-[34px] gap-2 rounded-md px-3 text-xs font-medium text-slate-600"><Cpu size={16} /><span>{about?.profile || 'local'}</span></Badge>
+          <Badge variant="outline" className="h-[34px] gap-2 rounded-md px-3 text-xs font-medium text-slate-600"><Database size={16} /><span>{readyCount}/{visibleModels.length || 1} models</span></Badge>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="outline" className="h-[34px] gap-2 rounded-md px-3 text-xs font-medium text-slate-600"><PlugZap size={16} /><span className="max-w-[220px] truncate">{about?.sd_cpp_bin || 'sd-cli'}</span></Badge>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[80vw] break-all"><p>{about?.sd_cpp_bin || 'sd-cli'}</p></TooltipContent>
+          </Tooltip>
+          <Button variant="outline" className="h-[34px] gap-2 rounded-md px-3 text-xs font-semibold text-slate-700 shadow-none" onClick={() => setAboutOpen(true)}>
+            <Info size={16} /><span>{t.about}</span>
+          </Button>
+          <Select value={language} onValueChange={value => changeLanguage(value as Language)}>
+            <SelectTrigger size="sm" className="w-[110px] bg-card text-xs text-slate-600 shadow-none"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="zh-CN">中文</SelectItem>
+              <SelectItem value="en">English</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </header>
-      <nav className="tabs">
-        <button className={tab === 'generate' ? 'active' : ''} onClick={() => setTab('generate')}><ImageIcon size={16} />{t.generate}</button>
-        <button className={tab === 'models' ? 'active' : ''} onClick={() => setTab('models')}><Database size={16} />{t.models}</button>
-        <button className={tab === 'jobs' ? 'active' : ''} onClick={() => setTab('jobs')}><ListChecks size={16} />{t.jobs}</button>
-        <button className={tab === 'api' ? 'active' : ''} onClick={() => setTab('api')}><PlugZap size={16} />{t.api}</button>
+      <nav className="shrink-0 border-b bg-card px-4 py-2 md:px-6">
+        <Tabs value={tab} onValueChange={value => setTab(value as Tab)}>
+          <TabsList>
+            {tabs.map(({ key, icon: Icon, labelKey }) => (
+              <TabsTrigger key={key} value={key}>
+                <Icon size={16} />{t[labelKey]}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
       </nav>
-      {aboutOpen && (
-        <div className="about-modal" role="presentation" onMouseDown={() => setAboutOpen(false)}>
-          <section className="about-modal-box" role="dialog" aria-modal="true" aria-labelledby="about-title" onMouseDown={event => event.stopPropagation()}>
-            <div className="about-modal-heading">
-              <div>
-                <img src={appIcon} alt="" />
-                <div><h2 id="about-title">{t.aboutTitle}</h2><p>{t.appSubtitle}</p></div>
-              </div>
-              <button aria-label={t.close} onClick={() => setAboutOpen(false)}><X size={18} /></button>
-            </div>
-            <dl className="about-versions">
-              <div><dt>{t.vosAppVersion}</dt><dd>{about?.app_version || window.__APP_VERSION__ || t.unavailable}</dd></div>
-              <div><dt>{t.frontendImage}</dt><dd>{window.__FRONTEND_IMAGE__ || t.unavailable}</dd></div>
-              <div><dt>{t.backendImage}</dt><dd>{window.__BACKEND_IMAGE__ || t.unavailable}</dd></div>
-              <div><dt>{t.deploymentProfile}</dt><dd>{about?.profile || t.unavailable}</dd></div>
-            </dl>
-          </section>
+      {error && (
+        <div className="shrink-0 px-4 pt-3">
+          <Alert variant="destructive" className="border-red-200 bg-red-50">
+            <AlertTriangle />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         </div>
       )}
-      {error && <div className="notice error">{error}</div>}
-      <main>
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {tab === 'generate' && <GeneratePage models={models} onRefresh={refresh} onOpenModels={() => setTab('models')} t={t} />}
-        {tab === 'models' && <ModelsPage models={models} onRefresh={refresh} t={t} />}
-        {tab === 'jobs' && <JobsPage t={t} />}
-        {tab === 'api' && <ApiPage models={models} t={t} />}
-      </main>
+        {tab !== 'generate' && (
+          <div className="p-3 pb-6 md:px-3">
+            {tab === 'models' && <ModelsPage models={models} onRefresh={refresh} t={t} />}
+            {tab === 'jobs' && <JobsPage t={t} />}
+            {tab === 'api' && <ApiPage models={models} t={t} />}
+          </div>
+        )}
+      </div>
+      <Dialog open={aboutOpen} onOpenChange={setAboutOpen}>
+        <DialogContent className="w-[min(520px,100%)] gap-0 rounded-xl p-5 sm:max-w-[520px]">
+          <DialogHeader className="flex-row items-center gap-3">
+            <img src={appIcon} alt="" className="size-11 rounded-[10px]" />
+            <div className="min-w-0">
+              <DialogTitle className="text-lg">{t.aboutTitle}</DialogTitle>
+              <p className="mt-1 text-xs text-muted-foreground">{t.appSubtitle}</p>
+            </div>
+          </DialogHeader>
+          <dl className="mt-5 grid gap-2.5">
+            <div className="rounded-lg bg-secondary px-3 py-2.5">
+              <dt className="text-[11px] font-bold text-muted-foreground">{t.vosAppVersion}</dt>
+              <dd className="mt-1 break-all font-mono text-xs">{about?.app_version || window.__APP_VERSION__ || t.unavailable}</dd>
+            </div>
+            <div className="rounded-lg bg-secondary px-3 py-2.5">
+              <dt className="text-[11px] font-bold text-muted-foreground">{t.frontendImage}</dt>
+              <dd className="mt-1 break-all font-mono text-xs">{window.__FRONTEND_IMAGE__ || t.unavailable}</dd>
+            </div>
+            <div className="rounded-lg bg-secondary px-3 py-2.5">
+              <dt className="text-[11px] font-bold text-muted-foreground">{t.backendImage}</dt>
+              <dd className="mt-1 break-all font-mono text-xs">{window.__BACKEND_IMAGE__ || t.unavailable}</dd>
+            </div>
+            <div className="rounded-lg bg-secondary px-3 py-2.5">
+              <dt className="text-[11px] font-bold text-muted-foreground">{t.deploymentProfile}</dt>
+              <dd className="mt-1 break-all font-mono text-xs">{about?.profile || t.unavailable}</dd>
+            </div>
+          </dl>
+        </DialogContent>
+      </Dialog>
+      <Toaster />
     </div>
+    </TooltipProvider>
   )
 }

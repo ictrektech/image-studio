@@ -33,6 +33,7 @@ const zh = {
   reset: '重置',
   resetModelDefaults: '恢复当前模型默认参数',
   templateSave: '存为模板',
+  templateApply: '应用模板',
   templateNameLabel: '模板名称',
   templateRename: '重命名',
   templateDeleteTitle: '删除模板',
@@ -308,6 +309,9 @@ const zh = {
   serviceUnavailable: '服务暂不可用',
   submitFailed: '生成任务提交失败',
   generationFailed: '生成失败',
+  dialogCancel: '取消',
+  dialogConfirm: '确认',
+  copiedToClipboard: '已复制到剪贴板',
 }
 
 const en: typeof zh = {
@@ -343,6 +347,7 @@ const en: typeof zh = {
   reset: 'Reset',
   resetModelDefaults: 'Restore current model defaults',
   templateSave: 'Save as template',
+  templateApply: 'Apply template',
   templateNameLabel: 'Template name',
   templateRename: 'Rename',
   templateDeleteTitle: 'Delete template',
@@ -618,6 +623,9 @@ const en: typeof zh = {
   serviceUnavailable: 'Service unavailable',
   submitFailed: 'Failed to submit generation job',
   generationFailed: 'Generation failed',
+  dialogCancel: 'Cancel',
+  dialogConfirm: 'Confirm',
+  copiedToClipboard: 'Copied to clipboard',
 }
 
 export const messages = { 'zh-CN': zh, en }

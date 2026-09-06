@@ -1,5 +1,14 @@
-import { CheckCircle2, DownloadCloud, Loader2, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck, Square } from 'lucide-react'
+import { CheckCircle2, DownloadCloud, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck, Square } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+import { Progress } from '@/components/ui/progress'
+import { Spinner } from '@/components/ui/spinner'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Panel, PanelHeading, PanelTitle } from '@/components/app/panel'
+import { StatusBadge } from '@/components/app/status-badge'
 import { api, ModelInfo } from '../api/client'
 import { messages } from '../i18n'
 
@@ -99,14 +108,6 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
     [modelEntries, selectedCapabilities],
   )
 
-  const toggleCapability = (capability: string) => {
-    setSelectedCapabilities(current =>
-      current.includes(capability)
-        ? current.filter(item => item !== capability)
-        : [...current, capability],
-    )
-  }
-
   useEffect(() => {
     if (!downloading) return
     const timer = setInterval(() => onRefresh(), 3000)
@@ -131,46 +132,65 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
   }
 
   return (
-    <div className="model-page">
-      <section className="panel model-zoo">
-        <div className="model-header">
+    <div className="grid gap-2.5">
+      <Panel className="p-3">
+        <PanelHeading className="mb-3">
           <div>
-            <div className="panel-title">{t.modelManagement}</div>
-            <p>{t.modelManagementHelp}</p>
+            <PanelTitle>{t.modelManagement}</PanelTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">{t.modelManagementHelp}</p>
           </div>
-          <button className="secondary-action" onClick={onRefresh}><RefreshCw size={15} />{t.refresh}</button>
-        </div>
-        {message && <div className="notice">{message}</div>}
-        {models.length === 0 && <div className="empty-small">{t.noModelsConfigured}</div>}
+          <Button variant="outline" onClick={onRefresh}><RefreshCw size={15} />{t.refresh}</Button>
+        </PanelHeading>
+        {message && (
+          <Alert className="mb-3 border-blue-200 bg-blue-50 text-blue-900">
+            <AlertDescription>{message}</AlertDescription>
+          </Alert>
+        )}
+        {models.length === 0 && (
+          <Empty className="border-0 py-6">
+            <EmptyHeader>
+              <EmptyTitle>{t.noModelsConfigured}</EmptyTitle>
+              <EmptyDescription>{t.modelManagementHelp}</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        )}
         {capabilityOptions.length > 0 && (
-          <div className="capability-filter">
-            <div className="capability-filter-heading">
+          <div className="my-3 rounded-lg bg-secondary p-3">
+            <PanelHeading>
               <div>
-                <strong>{t.capabilityFilter}</strong>
-                <span>{t.capabilityFilterHelp}</span>
+                <strong className="block text-xs text-slate-800">{t.capabilityFilter}</strong>
+                <span className="mt-0.5 block text-[11px] text-muted-foreground">{t.capabilityFilterHelp}</span>
               </div>
               {selectedCapabilities.length > 0 && (
-                <button type="button" className="quiet-button" onClick={() => setSelectedCapabilities([])}>
+                <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setSelectedCapabilities([])}>
                   {t.clearCapabilityFilters}
-                </button>
+                </Button>
               )}
-            </div>
-            <div className="capability-filter-options">
+            </PanelHeading>
+            <ToggleGroup
+              type="multiple"
+              variant="outline"
+              className="mt-2.5 flex-wrap"
+              value={selectedCapabilities}
+              onValueChange={setSelectedCapabilities}
+            >
               {capabilityOptions.map(capability => (
-                <label className="capability-check" key={capability}>
-                  <input
-                    type="checkbox"
-                    checked={selectedCapabilities.includes(capability)}
-                    onChange={() => toggleCapability(capability)}
-                  />
-                  <span>{capabilityLabel(capability, t)}</span>
-                </label>
+                <ToggleGroupItem key={capability} value={capability}>
+                  {capabilityLabel(capability, t)}
+                </ToggleGroupItem>
               ))}
-            </div>
+            </ToggleGroup>
           </div>
         )}
-        {models.length > 0 && filteredEntries.length === 0 && <div className="empty-small">{t.noModelsMatchFilter}</div>}
-        <div className="model-card-grid">
+        {models.length > 0 && filteredEntries.length === 0 && (
+          <Empty className="border-0 py-6">
+            <EmptyHeader>
+              <EmptyTitle>{t.noModelsMatchFilter}</EmptyTitle>
+              <EmptyDescription>{t.capabilityFilterHelp}</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        )}
+        <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(420px,1fr))] max-lg:grid-cols-1">
           {filteredEntries.map(entry => {
             const model = entry.base
             const active = entry.active
@@ -178,99 +198,119 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
             const ready = active.status === 'ready'
             const downloading = active.status === 'downloading'
             const failed = active.status === 'failed'
+            const metaFields: [string, string][] = [
+              [t.modelVariant, entry.isVariant ? `${active.name} (${entry.variantId})` : t.defaultModelVariant],
+              [t.modelId, active.model_id],
+              [t.source, active.source],
+              [t.family, active.family],
+              [t.paramsLabel, active.params || '-'],
+              [t.capabilities, capabilities.map(capability => capabilityLabel(capability, t)).join(', ')],
+              [t.loadPath, active.resolved_path || active.access_path],
+              [t.expectedFiles, active.expected_files.join(', ')],
+              [t.size, sizeDisplay(active, t)],
+              [t.status, active.status],
+            ]
             return (
-              <article className={`managed-model-card ${ready ? 'ready' : 'pending'} ${entry.isVariant ? 'variant-card' : ''}`} key={`${model.key}:${entry.variantId || 'default'}`}>
-                <div className="model-card-header">
-                  <div>
-                    <h3>{entry.isVariant ? `${model.name} · ${active.name}` : model.name}</h3>
-                    <div className="model-badges">
-                      {entry.isVariant && <span>{t.modelVariant}</span>}
-                      {active.preferred && <span>{t.preferredModel}</span>}
-                      <span>{active.family}</span>
-                      {capabilities.map(capability => <span key={capability}>{capabilityLabel(capability, t)}</span>)}
+              <article
+                className={
+                  ready
+                    ? 'rounded-lg border border-green-200 bg-[#fbfffd] p-3'
+                    : 'rounded-lg border border-orange-200 bg-[#fffdf9] p-3'
+                }
+                key={`${model.key}:${entry.variantId || 'default'}`}
+              >
+                <div className="flex items-start justify-between gap-3.5">
+                  <div className="min-w-0">
+                    <h3 className="text-[15px] font-bold">{entry.isVariant ? `${model.name} · ${active.name}` : model.name}</h3>
+                    <div className="mt-1.5 mb-1 flex flex-wrap gap-1.5">
+                      {entry.isVariant && <Badge className="h-[22px] rounded-full bg-accent px-2 text-[11px] font-semibold text-accent-foreground">{t.modelVariant}</Badge>}
+                      {active.preferred && <Badge className="h-[22px] rounded-full bg-accent px-2 text-[11px] font-semibold text-accent-foreground">{t.preferredModel}</Badge>}
+                      <Badge className="h-[22px] rounded-full bg-accent px-2 text-[11px] font-semibold text-accent-foreground">{active.family}</Badge>
+                      {capabilities.map(capability => (
+                        <Badge className="h-[22px] rounded-full bg-accent px-2 text-[11px] font-semibold text-accent-foreground" key={capability}>{capabilityLabel(capability, t)}</Badge>
+                      ))}
                     </div>
-                    <p>{active.description}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{active.description}</p>
                   </div>
-                  <span className={`model-status ${ready ? 'ready' : 'pending'}`}>
+                  <StatusBadge status={ready ? 'ready' : downloading ? 'downloading' : failed ? 'failed' : 'pending'} className="shrink-0 whitespace-nowrap">
                     {ready && <ShieldCheck size={14} />}
                     {failed && <ShieldAlert size={14} />}
-                    {downloading && <Loader2 size={14} className="spin" />}
+                    {downloading && <Spinner className="size-3.5" />}
                     {ready ? t.modelReady : failed ? t.modelFailed : downloading ? t.modelDownloading : t.modelMissing}
-                  </span>
+                  </StatusBadge>
                 </div>
 
-                <div className="model-meta">
-                  <div><span>{t.modelVariant}</span><code>{entry.isVariant ? `${active.name} (${entry.variantId})` : t.defaultModelVariant}</code></div>
-                  <div><span>{t.modelId}</span><code>{active.model_id}</code></div>
-                  <div><span>{t.source}</span><code>{active.source}</code></div>
-                  <div><span>{t.family}</span><code>{active.family}</code></div>
-                  <div><span>{t.paramsLabel}</span><code>{active.params || '-'}</code></div>
-                  <div><span>{t.capabilities}</span><code>{capabilities.map(capability => capabilityLabel(capability, t)).join(', ')}</code></div>
-                  <div><span>{t.loadPath}</span><code>{active.resolved_path || active.access_path}</code></div>
-                  <div><span>{t.expectedFiles}</span><code>{active.expected_files.join(', ')}</code></div>
-                  <div><span>{t.size}</span><code>{sizeDisplay(active, t)}</code></div>
-                  <div><span>{t.status}</span><code>{active.status}</code></div>
+                <div className="mt-3.5 grid grid-cols-2 gap-2 gap-x-3 max-md:grid-cols-1">
+                  {metaFields.map(([label, value]) => (
+                    <div className="min-w-0" key={label}>
+                      <span className="mb-1 block text-[11px] text-muted-foreground">{label}</span>
+                      <code className="block truncate rounded border bg-secondary px-1.5 py-1.5 font-mono text-[11px]">{value}</code>
+                    </div>
+                  ))}
                 </div>
 
-                <progress className="model-progress" max="100" value={percent(active)} />
+                <Progress className="mt-3.5" max={100} value={percent(active)} />
                 {downloading && active.current_file && (
-                  <p className="model-current-file">
+                  <p className="mt-1.5 truncate text-[11px] text-muted-foreground">
                     {t.downloadingFile}: {active.current_file}{bytesText(active) && ` · ${bytesText(active)}`}
                   </p>
                 )}
-                {failed && active.error && <p className="model-error">{active.error}</p>}
+                {failed && active.error && <p className="mt-1.5 break-all text-[11px] text-destructive">{active.error}</p>}
 
-                <div className="model-actions">
-                  <button
-                    className="primary-action compact-action"
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    className="min-w-[132px]"
                     disabled={ready || downloading || Boolean(busy)}
                     onClick={() => run(model, entry.variantId, 'pull')}
                   >
                     {ready ? <CheckCircle2 size={15} /> : <DownloadCloud size={15} />}
                     {ready ? t.downloaded : downloading ? `${t.modelDownloading} ${percent(active)}%` : t.downloadModel}
-                  </button>
+                  </Button>
                   {downloading && (
-                    <button
-                      className="secondary-action compact-action"
+                    <Button
+                      variant="outline"
+                      className="min-w-[132px]"
                       disabled={Boolean(busy)}
                       onClick={() => run(model, entry.variantId, 'stop')}
                     >
                       <Square size={15} />{t.stopDownload}
-                    </button>
+                    </Button>
                   )}
                   {(downloading || ready || failed) && (
-                    <button
-                      className="secondary-action compact-action"
+                    <Button
+                      variant="outline"
+                      className="min-w-[132px]"
                       disabled={Boolean(busy)}
                       onClick={() => run(model, entry.variantId, 'pull-force')}
                     >
                       <RotateCcw size={15} />{t.redownload}
-                    </button>
+                    </Button>
                   )}
-                  <button
-                    className="secondary-action compact-action"
+                  <Button
+                    variant="outline"
+                    className="min-w-[132px]"
                     disabled={Boolean(busy)}
                     onClick={() => run(model, entry.variantId, 'sync')}
                   >
                     <RefreshCw size={15} />{t.syncModel}
-                  </button>
+                  </Button>
                 </div>
               </article>
             )
           })}
         </div>
-      </section>
+      </Panel>
 
-      <section className="panel model-path-panel">
-        <div className="panel-title">{t.modelHubPathGuide}</div>
-        <p>{t.modelHubPathHelp}</p>
+      <Panel className="p-3">
+        <PanelTitle>{t.modelHubPathGuide}</PanelTitle>
+        <p className="mt-0.5 text-xs text-muted-foreground">{t.modelHubPathHelp}</p>
         {filteredEntries.map(entry => (
-          <div className="path-guide" key={`${entry.base.key}:${entry.variantId || 'default'}`}>
-            <span>{entry.isVariant ? `${entry.base.name} · ${entry.active.name}` : entry.base.name}</span>
-            <code>{entry.active.access_path}</code>
+          <div className="grid grid-cols-[260px_minmax(0,1fr)] items-center gap-3 border-t py-2.5 text-xs first:mt-2.5 max-md:grid-cols-1" key={`${entry.base.key}:${entry.variantId || 'default'}`}>
+            <span className="font-bold text-slate-700">{entry.isVariant ? `${entry.base.name} · ${entry.active.name}` : entry.base.name}</span>
+            <code className="truncate rounded border bg-secondary px-1.5 py-1.5 font-mono text-[11px]">{entry.active.access_path}</code>
           </div>
         ))}
-      </section>
+      </Panel>
     </div>
   )
 }

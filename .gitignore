@@ -9,5 +9,7 @@ ictrek.app/dist/
 frontend/tsconfig.tsbuildinfo
 .pnpm-store/
 .env.dev
+!docker/.env.dev
 .data/
 results/
+run_dev.sh

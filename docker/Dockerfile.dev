@@ -1,0 +1,49 @@
+# Dev image (amd-cuda) — 与生产同源的 CUDA 版 sd-cli + uv 预装依赖，源码在运行时由 volume 挂载。
+# 用途：在容器里热加载调试（uvicorn --reload），宿主机无需安装 sd-cli / CUDA 环境。
+# 用法见仓库根 Makefile：make dev / make dev-build
+#
+# 与 docker/Dockerfile.amd-cuda 的区别：
+#   - 不 COPY app/，源码由 docker-compose.dev.yml 挂载（改代码即生效）
+#   - 依赖装进 /app/.venv（compose 用命名卷持久化，重启不重装）
+#   - 默认命令带 --reload
+
+ARG CUDA_DEVEL_BASE_IMAGE=swr.cn-southwest-2.myhuaweicloud.com/ictrek/nvidia-cuda:amd_12.8.1-cudnn-devel-ubuntu22.04
+ARG CUDA_RUNTIME_BASE_IMAGE=swr.cn-southwest-2.myhuaweicloud.com/ictrek/nvidia-cuda:amd_12.8.1-runtime-ubuntu22.04
+
+# ── 阶段一：编译 CUDA 版 sd-cli（与生产镜像同一脚本/同一 commit）──
+FROM ${CUDA_DEVEL_BASE_IMAGE} AS sd-cpp-builder
+ARG GITHUB_ACCELERATOR=https://gh-proxy.com/
+ARG SD_CPP_REF=97d2990807fe6d558e395f8764198d7c7e7b411c
+ARG GGML_REF=8e800cef2948046cc47f9db6090491c6128ca42c
+ARG SD_CPP_CMAKE_ARGS="-DSD_CUDA=ON -DSD_WEBP=ON -DSD_WEBM=ON -DSD_USE_SYSTEM_WEBP=ON"
+WORKDIR /tmp
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl build-essential cmake pkg-config tar libwebp-dev && rm -rf /var/lib/apt/lists/*
+COPY docker/install_sd_cpp.sh /usr/local/bin/install_sd_cpp.sh
+RUN chmod +x /usr/local/bin/install_sd_cpp.sh && SD_CPP_INSTALL_DIR=/opt/sd-cpp SD_CPP_SKIP_VERIFY=true /usr/local/bin/install_sd_cpp.sh
+
+# ── 阶段二：运行时（依赖 + 调试工具，源码挂载）──
+FROM ${CUDA_RUNTIME_BASE_IMAGE}
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    IMAGE_STUDIO_MOCK_WHEN_RUNTIME_MISSING=false \
+    LD_LIBRARY_PATH=/usr/local/cuda/lib64
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip curl ca-certificates ffmpeg libgomp1 libwebp7 libwebpmux3 procps && rm -rf /var/lib/apt/lists/*
+
+# CUDA 版 sd-cli
+COPY --from=sd-cpp-builder /opt/sd-cpp/bin/sd-cli /usr/local/bin/sd-cli
+
+# uv：依赖预装到 /app/.venv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+ARG UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple/
+ENV UV_INDEX_URL=${UV_INDEX_URL} \
+    UV_LINK_MODE=copy
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project && uv pip install watchfiles debugpy
+
+ENV PATH="/app/.venv/bin:$PATH"
+EXPOSE 25050
+
+# 源码由 compose 挂载到 /app/app；--reload 只监听源码目录，避免 .venv 抖动触发重启
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "25050", "--reload", "--reload-dir", "/app/app"]

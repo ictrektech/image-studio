@@ -215,9 +215,8 @@ def _model(
 RUNTIME_SPECS: dict[str, dict[str, Any]] = {
     "sd15": _runtime(defaults={"width": 512, "height": 512, "steps": 20, "cfg_scale": 7.0, "sampler": "euler_a"}),
     "sd2": _runtime(defaults={"width": 512, "height": 512, "steps": 20, "cfg_scale": 7.0, "sampler": "euler_a"}),
-    # NX 实测（results/nx_model_report.md）：f16 + diffusion-fa + vae-tiling 采样 2.45->1.68s，显存 3.7->2.6GB
     "sd-turbo": _runtime(
-        extra_args=["--type", "f16", *_FA_ARGS],
+        extra_args=[*_FA_ARGS],
         defaults={
             "width": 512,
             "height": 512,
@@ -226,6 +225,7 @@ RUNTIME_SPECS: dict[str, dict[str, Any]] = {
             "sampler": "euler_a",
             "vae_tiling": True,
             "vae_tile_size": "128x128",
+            "weight_type": "f16",
         },
         parameters={"cfg_scale": False},
     ),

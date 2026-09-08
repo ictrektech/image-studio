@@ -13,3 +13,4 @@ frontend/tsconfig.tsbuildinfo
 .data/
 results/
 run_dev.sh
+tmp/

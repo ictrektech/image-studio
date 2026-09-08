@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
     "preview": "vite preview",
     "setup": "bun install --cpu=x64 --cpu=arm64 --os=linux"
   },

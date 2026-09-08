@@ -1,0 +1,22 @@
+# 本地提交检查：prek install 注册后，每次 git commit 自动执行。
+#
+# 用法：
+#   prek install                 # 注册 pre-commit 钩子
+#   git commit --no-verify       # 紧急跳过（尽量不要）
+#
+# 注意：uv run 会使用仓库 .venv；跨架构共享工作区的机器请先
+repos:
+  - repo: local
+    hooks:
+      - id: backend-unittest
+        name: backend unittest (tests/)
+        entry: uv run python -m unittest discover -s tests
+        language: system
+        pass_filenames: false
+
+      - id: frontend-typecheck
+        name: frontend tsc -b
+        entry: bash -c 'cd frontend && bun run typecheck'
+        language: system
+        pass_filenames: false
+        files: ^frontend/

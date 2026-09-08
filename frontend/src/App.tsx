@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, Cpu, Database, ImageIcon, Info, ListChecks, PlugZap } from 'lucide-react'
+import { AlertTriangle, Cpu, Database, ImageIcon, Info, ListChecks, Monitor, Moon, PlugZap, Sun } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,7 @@ import JobsPage from './pages/JobsPage'
 import ApiPage from './pages/ApiPage'
 import { Language, messages } from './i18n'
 import appIcon from './assets/icon.png'
+import { useTheme } from './hooks/useTheme'
 
 type Tab = 'generate' | 'models' | 'jobs' | 'api'
 
@@ -32,6 +33,7 @@ export default function App() {
   const [error, setError] = useState('')
   const [language, setLanguage] = useState<Language>('zh-CN')
   const [aboutOpen, setAboutOpen] = useState(false)
+  const { theme, cycleTheme } = useTheme()
   const t = messages[language]
 
   const changeLanguage = (next: Language) => {
@@ -91,19 +93,33 @@ export default function App() {
           </div>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2.5">
-          <Badge variant="outline" className="h-[34px] gap-2 rounded-md px-3 text-xs font-medium text-slate-600"><Cpu size={16} /><span>{about?.profile || 'local'}</span></Badge>
-          <Badge variant="outline" className="h-[34px] gap-2 rounded-md px-3 text-xs font-medium text-slate-600"><Database size={16} /><span>{readyCount}/{visibleModels.length || 1} models</span></Badge>
+          <Badge variant="outline" className="h-[34px] gap-2 rounded-md px-3 text-xs font-medium text-muted-foreground"><Cpu size={16} /><span>{about?.profile || 'local'}</span></Badge>
+          <Badge variant="outline" className="h-[34px] gap-2 rounded-md px-3 text-xs font-medium text-muted-foreground"><Database size={16} /><span>{readyCount}/{visibleModels.length || 1} models</span></Badge>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Badge variant="outline" className="h-[34px] gap-2 rounded-md px-3 text-xs font-medium text-slate-600"><PlugZap size={16} /><span className="max-w-[220px] truncate">{about?.sd_cpp_bin || 'sd-cli'}</span></Badge>
+              <Badge variant="outline" className="h-[34px] gap-2 rounded-md px-3 text-xs font-medium text-muted-foreground"><PlugZap size={16} /><span className="max-w-[220px] truncate">{about?.sd_cpp_bin || 'sd-cli'}</span></Badge>
             </TooltipTrigger>
             <TooltipContent className="max-w-[80vw] break-all"><p>{about?.sd_cpp_bin || 'sd-cli'}</p></TooltipContent>
           </Tooltip>
-          <Button variant="outline" className="h-[34px] gap-2 rounded-md px-3 text-xs font-semibold text-slate-700 shadow-none" onClick={() => setAboutOpen(true)}>
+          <Button variant="outline" className="h-[34px] gap-2 rounded-md px-3 text-xs font-semibold text-foreground shadow-none" onClick={() => setAboutOpen(true)}>
             <Info size={16} /><span>{t.about}</span>
           </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-[34px] w-[34px] rounded-md shadow-none"
+                onClick={cycleTheme}
+                aria-label={theme === 'light' ? t.themeLight : theme === 'dark' ? t.themeDark : t.themeAuto}
+              >
+                {theme === 'light' ? <Sun size={16} /> : theme === 'dark' ? <Moon size={16} /> : <Monitor size={16} />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{theme === 'light' ? t.themeLight : theme === 'dark' ? t.themeDark : t.themeAuto}</TooltipContent>
+          </Tooltip>
           <Select value={language} onValueChange={value => changeLanguage(value as Language)}>
-            <SelectTrigger size="sm" className="w-[110px] bg-card text-xs text-slate-600 shadow-none"><SelectValue /></SelectTrigger>
+            <SelectTrigger size="sm" className="w-[110px] bg-card text-xs text-foreground shadow-none"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="zh-CN">中文</SelectItem>
               <SelectItem value="en">English</SelectItem>
@@ -124,7 +140,7 @@ export default function App() {
       </nav>
       {error && (
         <div className="shrink-0 px-4 pt-3">
-          <Alert variant="destructive" className="border-red-200 bg-red-50">
+          <Alert variant="destructive" className="border-red-200 bg-red-50 dark:border-red-900/60 dark:bg-red-950/40">
             <AlertTriangle />
             <AlertDescription>{error}</AlertDescription>
           </Alert>

@@ -102,7 +102,7 @@ function ParamChecks({ label, checked, onCheckedChange, disabled }: {
 function ParamSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <Collapsible className="mt-3 overflow-hidden rounded-lg border bg-card">
-      <CollapsibleTrigger className="group flex min-h-[42px] w-full items-center justify-between gap-2.5 px-2.5 text-xs font-bold text-slate-700 hover:bg-secondary focus-visible:outline-2 focus-visible:outline-ring data-[state=open]:border-b data-[state=open]:border-border data-[state=open]:bg-secondary">
+      <CollapsibleTrigger className="group flex min-h-[42px] w-full items-center justify-between gap-2.5 px-2.5 text-xs font-bold text-foreground hover:bg-secondary focus-visible:outline-2 focus-visible:outline-ring data-[state=open]:border-b data-[state=open]:border-border data-[state=open]:bg-secondary">
         <span>{title}</span>
         <ChevronDown size={16} aria-hidden="true" className="shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
       </CollapsibleTrigger>
@@ -551,13 +551,13 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
                 <DropdownMenuTrigger asChild>
                   <button
                     className={cn(
-                      'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs text-slate-700 transition-colors hover:border-indigo-300 hover:text-indigo-600',
-                      tpl.id === defaultTplId ? 'border-indigo-500 bg-indigo-50' : 'border-[#dbe3ee] bg-[#f6f8fb]',
+                      'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs text-foreground transition-colors hover:border-indigo-300 hover:text-indigo-600',
+                      tpl.id === defaultTplId ? 'border-indigo-500 bg-accent text-accent-foreground' : 'border-border bg-secondary',
                     )}
                     title={tpl.description || tpl.name}
                   >
                     {tpl.name}
-                    <ChevronDown size={11} className="text-slate-400" />
+                    <ChevronDown size={11} className="text-muted-foreground" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="min-w-36">
@@ -575,7 +575,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
               </DropdownMenu>
             ))}
             <button
-              className="inline-flex items-center gap-1 rounded-full border border-dashed border-[#dbe3ee] bg-[#f6f8fb] px-2.5 py-1 text-xs text-slate-600 hover:border-indigo-300 hover:text-indigo-600"
+              className="inline-flex items-center gap-1 rounded-full border border-dashed border-border bg-secondary px-2.5 py-1 text-xs text-foreground hover:border-indigo-300 hover:text-indigo-600"
               onClick={() => { setTplName(''); setTplDialog({ mode: 'create' }) }}
             >
               <Plus size={12} />{t.templateSave}
@@ -791,7 +791,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <div className="rounded-xl border bg-background focus-within:border-ring">
+          <div className="rounded-xl border bg-card focus-within:border-ring">
             {supportsInit && initPreviewUrl && (
               <div className="relative mx-2.5 mt-2.5 inline-flex">
                 <img src={initPreviewUrl} alt="" className="size-16 rounded-lg border object-cover" />
@@ -801,26 +801,32 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
                 </span>
               </div>
             )}
-            <Textarea
-              value={payload.prompt}
-              onChange={e => setPayload({ ...payload, prompt: e.target.value })}
-              onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit() }}
-              placeholder={t.positivePrompt}
-              className="max-h-40 min-h-[52px] resize-none border-0 bg-transparent px-3 pt-2.5 shadow-none focus-visible:ring-0"
-              rows={2}
-            />
+            <div className="px-3 pt-2.5">
+              <label className="mb-1 block text-[11px] font-medium text-muted-foreground">{t.positivePrompt}</label>
+              <Textarea
+                value={payload.prompt}
+                onChange={e => setPayload({ ...payload, prompt: e.target.value })}
+                onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit() }}
+                placeholder={t.positivePrompt}
+                className="max-h-40 min-h-[44px] resize-none border-0 bg-transparent px-0 pt-0 shadow-none focus-visible:ring-0"
+                rows={2}
+              />
+            </div>
             <Collapsible open={negOpen} onOpenChange={setNegOpen}>
               <CollapsibleContent>
-                <Textarea
-                  value={payload.negative_prompt}
-                  onChange={e => setPayload({ ...payload, negative_prompt: e.target.value })}
-                  disabled={negativeIgnored}
-                  placeholder={negativeIgnored ? t.negativeIgnoredHint : ''}
-                  className="mx-2.5 mb-1 min-h-[56px] max-h-[160px] bg-secondary/60 text-xs"
-                  rows={2}
-                />
+                <div className="border-t px-3 pt-2">
+                  <label className="mb-1 block text-[11px] font-medium text-muted-foreground">{ig(t.negativePrompt, negativeIgnored)}</label>
+                  <Textarea
+                    value={payload.negative_prompt}
+                    onChange={e => setPayload({ ...payload, negative_prompt: e.target.value })}
+                    disabled={negativeIgnored}
+                    placeholder={negativeIgnored ? t.negativeIgnoredHint : ''}
+                    className="min-h-[44px] max-h-[160px] resize-none rounded-none border-0 bg-transparent px-0 pt-0 text-xs shadow-none focus-visible:ring-0"
+                    rows={2}
+                  />
+                </div>
               </CollapsibleContent>
-              <div className="flex flex-wrap items-center gap-1 px-2 pb-2">
+              <div className="flex flex-wrap items-center gap-1 px-2.5 pb-2.5">
                 {supportsInit && (
                   <>
                     <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px] text-muted-foreground" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
@@ -832,7 +838,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
                   </>
                 )}
                 <CollapsibleTrigger asChild>
-                  <Button variant="ghost" size="sm" className={cn('h-7 gap-1 px-2 text-[11px] text-muted-foreground', negativeIgnored && 'opacity-55', !negOpen && payload.negative_prompt && 'text-amber-700')}>
+                  <Button variant="ghost" size="sm" className={cn('h-7 gap-1 px-2 text-[11px] text-muted-foreground', negativeIgnored && 'opacity-55', !negOpen && payload.negative_prompt && 'text-warning')}>
                     {ig(t.negativePrompt, negativeIgnored)}
                     <ChevronDown size={12} className={cn('transition-transform', negOpen && 'rotate-180')} />
                   </Button>
@@ -904,7 +910,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
         )}>
           <strong className="mb-0.5 block text-xs">{isVideoModel ? (isImg2Img ? t.img2Video : t.text2Video) : isImg2Img ? (isEditModel ? t.imageEdit : t.imageToImage) : t.textToImage}</strong>
           <span className="block">{isVideoModel ? t.videoModelHint : isImg2Img ? (isEditModel ? t.imageEditHint : t.sourceImageHint) : t.previewHint}</span>
-          {isImg2Img && <code className="mt-1.5 block break-all rounded border bg-white/60 px-1.5 py-1 font-mono">{payload.init_input_id || `${payload.init_job_id}/${payload.init_filename}`}</code>}
+          {isImg2Img && <code className="mt-1.5 block break-all rounded border bg-secondary px-1.5 py-1 font-mono">{payload.init_input_id || `${payload.init_job_id}/${payload.init_filename}`}</code>}
         </div>
         <FieldRow className="mt-2.5 sm:grid-cols-2">
           <ParamInput label={ig(t.strength, !(isImg2Img && supportsStrength))} type="number" min={0} max={1} step={0.05} value={payload.strength} disabled={!(isImg2Img && supportsStrength)} onChange={e => setPayload({ ...payload, strength: Number(e.target.value) })} />

@@ -257,7 +257,7 @@ function SectionHeading({ children }: { children: ReactNode }) {
   return (
     <div className="mt-5">
       <Separator className="mb-3" />
-      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+      <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
         {children}
       </div>
     </div>
@@ -266,7 +266,7 @@ function SectionHeading({ children }: { children: ReactNode }) {
 
 function AuthCard({ warn, children }: { warn?: boolean; children: ReactNode }) {
   return (
-    <Card className={`mt-3 gap-0 rounded-lg py-3 ${warn ? 'border-orange-200 bg-orange-50' : 'bg-secondary'}`}>
+    <Card className={`mt-3 gap-0 rounded-lg px-3.5 py-3 ${warn ? 'border-orange-200 bg-orange-50 dark:border-orange-900/60 dark:bg-orange-950/30' : 'bg-card'}`}>
       {children}
     </Card>
   )
@@ -374,7 +374,7 @@ export default function ApiPage({ models, t }: { models: ModelInfo[]; t: T }) {
           <Checkbox checked={immichVerifySsl} onCheckedChange={checked => setImmichVerifySsl(checked === true)} />
           <span>{t.immichVerifySsl}</span>
         </CheckRow>
-        <Button variant="outline" onClick={saveImmich} disabled={immichSaving || !immichUrl.trim() || (!immichConfigured && !immichKey.trim())}>{immichSaving ? t.submitting : t.immichSave}</Button>
+        <Button variant="outline" className="self-start" onClick={saveImmich} disabled={immichSaving || !immichUrl.trim() || (!immichConfigured && !immichKey.trim())}>{immichSaving ? t.submitting : t.immichSave}</Button>
         {immichMessage && <p className="mt-2 text-xs text-muted-foreground" role="status">{immichMessage}</p>}
       </AuthCard>
 
@@ -510,7 +510,7 @@ https://<vos-host>/api/com.ictrek.image-studio/api/v1/outputs/<job_id>/output.pn
       <p className="mt-3.5 text-xs">
         {t.apiCurrentSession}
         <code className="mx-1.5 rounded bg-secondary px-2 py-0.5 font-mono text-xs">{session ? session.user_key : '...'}</code>
-        {session && !session.authenticated && <span className="ml-1.5 rounded-full bg-orange-100 px-1.5 py-px text-[10px] font-bold text-orange-900">{t.anonymousSession}</span>}
+        {session && !session.authenticated && <span className="ml-1.5 rounded-full bg-orange-100 px-1.5 py-px text-[10px] font-bold text-orange-900 dark:bg-orange-950 dark:text-orange-300">{t.anonymousSession}</span>}
       </p>
     </Panel>
   )

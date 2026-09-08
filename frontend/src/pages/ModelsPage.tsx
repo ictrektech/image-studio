@@ -142,7 +142,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
           <Button variant="outline" onClick={onRefresh}><RefreshCw size={15} />{t.refresh}</Button>
         </PanelHeading>
         {message && (
-          <Alert className="mb-3 border-blue-200 bg-blue-50 text-blue-900">
+          <Alert className="mb-3 border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-200">
             <AlertDescription>{message}</AlertDescription>
           </Alert>
         )}
@@ -158,7 +158,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
           <div className="my-3 rounded-lg bg-secondary p-3">
             <PanelHeading>
               <div>
-                <strong className="block text-xs text-slate-800">{t.capabilityFilter}</strong>
+                <strong className="block text-xs text-foreground">{t.capabilityFilter}</strong>
                 <span className="mt-0.5 block text-[11px] text-muted-foreground">{t.capabilityFilterHelp}</span>
               </div>
               {selectedCapabilities.length > 0 && (
@@ -170,6 +170,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
             <ToggleGroup
               type="multiple"
               variant="outline"
+              spacing={1}
               className="mt-2.5 flex-wrap"
               value={selectedCapabilities}
               onValueChange={setSelectedCapabilities}
@@ -214,8 +215,8 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
               <article
                 className={
                   ready
-                    ? 'rounded-lg border border-green-200 bg-[#fbfffd] p-3'
-                    : 'rounded-lg border border-orange-200 bg-[#fffdf9] p-3'
+                    ? 'rounded-lg border border-green-300 bg-card p-3 dark:border-green-700'
+                    : 'rounded-lg border border-orange-300 bg-card p-3 dark:border-orange-700'
                 }
                 key={`${model.key}:${entry.variantId || 'default'}`}
               >
@@ -306,7 +307,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
         <p className="mt-0.5 text-xs text-muted-foreground">{t.modelHubPathHelp}</p>
         {filteredEntries.map(entry => (
           <div className="grid grid-cols-[260px_minmax(0,1fr)] items-center gap-3 border-t py-2.5 text-xs first:mt-2.5 max-md:grid-cols-1" key={`${entry.base.key}:${entry.variantId || 'default'}`}>
-            <span className="font-bold text-slate-700">{entry.isVariant ? `${entry.base.name} · ${entry.active.name}` : entry.base.name}</span>
+            <span className="font-bold text-foreground">{entry.isVariant ? `${entry.base.name} · ${entry.active.name}` : entry.base.name}</span>
             <code className="truncate rounded border bg-secondary px-1.5 py-1.5 font-mono text-[11px]">{entry.active.access_path}</code>
           </div>
         ))}

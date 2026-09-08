@@ -54,7 +54,7 @@ export default function JobsPage({ t }: { t: typeof messages['zh-CN'] }) {
           const failed = hasFailedUpload(job)
           return (
             <div
-              className="grid items-center gap-2.5 rounded-lg border p-2.5 text-xs max-md:grid-cols-1 md:grid-cols-[74px_92px_minmax(180px,0.75fr)_92px_82px_minmax(220px,1fr)_78px]"
+              className="grid items-center gap-2.5 rounded-lg border p-2.5 text-xs max-md:grid-cols-1 md:grid-cols-[74px_92px_minmax(180px,0.75fr)_92px_82px_minmax(220px,1fr)_max-content]"
               key={job.job_id}
             >
               <div className="grid size-16 place-items-center overflow-hidden rounded-md border bg-secondary text-[11px] text-muted-foreground">

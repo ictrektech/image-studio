@@ -68,5 +68,26 @@
 }
 
 .dark {
+  /* shadcn 原生 zinc 深色：card 与 background 同色，表面仅靠 border 区分 */
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: #09090b;
+  --card-foreground: #fafafa;
+  --popover: #09090b;
+  --popover-foreground: #fafafa;
+  --primary: #19c2d6;
+  --primary-foreground: #04222a;
+  --secondary: #27272a;
+  --secondary-foreground: #fafafa;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --accent: #27272a;
+  --accent-foreground: #fafafa;
+  --destructive: #ef4444;
+  --border: #27272a;
+  --input: #27272a;
+  --ring: #19c2d6;
+  --success: #22c58a;
+  --warning: #d99a3a;
 }
 

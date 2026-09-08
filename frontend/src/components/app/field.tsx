@@ -15,7 +15,7 @@ function Field({
 }) {
   return (
     <div className={cn("min-w-0", className)} {...props}>
-      <Label className={cn("mb-1.5 block text-xs font-bold text-slate-700", labelClassName)}>
+      <Label className={cn("mb-1.5 block text-xs font-bold text-foreground", labelClassName)}>
         {label}
       </Label>
       {children}

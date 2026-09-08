@@ -4,6 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Image Studio</title>
+    <script>
+      // 在 React 挂载前应用主题，避免深色模式闪烁
+      (function () {
+        var saved = localStorage.getItem('image-studio-theme')
+        var theme = saved === 'light' || saved === 'dark' || saved === 'auto' ? saved : 'auto'
+        var dark = theme === 'dark' || (theme === 'auto' &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.classList.toggle('dark', dark)
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

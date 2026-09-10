@@ -1,20 +1,18 @@
+# =============================================================================
+# Image Studio — 前端导航路由
+# 平铺 page：与其他应用（Model-Hub/PGV）一致的门户导航形态，
+# 应用抽屉内直接点击进入，无折叠分组。
+# =============================================================================
+
 routers:
-  - id: com-ictrek-image-studio
-    kind: group
+  - id: image-studio
+    kind: page
     title:
       zh-CN: Image Studio
       en: Image Studio
     icon: lucide:image
     order: 210
-    children:
-      - id: image-studio
-        kind: page
-        title:
-          zh-CN: 图片生成
-          en: Image Generation
-        icon: lucide:image-plus
-        iframe-src: /app/com.ictrek.image-studio/?v=__APP_VERSION__
-        order: 10
-        keep-alive: true
-        entry-point: true
-        embed: true
+    iframe-src: /app/com.ictrek.image-studio/?v=__APP_VERSION__
+    keep-alive: true
+    entry-point: true
+    embed: true

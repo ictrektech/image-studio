@@ -29,7 +29,7 @@ x-image-studio-frontend-base: &image-studio-frontend-base
     - "traefik.http.routers.image-studio-top-open.service=image-studio-web"
     - "traefik.http.routers.image-studio-top-open.middlewares=image-studio-top-open-redirect"
     - "traefik.http.middlewares.image-studio-top-open-redirect.redirectregex.regex=^(https?://[^/]+)/app/com\\.ictrek\\.image-studio/?(?:\\?.*)?$"
-    - "traefik.http.middlewares.image-studio-top-open-redirect.redirectregex.replacement=$${1}/#/app/com.ictrek.image-studio/com-ictrek-image-studio/image-studio"
+    - "traefik.http.middlewares.image-studio-top-open-redirect.redirectregex.replacement=$${1}/#/app/com.ictrek.image-studio/image-studio"
     - "traefik.http.middlewares.image-studio-top-open-redirect.redirectregex.permanent=false"
     - "traefik.http.routers.image-studio-web.rule=PathPrefix(`/app/com.ictrek.image-studio`)"
     - "traefik.http.routers.image-studio-web.service=image-studio-web"

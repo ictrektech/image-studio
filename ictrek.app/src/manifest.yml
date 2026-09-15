@@ -136,6 +136,8 @@ profiles:
       software: [cuda]
     conflicts: [amd, amd-cuda, arm, arm-cuda, l4t]
 
+require-profiles: true
+
 storage:
   directories:
     - path: data

@@ -181,3 +181,4 @@ class ModelInfo(BaseModel):
     total_bytes: int | None = None
     error: str | None = None
     model_hub_status: dict[str, Any] | None = None
+    v_router: dict[str, Any] = Field(default_factory=dict)

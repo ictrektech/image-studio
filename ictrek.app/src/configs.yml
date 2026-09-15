@@ -20,6 +20,26 @@ configs:
       en: Model Hub backend API URL inside VOS network, used to trigger model pull and sync.
     default: http://model-hub-backend:5005
 
+  - name: IMAGE_STUDIO_V_ROUTER_API_URL
+    type: string
+    title:
+      zh-CN: V-Router API 地址
+      en: V-Router API URL
+    description:
+      zh-CN: Image Studio 调用 V-Router 中已有生图/生视频模型的 API 地址；默认使用同一 VOS 网络内的 V-Router 后端。留空或不可达时只显示本地模型。
+      en: API URL used by Image Studio to call image/video generation models already configured in V-Router. Defaults to the V-Router backend on the same VOS network. When empty or unreachable, only local models are shown.
+    default: http://v-router-backend:8080
+
+  - name: IMAGE_STUDIO_V_ROUTER_BASE_URL
+    type: string
+    title:
+      zh-CN: Image Studio 对 V-Router 暴露地址
+      en: Image Studio URL for V-Router
+    description:
+      zh-CN: V-Router 自动发现或注册 Image Studio 本地 ready 模型时回调的 Image Studio 后端地址；不要填 V-Router 地址。
+      en: Image Studio backend URL that V-Router uses when discovering or registering Image Studio's local ready models. Do not set this to the V-Router URL.
+    default: http://image-studio-backend:5000
+
   - name: IMAGE_STUDIO_VOS_SSO_ENABLED
     type: boolean
     title:

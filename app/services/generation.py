@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
+import mimetypes
 import re
 import shlex
 import shutil
@@ -10,11 +12,15 @@ import uuid
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urljoin
+
+import httpx
 
 from app.config import settings
 from app.models import GenerateRequest, JobRecord
 from app.services.models import assert_model_hub_ready, get_model_def, model_path_for, runtime_paths_for
 from app.services.storage import input_path, job_dir, load_job, save_job, user_dir
+from app.services.v_router import fetch_v_router_generation_models
 logger = logging.getLogger("image-studio.sd")
 
 
@@ -84,7 +90,9 @@ _STEP_RE = re.compile(r"\b(?:step|steps|sampling|sample|denoise|denoising)\D{0,3
 _FRAME_RE = re.compile(r"\b(?:frame|frames|video)\D{0,32}(\d+)\s*/\s*(\d+)", re.IGNORECASE)
 
 
-async def create_job(user_key: str, request: GenerateRequest) -> JobRecord:
+async def create_job(user_key: str, request: GenerateRequest, access_token: str = "") -> JobRecord:
+    if request.model_key.startswith("v-router/"):
+        return await create_v_router_job(user_key, request, access_token)
     runtime = get_model_def(request.model_key, request.model_variant)["runtime"]
     video_mode = runtime.get("mode") == "video"
     defaults = runtime.get("defaults") or {}
@@ -172,6 +180,52 @@ async def create_job(user_key: str, request: GenerateRequest) -> JobRecord:
     return job
 
 
+async def create_v_router_job(user_key: str, request: GenerateRequest, access_token: str = "") -> JobRecord:
+    qualified = request.model_key.removeprefix("v-router/")
+    rows = await fetch_v_router_generation_models(access_token)
+    model = next((row for row in rows if row.get("model_id") == qualified), None)
+    if not model:
+        raise KeyError(request.model_key)
+    endpoints = [str(e) for e in (model.get("v_router") or {}).get("endpoints") or []]
+    video_mode = "videos/generations" in endpoints and "images/generations" not in endpoints and "images/edits" not in endpoints
+    now = datetime.now(timezone.utc)
+    job = JobRecord(
+        job_id=f"job_{now.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}",
+        user_key=user_key,
+        status="queued",
+        prompt=request.prompt,
+        negative_prompt=request.negative_prompt,
+        model_key=request.model_key,
+        model_variant="",
+        model_path=settings.v_router_api_url,
+        width=request.width,
+        height=request.height,
+        steps=request.steps,
+        cfg_scale=request.cfg_scale,
+        strength=request.strength,
+        sampler=request.sampler,
+        seed=request.seed,
+        batch_count=1 if video_mode else request.batch_count,
+        video_frames=request.video_frames if video_mode else 0,
+        fps=request.fps if video_mode else 0,
+        metadata={
+            "init_job_id": request.init_job_id,
+            "init_filename": request.init_filename,
+            "init_input_id": request.init_input_id,
+            "v_router_model": qualified,
+            "v_router_endpoints": endpoints,
+        },
+        created_at=now,
+        updated_at=now,
+    )
+    save_job(job)
+    task_key = (job.user_key, job.job_id)
+    task = asyncio.create_task(run_v_router_job(job, access_token))
+    _job_tasks[task_key] = task
+    task.add_done_callback(lambda _: _job_tasks.pop(task_key, None))
+    return job
+
+
 async def cancel_job(user_key: str, job_id: str) -> bool:
     task_key = (user_key, job_id)
     cancelled = False
@@ -250,6 +304,155 @@ async def run_job(job: JobRecord) -> None:
         job.error = str(exc)
     if load_job(job.user_key, job.job_id) is not None:
         save_job(job)
+
+
+async def run_v_router_job(job: JobRecord, access_token: str = "") -> None:
+    try:
+        async with _semaphore:
+            if load_job(job.user_key, job.job_id) is None:
+                return
+            job.status = "running"
+            job.progress = 0.1
+            save_job(job)
+            endpoint = _v_router_endpoint_for_job(job)
+            response = await _call_v_router_generation(job, endpoint, access_token)
+            output_dir = job_dir(job.user_key, job.job_id)
+            outputs = await _save_v_router_outputs(job, response, output_dir, access_token)
+            if not outputs:
+                raise RuntimeError(f"V-Router response did not include downloadable output: {response}")
+            job.outputs = outputs
+            job.progress = 1
+            job.status = "succeeded"
+    except asyncio.CancelledError:
+        return
+    except Exception as exc:
+        if load_job(job.user_key, job.job_id) is None:
+            return
+        job.status = "failed"
+        job.error = str(exc)
+    if load_job(job.user_key, job.job_id) is not None:
+        save_job(job)
+
+
+def _v_router_endpoint_for_job(job: JobRecord) -> str:
+    endpoints = {str(e).strip().lower().lstrip("/").removeprefix("v1/") for e in job.metadata.get("v_router_endpoints") or []}
+    has_init = bool(job.metadata.get("init_input_id") or (job.metadata.get("init_job_id") and job.metadata.get("init_filename")))
+    if has_init and "images/edits" in endpoints:
+        return "images/edits"
+    if "videos/generations" in endpoints and "images/generations" not in endpoints:
+        return "videos/generations"
+    if "images/generations" in endpoints:
+        return "images/generations"
+    if "videos/generations" in endpoints:
+        return "videos/generations"
+    raise RuntimeError("V-Router model does not declare image/video generation endpoints")
+
+
+async def _call_v_router_generation(job: JobRecord, endpoint: str, access_token: str) -> dict:
+    headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
+    url = f"{settings.v_router_api_url}/v1/{endpoint}"
+    model = str(job.metadata.get("v_router_model") or "").strip()
+    payload = {
+        "model": model,
+        "prompt": job.prompt,
+        "negative_prompt": job.negative_prompt,
+        "size": f"{job.width}x{job.height}",
+        "width": job.width,
+        "height": job.height,
+        "steps": job.steps,
+        "cfg_scale": job.cfg_scale,
+        "strength": job.strength,
+        "seed": job.seed,
+    }
+    if endpoint == "videos/generations":
+        payload.update({"video_frames": job.video_frames, "fps": job.fps})
+    else:
+        payload["n"] = max(1, job.batch_count)
+    timeout = settings.video_timeout_seconds if endpoint == "videos/generations" else settings.default_timeout_seconds
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        if endpoint == "images/edits":
+            init = init_image_path(job)
+            if not init:
+                raise RuntimeError("image edit requires a source image")
+            content_type = mimetypes.guess_type(init.name)[0] or "application/octet-stream"
+            with init.open("rb") as f:
+                files = {"image": (init.name, f, content_type)}
+                data = {k: str(v) for k, v in payload.items() if v is not None}
+                resp = await client.post(url, headers=headers, data=data, files=files)
+        else:
+            resp = await client.post(url, headers={**headers, "Content-Type": "application/json"}, json=payload)
+        text = resp.text
+        if resp.status_code < 200 or resp.status_code >= 300:
+            raise RuntimeError(text or f"V-Router status {resp.status_code}")
+        try:
+            return resp.json()
+        except ValueError as exc:
+            raise RuntimeError("V-Router returned non-JSON generation response") from exc
+
+
+async def _save_v_router_outputs(job: JobRecord, response: dict, output_dir: Path, access_token: str) -> list[str]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    items: list[dict] = []
+    raw_data = response.get("data")
+    if isinstance(raw_data, list):
+        items.extend(item for item in raw_data if isinstance(item, dict))
+    for key in ("output", "outputs", "videos", "images"):
+        value = response.get(key)
+        if isinstance(value, list):
+            items.extend({"url": item} if isinstance(item, str) else item for item in value if isinstance(item, (str, dict)))
+        elif isinstance(value, str):
+            items.append({"url": value})
+    for key in ("url", "video_url", "image_url", "b64_json"):
+        if isinstance(response.get(key), str):
+            items.append({key: response[key]})
+
+    outputs: list[str] = []
+    for idx, item in enumerate(items, start=1):
+        name = await _save_v_router_item(item, output_dir, idx, access_token)
+        if name:
+            outputs.append(name)
+            job.outputs = outputs
+            job.progress = min(0.95, 0.1 + 0.8 * len(outputs) / max(len(items), 1))
+            save_job(job)
+    return outputs
+
+
+async def _save_v_router_item(item: dict, output_dir: Path, index: int, access_token: str) -> str:
+    if isinstance(item.get("b64_json"), str):
+        data = base64.b64decode(item["b64_json"])
+        ext = ".webm" if data[:4] == b"\x1a\x45\xdf\xa3" else ".png"
+        name = f"output_{index:02d}{ext}" if index > 1 else f"output{ext}"
+        (output_dir / name).write_bytes(data)
+        return name
+    raw_url = item.get("url") or item.get("video_url") or item.get("image_url")
+    if not isinstance(raw_url, str) or not raw_url:
+        return ""
+    url = urljoin(settings.v_router_api_url + "/", raw_url)
+    headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
+    async with httpx.AsyncClient(timeout=settings.video_timeout_seconds) as client:
+        resp = await client.get(url, headers=headers)
+        resp.raise_for_status()
+        data = resp.content
+        content_type = resp.headers.get("Content-Type", "")
+    ext = _extension_for_output(raw_url, content_type, data)
+    name = f"output_{index:02d}{ext}" if index > 1 else f"output{ext}"
+    (output_dir / name).write_bytes(data)
+    return name
+
+
+def _extension_for_output(url: str, content_type: str, data: bytes) -> str:
+    path_ext = Path(url.split("?", 1)[0]).suffix.lower()
+    if path_ext in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov"}:
+        return path_ext
+    if "webm" in content_type or data[:4] == b"\x1a\x45\xdf\xa3":
+        return ".webm"
+    if "mp4" in content_type:
+        return ".mp4"
+    if "jpeg" in content_type:
+        return ".jpg"
+    if "webp" in content_type:
+        return ".webp"
+    return ".png"
 
 
 def build_sd_args(job: JobRecord, output: Path, seed_offset: int = 0, low_memory_retry: bool = False) -> list[str]:

@@ -16,6 +16,7 @@ from app.services.immich import (
     save_immich_settings,
 )
 from app.services.models import get_model, get_model_def, list_model_defs_with_hub_state, model_info, pull_model, stop_model, sync_model_hub
+from app.services.v_router import registration_payload
 from app.services.templates import delete_template, default_template_id, list_templates, rename_template, save_template
 from app.services.session import bearer_token, current_user_key
 from app.services.storage import (
@@ -124,7 +125,7 @@ async def update_immich_settings(request: Request, payload: ImmichSettingsUpdate
 async def generate(request: Request, payload: GenerateRequest):
     user_key = await current_user_key(request)
     try:
-        job = await create_job(user_key, payload)
+        job = await create_job(user_key, payload, bearer_token(request))
     except FileNotFoundError as exc:
         raise HTTPException(status_code=409, detail=f"模型文件未就绪: {exc}")
     except KeyError:
@@ -234,8 +235,14 @@ async def remove_input(request: Request, input_id: str):
 
 
 @router.get("/models")
-async def models():
-    return await list_model_defs_with_hub_state()
+async def models(request: Request):
+    return await list_model_defs_with_hub_state(bearer_token(request))
+
+
+@router.get("/v-router/registration")
+async def v_router_registration(ready_only: bool = True):
+    rows = [item.model_dump() for item in await list_model_defs_with_hub_state()]
+    return registration_payload(rows, ready_only=ready_only)
 
 
 @router.get("/models/{key}")

@@ -8,6 +8,7 @@ import httpx
 
 from app.config import settings
 from app.models import ModelInfo
+from app.services.v_router import fetch_v_router_generation_models, model_metadata
 
 
 MODEL_FILE_PATTERNS = ("*.safetensors", "*.ckpt", "*.pt", "*.pth", "*.gguf")
@@ -1405,6 +1406,7 @@ def _model_payload(item: dict[str, Any], include_variants: bool = False) -> dict
         "size": size,
         "total_bytes": expected_size,
     }
+    info["v_router"] = model_metadata(item["key"], item["capabilities"], variant_id=item.get("variant_id", ""), status=info["status"])
     if dirty_partial and not resolved:
         info["error"] = "发现上次未完成下载残留，请重新下载以清理后重新拉取"
     return info
@@ -1638,7 +1640,7 @@ def merge_item_hub_states(item: dict[str, Any], hub_states: dict[str, dict[str, 
             info["status"] = "ready"
 
 
-async def list_model_defs_with_hub_state() -> list[ModelInfo]:
+async def list_model_defs_with_hub_state(access_token: str = "") -> list[ModelInfo]:
     """列出模型并合并双端下载状态：本应用 HF 任务 + Model Hub 拉取任务。"""
     hub_states = await fetch_model_hub_states()
     result = []
@@ -1651,6 +1653,13 @@ async def list_model_defs_with_hub_state() -> list[ModelInfo]:
             merge_item_hub_states(variant_item, hub_states, variant)
         info = ModelInfo(**payload)
         result.append(info)
+    try:
+        for item in await fetch_v_router_generation_models(access_token):
+            result.append(ModelInfo(**item))
+    except Exception:
+        # V-Router is optional for Image Studio. Local models must remain usable
+        # when V-Router is not installed, not reachable, or rejects this token.
+        pass
     return result
 
 

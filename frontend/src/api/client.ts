@@ -43,6 +43,15 @@ export interface ModelInfo {
   downloaded_bytes?: number | null
   total_bytes?: number | null
   error?: string | null
+  v_router?: {
+    model: string
+    qualified: string
+    protocol: 'image_studio' | 'v_router'
+    status: string
+    endpoints: string[]
+    capabilities: string[]
+    model_kind: 'unknown'
+  }
 }
 
 export interface GeneratePayload {

@@ -12,6 +12,11 @@ class Settings:
     data_dir = Path(os.getenv("IMAGE_STUDIO_DATA_DIR", "/data")).resolve()
     modelhub_root = Path(os.getenv("MODEL_HUB_SHARED_MODELS_PATH", "/modelhub")).resolve()
     model_hub_api_url = os.getenv("MODEL_HUB_API_URL", "http://model-hub-backend:5005").rstrip("/")
+    # Base URL that V-Router should call when Image Studio registers itself.
+    # VOS containers share vos_default, so the internal backend DNS is the default.
+    v_router_base_url = os.getenv("IMAGE_STUDIO_V_ROUTER_BASE_URL", "http://image-studio-backend:5000").rstrip("/")
+    # V-Router API endpoint consumed by Image Studio for remote image/video models.
+    v_router_api_url = os.getenv("IMAGE_STUDIO_V_ROUTER_API_URL", "http://v-router-backend:8080").rstrip("/")
     vos_sso_enabled = os.getenv("IMAGE_STUDIO_VOS_SSO_ENABLED", "true").lower() in {"1", "true", "yes"}
     vos_userinfo_url = os.getenv("IMAGE_STUDIO_VOS_USERINFO_URL", "http://172.17.0.1:8105/v1000/user/check")
     vos_oidc_userinfo_url = os.getenv("IMAGE_STUDIO_VOS_OIDC_USERINFO_URL", "http://172.17.0.1:8105/v1000/oauth2/userinfo")

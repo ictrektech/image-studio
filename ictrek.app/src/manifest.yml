@@ -23,6 +23,9 @@ dependencies:
     - id: com.ictrek.model-hub
       version: ">=0.0.54"
       optional: false
+    - id: com.ictrek.v-router
+      version: ">=0.0.22"
+      optional: true
 
 oauth2:
   client:
@@ -70,6 +73,8 @@ profiles:
     description:
       zh-CN: AMD64 平台，不声明 nvidia runtime，适合 CPU 或外部 runtime 测试。
       en: AMD64 platform without nvidia runtime, for CPU or external runtime testing.
+    caps:
+      arch: amd64
     conflicts: [amd-cuda, arm, arm-cuda, l4t, thor]
   - name: amd-cuda
     title:
@@ -78,6 +83,9 @@ profiles:
     description:
       zh-CN: AMD64 NVIDIA CUDA 平台，声明 nvidia runtime。
       en: AMD64 NVIDIA CUDA platform with nvidia runtime.
+    caps:
+      arch: amd64
+      software: [cuda]
     conflicts: [amd, arm, arm-cuda, l4t, thor]
   - name: arm
     title:
@@ -86,6 +94,8 @@ profiles:
     description:
       zh-CN: ARM64 平台，不声明 nvidia runtime。
       en: ARM64 platform without nvidia runtime.
+    caps:
+      arch: arm64
     conflicts: [amd, amd-cuda, arm-cuda, l4t, thor]
   - name: arm-cuda
     title:
@@ -94,6 +104,10 @@ profiles:
     description:
       zh-CN: ARM64 NVIDIA CUDA 平台，声明 nvidia runtime。
       en: ARM64 NVIDIA CUDA platform with nvidia runtime.
+    caps:
+      device-type: generic
+      arch: arm64
+      software: [cuda]
     conflicts: [amd, amd-cuda, arm, l4t, thor]
   - name: l4t
     title:
@@ -102,6 +116,11 @@ profiles:
     description:
       zh-CN: Jetson / L4T 平台，声明 nvidia runtime。
       en: Jetson / L4T platform with nvidia runtime.
+    caps:
+      device-type:
+        - any-of: [l4t, jetson]
+      arch: arm64
+      software: [cuda]
     conflicts: [amd, amd-cuda, arm, arm-cuda, thor]
   - name: thor
     title:
@@ -110,6 +129,11 @@ profiles:
     description:
       zh-CN: Thor 平台，声明 nvidia runtime。
       en: Thor platform with nvidia runtime.
+    caps:
+      device-type:
+        - any-of: [thor-spark, thor]
+      arch: arm64
+      software: [cuda]
     conflicts: [amd, amd-cuda, arm, arm-cuda, l4t]
 
 storage:

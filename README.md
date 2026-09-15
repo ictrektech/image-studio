@@ -45,6 +45,7 @@ Main endpoints:
 | `GET` | `/api/v1/inputs/{input_id}` | Download one uploaded reference image |
 | `DELETE` | `/api/v1/inputs/{input_id}` | Delete one uploaded reference image |
 | `GET` | `/api/v1/models` | List managed model definitions and state |
+| `GET` | `/api/v1/v-router/registration` | Registration payload for V-Router to discover Image Studio's own ready local models |
 | `POST` | `/api/v1/models/{key}/pull` | Trigger Model Hub pull from ModelScope |
 | `POST` | `/api/v1/models/{key}/stop` | Stop an in-flight download (resumable) |
 | `POST` | `/api/v1/models/{key}/sync` | Ask Model Hub to sync local model registry |
@@ -153,6 +154,30 @@ When a model is ready, Image Studio resolves the largest compatible model file
 under that directory (`.safetensors`, `.ckpt`, `.pt`, `.pth`, or `.gguf`) and
 passes it to `sd-cli`.
 
+## V-Router Integration
+
+Image Studio has two separate V-Router integrations:
+
+1. **Image Studio as a provider.** V-Router can discover or register Image
+   Studio's own ready local models through `GET /api/v1/models` or
+   `GET /api/v1/v-router/registration`. These models are exposed to V-Router
+   with the `image-studio/` prefix and the `image_studio` protocol.
+2. **Image Studio as a consumer.** Image Studio can read models already
+   configured in V-Router from `IMAGE_STUDIO_V_ROUTER_API_URL`
+   (default `http://v-router-backend:8080`). It adds eligible image/video
+   entries to the generation picker with a `v-router/` key, calls V-Router's
+   `/v1/images/generations`, `/v1/images/edits`, or `/v1/videos/generations`,
+   and saves returned files into the normal Image Studio job output directory.
+
+The consumer path filters out `image-studio/` rows returned by V-Router. This
+prevents a routing loop where Image Studio calls V-Router, and V-Router routes
+the request back into the same Image Studio instance.
+
+`IMAGE_STUDIO_V_ROUTER_BASE_URL` is a different setting: it is the Image Studio
+backend URL that V-Router should call when Image Studio is acting as a provider
+(default `http://image-studio-backend:5000`). Do not set it to the V-Router API
+URL.
+
 ## Video Generation
 
 Video families (`wan21`, `wan22`, `wan21-t2v-14b`, `wan21-i2v-14b`,
@@ -251,6 +276,23 @@ host check only applies when building the backend; frontend-only runs may update
 the shared ARM frontend tag for L4T and Thor sheets from an ARM build host.
 
 ## VOS Package
+
+### Profile caps
+
+The package declares VOS 1.1+ profile caps:
+
+- `amd`: `arch: amd64`
+- `amd-cuda`: `arch: amd64`, `software: [cuda]`
+- `arm`: `arch: arm64`
+- `arm-cuda`: `device-type: generic`, `arch: arm64`, `software: [cuda]`
+- `l4t`: `device-type` any of `l4t` or `jetson`, `arch: arm64`,
+  `software: [cuda]`
+- `thor`: `device-type` any of `thor-spark` or `thor`, `arch: arm64`,
+  `software: [cuda]`
+
+Hosts that should enable the dedicated Jetson/L4T or Thor profiles must expose
+the matching `/etc/vos/caps/*.yaml` `device-type` value; generic ARM CUDA
+hosts should use `device-type: generic`.
 
 ```bash
 cd ictrek.app

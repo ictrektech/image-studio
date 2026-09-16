@@ -175,7 +175,9 @@ Image Studio has two separate V-Router integrations:
 
 In the web UI, open **Models** to see a dedicated **V-Router cloud models**
 section. It shows connection health and the number of eligible models, links to
-V-Router for adding or editing providers, and lists remote models separately
+V-Router for adding or editing providers through the current VOS shell route
+(`/#/app/app-drawer/com.ictrek.v-router/v-router`, preserving the current
+origin), and lists remote models separately
 from models downloaded locally through Model Hub. The generation model picker
 uses the same local/cloud grouping. A V-Router model is eligible when its model
 row has an ID (`qualified` or `id`) and declares at least one of

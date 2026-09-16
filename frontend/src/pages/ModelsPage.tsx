@@ -83,6 +83,7 @@ function sortCapabilities(caps: string[]) {
 }
 
 export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo[]; onRefresh: () => void; t: typeof messages['zh-CN'] }) {
+  const vRouterSettingsUrl = `${window.location.origin}/#/app/app-drawer/com.ictrek.v-router/v-router`
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
   const [selectedCapabilities, setSelectedCapabilities] = useState<string[]>([])
@@ -154,7 +155,12 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild>
-              <a href="/app/com.ictrek.v-router/" target="_top"><ExternalLink size={15} />{t.openVRouter}</a>
+              <a
+                href={vRouterSettingsUrl}
+                target="_top"
+              >
+                <ExternalLink size={15} />{t.openVRouter}
+              </a>
             </Button>
             <Button variant="outline" onClick={() => { onRefresh(); refreshVRouterStatus() }}><RefreshCw size={15} />{t.refresh}</Button>
           </div>

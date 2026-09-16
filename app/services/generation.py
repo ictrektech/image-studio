@@ -408,7 +408,7 @@ async def _save_v_router_outputs(job: JobRecord, response: dict, output_dir: Pat
 
     outputs: list[str] = []
     for idx, item in enumerate(items, start=1):
-        name = await _save_v_router_item(item, output_dir, idx, access_token)
+        name = await _save_v_router_item(job, item, output_dir, idx, access_token)
         if name:
             outputs.append(name)
             job.outputs = outputs
@@ -417,7 +417,7 @@ async def _save_v_router_outputs(job: JobRecord, response: dict, output_dir: Pat
     return outputs
 
 
-async def _save_v_router_item(item: dict, output_dir: Path, index: int, access_token: str) -> str:
+async def _save_v_router_item(job: JobRecord, item: dict, output_dir: Path, index: int, access_token: str) -> str:
     if isinstance(item.get("b64_json"), str):
         data = base64.b64decode(item["b64_json"])
         ext = ".webm" if data[:4] == b"\x1a\x45\xdf\xa3" else ".png"

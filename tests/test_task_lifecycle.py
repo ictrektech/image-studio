@@ -1,10 +1,11 @@
 import asyncio
+import base64
 import tempfile
 import unittest
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from app.models import JobRecord
 from app.services import generation, hf_downloader
@@ -185,6 +186,137 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         generation._job_tasks.clear()
         generation._job_processes.clear()
+
+    def _v_router_job(self) -> JobRecord:
+        return JobRecord(
+            job_id="job_v_router",
+            user_key="user",
+            status="running",
+            prompt="prompt",
+            model_key="v-router/ai.kie.api/nano-banana-2",
+            model_path="http://v-router:8080",
+            width=1024,
+            height=1024,
+            steps=1,
+            cfg_scale=1.0,
+            sampler="",
+            seed=-1,
+            batch_count=1,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+
+    async def test_v_router_absolute_image_url_is_downloaded(self):
+        job = self._v_router_job()
+        response = type(
+            "Response",
+            (),
+            {
+                "content": b"image-bytes",
+                "headers": {"Content-Type": "image/png"},
+                "raise_for_status": lambda self: None,
+            },
+        )()
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=response)
+        client.__aenter__.return_value = client
+        client.__aexit__.return_value = None
+
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            generation.httpx, "AsyncClient", return_value=client
+        ), patch.object(generation, "save_job"):
+            outputs = await generation._save_v_router_outputs(
+                job,
+                {"data": [{"url": "https://cdn.example.test/result.png"}]},
+                Path(tmp),
+                "secret-token",
+            )
+
+            self.assertEqual(outputs, ["output.png"])
+            self.assertEqual((Path(tmp) / "output.png").read_bytes(), b"image-bytes")
+        client.get.assert_awaited_once_with(
+            "https://cdn.example.test/result.png",
+            headers={"Authorization": "Bearer secret-token"},
+        )
+
+    async def test_v_router_relative_image_url_uses_model_base_url(self):
+        job = self._v_router_job()
+        response = type(
+            "Response",
+            (),
+            {
+                "content": b"image-bytes",
+                "headers": {"Content-Type": "image/webp"},
+                "raise_for_status": lambda self: None,
+            },
+        )()
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=response)
+        client.__aenter__.return_value = client
+        client.__aexit__.return_value = None
+
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            generation.httpx, "AsyncClient", return_value=client
+        ), patch.object(generation, "save_job"):
+            outputs = await generation._save_v_router_outputs(
+                job,
+                {"data": [{"url": "files/result.webp"}]},
+                Path(tmp),
+                "",
+            )
+
+        self.assertEqual(outputs, ["output.webp"])
+        client.get.assert_awaited_once_with(
+            "http://v-router:8080/files/result.webp",
+            headers={},
+        )
+
+    async def test_v_router_b64_image_is_saved_without_http(self):
+        job = self._v_router_job()
+        encoded = "iVBORw0KGgo="
+
+        with tempfile.TemporaryDirectory() as tmp, patch.object(generation, "save_job"):
+            outputs = await generation._save_v_router_outputs(
+                job,
+                {"data": [{"b64_json": encoded}]},
+                Path(tmp),
+                "secret-token",
+            )
+
+            self.assertEqual(outputs, ["output.png"])
+            self.assertEqual((Path(tmp) / "output.png").read_bytes(), base64.b64decode(encoded))
+
+    async def test_v_router_video_url_keeps_extension_and_authorization(self):
+        job = self._v_router_job()
+        response = type(
+            "Response",
+            (),
+            {
+                "content": b"video-bytes",
+                "headers": {"Content-Type": "video/mp4"},
+                "raise_for_status": lambda self: None,
+            },
+        )()
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=response)
+        client.__aenter__.return_value = client
+        client.__aexit__.return_value = None
+
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            generation.httpx, "AsyncClient", return_value=client
+        ), patch.object(generation, "save_job"):
+            outputs = await generation._save_v_router_outputs(
+                job,
+                {"data": [{"video_url": "/files/result.mp4"}]},
+                Path(tmp),
+                "secret-token",
+            )
+
+        self.assertEqual(outputs, ["output.mp4"])
+        client.get.assert_awaited_once_with(
+            "http://v-router:8080/files/result.mp4",
+            headers={"Authorization": "Bearer secret-token"},
+        )
 
     async def test_cancel_job_waits_for_task_completion(self):
         finished = asyncio.Event()

@@ -188,34 +188,56 @@ def v_router_model_info(row: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-async def fetch_v_router_generation_models(access_token: str = "") -> list[dict[str, Any]]:
+def v_router_api_candidates() -> list[str]:
+    """Return V-Router addresses in VOS-network-first fallback order."""
+    candidates = [
+        settings.v_router_api_url,
+        "http://v-router:8080",
+        "http://v-router-backend:8080",
+        settings.v_router_host_api_url,
+    ]
+    return list(dict.fromkeys(url.rstrip("/") for url in candidates if url))
+
+
+async def _fetch_v_router_generation_models(access_token: str = "") -> tuple[list[dict[str, Any]], str]:
     """Read V-Router model metadata for Image Studio's remote backend picker.
 
     Image Studio consumes V-Router models as a separate source and never feeds
     them into its own registration payload. `image-studio/` rows are filtered
     out here to prevent Image Studio -> V-Router -> Image Studio routing loops.
     """
-    if not settings.v_router_api_url:
-        return []
     headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
-    url = f"{settings.v_router_api_url}/api/v1/models"
+    errors: list[str] = []
     async with httpx.AsyncClient(timeout=8.0) as client:
-        resp = await client.get(url, headers=headers)
-        resp.raise_for_status()
-        rows = resp.json().get("models") or []
-    out: list[dict[str, Any]] = []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        info = v_router_model_info(row)
-        if info:
-            out.append(info)
-    return out
+        for api_url in v_router_api_candidates():
+            try:
+                resp = await client.get(f"{api_url}/api/v1/models", headers=headers)
+                resp.raise_for_status()
+                rows = resp.json().get("models") or []
+            except Exception as exc:
+                errors.append(f"{api_url}: {exc}")
+                continue
+            out: list[dict[str, Any]] = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                info = v_router_model_info(row)
+                if info:
+                    info["access_path"] = api_url
+                    info["resolved_path"] = api_url
+                    out.append(info)
+            return out, api_url
+    raise RuntimeError("V-Router not found; tried " + ", ".join(errors))
+
+
+async def fetch_v_router_generation_models(access_token: str = "") -> list[dict[str, Any]]:
+    models, _ = await _fetch_v_router_generation_models(access_token)
+    return models
 
 
 async def v_router_connection_status(access_token: str = "") -> dict[str, Any]:
     """Return a user-facing health summary without hiding V-Router failures."""
-    if not settings.v_router_api_url:
+    if not v_router_api_candidates():
         return {
             "configured": False,
             "reachable": False,
@@ -224,11 +246,11 @@ async def v_router_connection_status(access_token: str = "") -> dict[str, Any]:
             "error": "V-Router API URL is empty",
         }
     try:
-        models = await fetch_v_router_generation_models(access_token)
+        models, api_url = await _fetch_v_router_generation_models(access_token)
         return {
             "configured": True,
             "reachable": True,
-            "api_url": settings.v_router_api_url,
+            "api_url": api_url,
             "eligible_models": len(models),
             "error": "",
         }

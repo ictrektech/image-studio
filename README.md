@@ -164,7 +164,11 @@ Image Studio has two separate V-Router integrations:
    with the `image-studio/` prefix and the `image_studio` protocol.
 2. **Image Studio as a consumer.** Image Studio can read models already
    configured in V-Router from `IMAGE_STUDIO_V_ROUTER_API_URL`
-   (default `http://v-router-backend:8080`). It adds eligible image/video
+   (default `http://v-router:8080`). Image Studio tries the `v-router` and
+   `v-router-backend` aliases on `vos_default` first, then falls back to
+   `IMAGE_STUDIO_V_ROUTER_HOST_API_URL` (default
+   `http://host.docker.internal:22888`). It reports V-Router as unavailable
+   only after every candidate fails. It adds eligible image/video
    entries to the generation picker with a `v-router/` key, calls V-Router's
    `/v1/images/generations`, `/v1/images/edits`, or `/v1/videos/generations`,
    and saves returned files into the normal Image Studio job output directory.

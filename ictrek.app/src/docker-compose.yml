@@ -7,7 +7,8 @@ x-image-studio-backend-env: &image-studio-backend-env
   IMAGE_STUDIO_DATA_DIR: /data
   MODEL_HUB_SHARED_MODELS_PATH: /modelhub
   MODEL_HUB_API_URL: ${MODEL_HUB_API_URL:-http://model-hub-backend:5005}
-  IMAGE_STUDIO_V_ROUTER_API_URL: ${IMAGE_STUDIO_V_ROUTER_API_URL:-http://v-router-backend:8080}
+  IMAGE_STUDIO_V_ROUTER_API_URL: ${IMAGE_STUDIO_V_ROUTER_API_URL:-http://v-router:8080}
+  IMAGE_STUDIO_V_ROUTER_HOST_API_URL: ${IMAGE_STUDIO_V_ROUTER_HOST_API_URL:-http://host.docker.internal:22888}
   IMAGE_STUDIO_V_ROUTER_BASE_URL: ${IMAGE_STUDIO_V_ROUTER_BASE_URL:-http://image-studio-backend:5000}
   IMAGE_STUDIO_VOS_SSO_ENABLED: ${IMAGE_STUDIO_VOS_SSO_ENABLED:-true}
   IMAGE_STUDIO_VOS_USERINFO_URL: ${IMAGE_STUDIO_VOS_USERINFO_URL:-http://172.17.0.1:8105/v1000/user/check}
@@ -44,6 +45,8 @@ x-image-studio-frontend-base: &image-studio-frontend-base
 
 x-image-studio-backend-base: &image-studio-backend-base
   restart: unless-stopped
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
   networks:
     vos_default:
       aliases:

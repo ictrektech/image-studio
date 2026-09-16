@@ -197,7 +197,7 @@ async def create_v_router_job(user_key: str, request: GenerateRequest, access_to
         negative_prompt=request.negative_prompt,
         model_key=request.model_key,
         model_variant="",
-        model_path=settings.v_router_api_url,
+        model_path=str(model.get("resolved_path") or model.get("access_path") or settings.v_router_api_url),
         width=request.width,
         height=request.height,
         steps=request.steps,
@@ -350,7 +350,7 @@ def _v_router_endpoint_for_job(job: JobRecord) -> str:
 
 async def _call_v_router_generation(job: JobRecord, endpoint: str, access_token: str) -> dict:
     headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
-    url = f"{settings.v_router_api_url}/v1/{endpoint}"
+    url = f"{job.model_path.rstrip('/')}/v1/{endpoint}"
     model = str(job.metadata.get("v_router_model") or "").strip()
     payload = {
         "model": model,
@@ -427,7 +427,7 @@ async def _save_v_router_item(item: dict, output_dir: Path, index: int, access_t
     raw_url = item.get("url") or item.get("video_url") or item.get("image_url")
     if not isinstance(raw_url, str) or not raw_url:
         return ""
-    url = urljoin(settings.v_router_api_url + "/", raw_url)
+    url = urljoin(job.model_path.rstrip("/") + "/", raw_url)
     headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
     async with httpx.AsyncClient(timeout=settings.video_timeout_seconds) as client:
         resp = await client.get(url, headers=headers)

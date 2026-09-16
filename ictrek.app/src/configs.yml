@@ -26,9 +26,19 @@ configs:
       zh-CN: V-Router API 地址
       en: V-Router API URL
     description:
-      zh-CN: Image Studio 调用 V-Router 中已有生图/生视频模型的 API 地址；默认使用同一 VOS 网络内的 V-Router 后端。留空或不可达时只显示本地模型。
-      en: API URL used by Image Studio to call image/video generation models already configured in V-Router. Defaults to the V-Router backend on the same VOS network. When empty or unreachable, only local models are shown.
-    default: http://v-router-backend:8080
+      zh-CN: Image Studio 调用 V-Router 中已有生图/生视频模型的 API 地址；默认优先使用同一 VOS 网络内的 V-Router 别名。
+      en: API URL used by Image Studio to call image/video generation models already configured in V-Router. Defaults to the V-Router alias on the same VOS network.
+    default: http://v-router:8080
+
+  - name: IMAGE_STUDIO_V_ROUTER_HOST_API_URL
+    type: string
+    title:
+      zh-CN: V-Router 宿主机回退地址
+      en: V-Router host fallback URL
+    description:
+      zh-CN: vos_default 内部别名不可达时使用的宿主机地址；默认访问 V-Router 暴露端口 22888。
+      en: Host URL used when the vos_default aliases are unreachable. Defaults to V-Router's exposed port 22888.
+    default: http://host.docker.internal:22888
 
   - name: IMAGE_STUDIO_V_ROUTER_BASE_URL
     type: string

@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Progress } from '@/components/ui/progress'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Textarea } from '@/components/ui/textarea'
@@ -228,6 +228,8 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
       ...(model.variants || []).map(variant => ({ base: model, active: variant, variantId: variant.id || '', label: `${model.name} · ${variant.name}${variant.params ? ` (${variant.params})` : ''}` })),
       { base: model, active: model, variantId: '', label: `${model.name}${model.params ? ` (${model.params})` : ''}` },
     ]), [models])
+  const localImageModels = imageModels.filter(entry => entry.active.source !== 'v-router')
+  const remoteImageModels = imageModels.filter(entry => entry.active.source === 'v-router')
   const selectedModel = models.find(model => model.key === payload.model_key)
   const selectedVariant = selectedModel?.variants?.find(variant => variant.id === payload.model_variant)
   const activeModel = selectedVariant || selectedModel
@@ -624,9 +626,21 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
             <Select value={`${payload.model_key}::${payload.model_variant}`} onValueChange={switchModelEntry}>
               <SelectTrigger className="h-8 w-full"><SelectValue /></SelectTrigger>
               <SelectContent position="popper" className="max-h-72">
-                {imageModels.map(entry => (
-                  <SelectItem key={`${entry.base.key}:${entry.variantId || 'default'}`} value={`${entry.base.key}::${entry.variantId}`}>{entry.label} · {entry.active.family}</SelectItem>
-                ))}
+                {remoteImageModels.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>{t.vRouterCloudModels}</SelectLabel>
+                    {remoteImageModels.map(entry => (
+                      <SelectItem key={`${entry.base.key}:${entry.variantId || 'default'}`} value={`${entry.base.key}::${entry.variantId}`}>{entry.label} · {entry.active.params || entry.active.family}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+                {remoteImageModels.length > 0 && <SelectSeparator />}
+                <SelectGroup>
+                  <SelectLabel>{t.localModels}</SelectLabel>
+                  {localImageModels.map(entry => (
+                    <SelectItem key={`${entry.base.key}:${entry.variantId || 'default'}`} value={`${entry.base.key}::${entry.variantId}`}>{entry.label} · {entry.active.family}</SelectItem>
+                  ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
           </Field>

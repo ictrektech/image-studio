@@ -1,4 +1,4 @@
-import { CheckCircle2, DownloadCloud, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck, Square } from 'lucide-react'
+import { CheckCircle2, Cloud, DownloadCloud, ExternalLink, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck, Square, WifiOff } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -9,7 +9,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Panel, PanelHeading, PanelTitle } from '@/components/app/panel'
 import { StatusBadge } from '@/components/app/status-badge'
-import { api, ModelInfo } from '../api/client'
+import { api, ModelInfo, VRouterStatus } from '../api/client'
 import { messages } from '../i18n'
 
 type T = typeof messages['zh-CN']
@@ -86,6 +86,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
   const [selectedCapabilities, setSelectedCapabilities] = useState<string[]>([])
+  const [vRouterStatus, setVRouterStatus] = useState<VRouterStatus | null>(null)
   const downloading = models.some(model => model.status === 'downloading' || model.variants?.some(variant => variant.status === 'downloading'))
   const modelEntries = useMemo(
     () => models.flatMap(model => [
@@ -94,19 +95,31 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
     ]),
     [models],
   )
+  const localEntries = useMemo(() => modelEntries.filter(entry => entry.active.source !== 'v-router'), [modelEntries])
+  const remoteEntries = useMemo(() => modelEntries.filter(entry => entry.active.source === 'v-router'), [modelEntries])
+  const vRouterReachable = remoteEntries.length > 0 || Boolean(vRouterStatus?.reachable)
+  const vRouterModelCount = remoteEntries.length || vRouterStatus?.eligible_models || 0
   const capabilityOptions = useMemo(
-    () => sortCapabilities(Array.from(new Set(modelEntries.flatMap(entry => displayCapabilities(entryCapabilities(entry)))))),
-    [modelEntries],
+    () => sortCapabilities(Array.from(new Set(localEntries.flatMap(entry => displayCapabilities(entryCapabilities(entry)))))),
+    [localEntries],
   )
   const filteredEntries = useMemo(
     () => selectedCapabilities.length === 0
-      ? modelEntries
-      : modelEntries.filter(entry => {
+      ? localEntries
+      : localEntries.filter(entry => {
         const caps = entryCapabilities(entry)
         return selectedCapabilities.every(capability => caps.includes(capability))
       }),
-    [modelEntries, selectedCapabilities],
+    [localEntries, selectedCapabilities],
   )
+
+  const refreshVRouterStatus = () => api.vRouterStatus()
+    .then(setVRouterStatus)
+    .catch(error => setVRouterStatus({ configured: true, reachable: false, api_url: '', eligible_models: 0, error: error.message || String(error) }))
+
+  useEffect(() => {
+    refreshVRouterStatus()
+  }, [])
 
   useEffect(() => {
     if (!downloading) return
@@ -136,8 +149,59 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
       <Panel className="p-3">
         <PanelHeading className="mb-3">
           <div>
-            <PanelTitle>{t.modelManagement}</PanelTitle>
-            <p className="mt-0.5 text-xs text-muted-foreground">{t.modelManagementHelp}</p>
+            <PanelTitle className="flex items-center gap-2"><Cloud size={17} />{t.vRouterCloudModels}</PanelTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">{t.vRouterCloudModelsHelp}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild>
+              <a href="/app/com.ictrek.v-router/" target="_top"><ExternalLink size={15} />{t.openVRouter}</a>
+            </Button>
+            <Button variant="outline" onClick={() => { onRefresh(); refreshVRouterStatus() }}><RefreshCw size={15} />{t.refresh}</Button>
+          </div>
+        </PanelHeading>
+        <Alert className={vRouterReachable ? 'mb-3 border-green-300 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-950/30 dark:text-green-200' : 'mb-3'}>
+          {vRouterReachable ? <ShieldCheck size={16} /> : <WifiOff size={16} />}
+          <AlertDescription>
+            <strong>{vRouterReachable ? t.vRouterConnected : t.vRouterUnavailable}</strong>
+            {vRouterReachable
+              ? ` · ${vRouterModelCount} ${t.vRouterModelCount}`
+              : vRouterStatus?.error ? ` · ${vRouterStatus.error}` : ''}
+          </AlertDescription>
+        </Alert>
+        {remoteEntries.length === 0 ? (
+          <Empty className="border py-6">
+            <EmptyHeader>
+              <EmptyTitle>{vRouterReachable ? t.vRouterNoModels : t.vRouterUnavailable}</EmptyTitle>
+              <EmptyDescription>{vRouterReachable ? t.vRouterCloudModelsHelp : (vRouterStatus?.error || t.vRouterCloudModelsHelp)}</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(300px,1fr))]">
+            {remoteEntries.map(entry => (
+              <article className="rounded-lg border border-blue-300 bg-card p-3 dark:border-blue-800" key={entry.base.key}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="truncate text-[15px] font-bold">{entry.active.name}</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">{entry.active.description}</p>
+                  </div>
+                  <StatusBadge status="ready" className="shrink-0 whitespace-nowrap"><ShieldCheck size={14} />{t.modelReady}</StatusBadge>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  <Badge>V-Router</Badge>
+                  {displayCapabilities(entryCapabilities(entry)).map(capability => <Badge variant="outline" key={capability}>{capabilityLabel(capability, t)}</Badge>)}
+                </div>
+                <code className="mt-3 block truncate rounded border bg-secondary px-1.5 py-1.5 font-mono text-[11px]">{entry.active.model_id}</code>
+              </article>
+            ))}
+          </div>
+        )}
+      </Panel>
+
+      <Panel className="p-3">
+        <PanelHeading className="mb-3">
+          <div>
+            <PanelTitle>{t.localModels}</PanelTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">{t.localModelsHelp}</p>
           </div>
           <Button variant="outline" onClick={onRefresh}><RefreshCw size={15} />{t.refresh}</Button>
         </PanelHeading>
@@ -146,7 +210,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
             <AlertDescription>{message}</AlertDescription>
           </Alert>
         )}
-        {models.length === 0 && (
+        {localEntries.length === 0 && (
           <Empty className="border-0 py-6">
             <EmptyHeader>
               <EmptyTitle>{t.noModelsConfigured}</EmptyTitle>

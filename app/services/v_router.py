@@ -211,3 +211,32 @@ async def fetch_v_router_generation_models(access_token: str = "") -> list[dict[
         if info:
             out.append(info)
     return out
+
+
+async def v_router_connection_status(access_token: str = "") -> dict[str, Any]:
+    """Return a user-facing health summary without hiding V-Router failures."""
+    if not settings.v_router_api_url:
+        return {
+            "configured": False,
+            "reachable": False,
+            "api_url": "",
+            "eligible_models": 0,
+            "error": "V-Router API URL is empty",
+        }
+    try:
+        models = await fetch_v_router_generation_models(access_token)
+        return {
+            "configured": True,
+            "reachable": True,
+            "api_url": settings.v_router_api_url,
+            "eligible_models": len(models),
+            "error": "",
+        }
+    except Exception as exc:
+        return {
+            "configured": True,
+            "reachable": False,
+            "api_url": settings.v_router_api_url,
+            "eligible_models": 0,
+            "error": str(exc),
+        }

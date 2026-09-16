@@ -163,6 +163,14 @@ export interface UserSettings {
   language: 'zh-CN' | 'en'
 }
 
+export interface VRouterStatus {
+  configured: boolean
+  reachable: boolean
+  api_url: string
+  eligible_models: number
+  error: string
+}
+
 export interface ImmichSettings {
   api_url: string
   configured: boolean
@@ -236,6 +244,7 @@ export const api = {
   updateImmichSettings: (payload: { api_url: string; api_key?: string; verify_ssl: boolean }) =>
     request<ImmichSettings>('/api/v1/immich', { method: 'PUT', body: JSON.stringify(payload) }),
   listModels: () => request<ModelInfo[]>('/api/v1/models'),
+  vRouterStatus: () => request<VRouterStatus>('/api/v1/v-router/status'),
   pullModel: (key: string, force = false, variant = '') => {
     const params = new URLSearchParams()
     if (force) params.set('force', 'true')

@@ -169,6 +169,15 @@ Image Studio has two separate V-Router integrations:
    `/v1/images/generations`, `/v1/images/edits`, or `/v1/videos/generations`,
    and saves returned files into the normal Image Studio job output directory.
 
+In the web UI, open **Models** to see a dedicated **V-Router cloud models**
+section. It shows connection health and the number of eligible models, links to
+V-Router for adding or editing providers, and lists remote models separately
+from models downloaded locally through Model Hub. The generation model picker
+uses the same local/cloud grouping. A V-Router model is eligible when its model
+row has an ID (`qualified` or `id`) and declares at least one of
+`images/generations`, `images/edits`, `images/variations`, or
+`videos/generations` in `endpoints`.
+
 The consumer path filters out `image-studio/` rows returned by V-Router. This
 prevents a routing loop where Image Studio calls V-Router, and V-Router routes
 the request back into the same Image Studio instance.

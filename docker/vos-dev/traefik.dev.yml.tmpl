@@ -1,0 +1,27 @@
+# Traefik 临时联调路由模板 — 由 scripts/vos-dev.sh 渲染后写入
+# /etc/traefik/dynamic-conf/com.ictrek.image-studio.dev.yml（priority 2000 > 平台正式路由 1000），
+# 撤销即回退到平台上已安装的应用。
+http:
+  routers:
+    image-studio-dev-web:
+      rule: "PathPrefix(`__BASE_PATH__`)"
+      service: image-studio-dev-web
+      priority: 2000
+    image-studio-dev-api:
+      rule: "PathPrefix(`/api/__APP_ID__`)"
+      service: image-studio-dev-api
+      middlewares: [image-studio-dev-api-strip]
+      priority: 2000
+  middlewares:
+    image-studio-dev-api-strip:
+      stripPrefix:
+        prefixes: ["/api/__APP_ID__"]
+  services:
+    image-studio-dev-web:
+      loadBalancer:
+        servers:
+          - url: "http://__HOST__:__WEB_PORT__"
+    image-studio-dev-api:
+      loadBalancer:
+        servers:
+          - url: "http://__HOST__:__API_PORT__"

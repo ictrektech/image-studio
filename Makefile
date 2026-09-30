@@ -21,12 +21,14 @@ DEV_ENV_FILE := docker/.env.dev
 DEV_CMD      := docker compose --env-file $(DEV_ENV_FILE) -f $(DEV_COMPOSE)
 DEV_SERVICE  := backend
 
+VOS_DEV_CMD  := $(DEV_CMD) -f docker/docker-compose.vos-dev.yml
+
 .DEFAULT_GOAL := help
 help:  ## 显示帮助
 	@grep -Eh '^[a-zA-Z_.-]+:.*## ' $(MAKEFILE_LIST) | sort | \
 	awk 'BEGIN {FS = ":.*## "}; {printf "\033[36m%-28s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: dev dev-build dev-down dev-restart dev-logs dev-ps dev-shell dev-test dev-config
+.PHONY: dev dev-build dev-down dev-restart dev-logs dev-ps dev-shell dev-test dev-config vos-dev vos-dev-down vos-dev-logs vos-dev-web vos-dev-status
 
 # 源码是 volume 挂载的，改 app/ 下代码由 uvicorn --reload 生效，不需要重新构建。
 # 只有下面三类改动才需要 make dev-build：Dockerfile.dev、pyproject.toml / uv.lock、install_sd_cpp.sh
@@ -56,3 +58,18 @@ dev-test:   ## [Dev] 在容器内跑后端单测
 
 dev-config: ## [Dev] 打印解析后的 compose 配置（校验用）
 	$(DEV_CMD) config
+
+vos-dev:     ## [VOS] 一键联调：起后端容器 + 前端（vite HMR，VOS_DEV_WEB=0 改产物）+ Traefik 临时路由；Ctrl-C 统一收尾
+	scripts/vos-dev.sh up
+
+vos-dev-down: ## [VOS] 停止 VOS 联调（撤临时路由 + 停前后端）
+	scripts/vos-dev.sh down
+
+vos-dev-logs: ## [VOS] 跟随 VOS 联调容器日志
+	scripts/vos-dev.sh logs
+
+vos-dev-web: ## [VOS] 构建前端产物到 frontend/dist-vos（保真模式；VOS_DEV_WEB=0 时自动使用）
+	cd frontend && bun install --frozen-lockfile && bunx vite build --outDir dist-vos
+
+vos-dev-status: ## [VOS] 查看 VOS 联调状态（容器/前端/路由）
+	scripts/vos-dev.sh status

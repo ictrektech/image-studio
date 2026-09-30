@@ -35,6 +35,9 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
+    // VOS 联调时经平台域名（Traefik 临时路由）访问 dev server，需放开 Host 校验；
+    // 仅影响 dev server（VITE_ALLOWED_HOSTS=true 时放开），不影响生产构建。
+    allowedHosts: process.env.VITE_ALLOWED_HOSTS === 'true' ? true : undefined,
     proxy: {
       // 生产环境由 VOS 网关剥掉 /api/com.ictrek.image-studio 前缀；
       // 本地开发由代理完成同样的前缀剥离，再转发给 uvicorn。

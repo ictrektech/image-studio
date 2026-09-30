@@ -1,0 +1,118 @@
+# ============================================================
+# VOS 联调覆盖（叠加在 docker-compose.dev.yml 之上）
+#
+# 用法（推荐，一条命令起前后端 + 装/撤 Traefik 临时路由，Ctrl-C 统一收尾）：
+#   make vos-dev                 前端 vite HMR；VOS_DEV_WEB=0 走 dist-vos 产物（保真）
+#   make vos-dev-down / vos-dev-status / vos-dev-web   详见 scripts/vos-dev.sh
+#
+# 手动方式（后端）：
+#   docker compose --env-file docker/.env.dev \
+#     -f docker/docker-compose.dev.yml -f docker/docker-compose.vos-dev.yml up -d
+#
+# 前端两种模式（与 v-cine 相同的二选一，共享同一个 Traefik 临时路由，换上游即可）：
+#   vite 模式（HMR，默认推荐）：
+#     cd frontend && BACKEND_ORIGIN=http://127.0.0.1:38088 VITE_ALLOWED_HOSTS=true bun dev
+#     Traefik web 上游 → http://172.17.0.1:${VOS_DEV_WEB_PORT:-38089}
+#   保真模式（dist 产物，验证打包结果）：
+#     make vos-dev-web   # 构建产物到 frontend/dist-vos
+#     docker compose --env-file docker/.env.dev \
+#       -f docker/docker-compose.dev.yml -f docker/docker-compose.vos-dev.yml --profile web-dist up -d
+#     Traefik web 上游 → http://172.17.0.1:${VOS_DEV_DIST_PORT:-38090}
+#     （nginx 容器仅在此 profile 下启动；与 vite 模式二选一跑，避免端口/混淆）
+#
+# 让平台域流量指向 dev（Traefik 临时路由，priority 高于平台正式路由；
+# 删掉该文件即回退到平台上已安装的应用）：
+#   docker exec -i traefik sh -c 'cat > /etc/traefik/dynamic-conf/com.ictrek.image-studio.dev.yml' <<'EOF'
+#   http:
+#     routers:
+#       image-studio-dev-web:
+#         rule: "PathPrefix(`/app/com.ictrek.image-studio`)"
+#         service: image-studio-dev-web
+#         priority: 2000
+#       image-studio-dev-api:
+#         rule: "PathPrefix(`/api/com.ictrek.image-studio`)"
+#         service: image-studio-dev-api
+#         middlewares: [image-studio-dev-api-strip]
+#         priority: 2000
+#     middlewares:
+#       image-studio-dev-api-strip:
+#         stripPrefix:
+#           prefixes: ["/api/com.ictrek.image-studio"]
+#     services:
+#       image-studio-dev-web:
+#         loadBalancer:
+#           servers:
+#             - url: "http://172.17.0.1:38089"   # vite dev server（vite 模式）
+#             # - url: "http://172.17.0.1:38090" # nginx 产物（保真模式，二选一）
+#       image-studio-dev-api:
+#         loadBalancer:
+#           servers:
+#             - url: "http://172.17.0.1:38088"   # dev 后端（VOS_DEV_PORT）
+#   EOF
+#   撤销：docker exec traefik rm -f /etc/traefik/dynamic-conf/com.ictrek.image-studio.dev.yml
+#
+# 与平台上已安装应用的关系（刻意不打扰它）：
+#   - 已安装应用继续占宿主 Traefik 正式路由；dev 后端占 38088（VOS_DEV_PORT 可改）、
+#     vite 占 38089（VOS_DEV_WEB_PORT 可改），均避开 v-cine 联调的 38086/38087
+#   - dev 容器加入 vos_default 时别名是 image-studio-backend-dev，不会抢平台上
+#     image-studio-backend 的名字；其他应用可按该别名直连调试
+#   - 平台会周期性 reconcile 已安装应用（compose up），**不要** stop 它，
+#     本方案只写 Traefik 临时路由文件，不动平台容器
+# ============================================================
+services:
+  backend:
+    # 容器名带 -vos-dev 后缀：与普通 dev（image-studio-dev）并存时互不干扰
+    container_name: image-studio-vos-dev
+    # 宿主端口改为独立端口（容器内仍是 25050），避免与其他环境抢端口
+    ports: !override
+      - "${VOS_DEV_PORT:-38088}:25050"
+    healthcheck: !override
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:25050/health', timeout=3).read()\" >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      vos_default:
+        aliases:
+          - image-studio-backend-dev
+    environment:
+      # ---- VOS SSO：开启后后端按 Bearer token 验 VOS 身份（取值与平台已安装应用一致）----
+      IMAGE_STUDIO_VOS_SSO_ENABLED: "true"
+      IMAGE_STUDIO_VOS_USERINFO_URL: http://${VOS_HOST_GW_IP:-172.17.0.1}:8105/v1000/user/check
+      IMAGE_STUDIO_VOS_OIDC_USERINFO_URL: http://${VOS_HOST_GW_IP:-172.17.0.1}:8105/v1000/oauth2/userinfo
+      # ---- 平台共享服务：加入 vos_default 后按服务名直连 ----
+      MODEL_HUB_API_URL: http://model-hub-backend:5005
+      IMAGE_STUDIO_V_ROUTER_API_URL: http://v-router:8080
+      IMAGE_STUDIO_V_ROUTER_HOST_API_URL: http://host.docker.internal:22888
+      # ---- Immich 免申请 API Key（按需在宿主侧 export 后传入）----
+      IMAGE_STUDIO_IMMICH_ADMIN_EMAIL: ${IMAGE_STUDIO_IMMICH_ADMIN_EMAIL:-}
+      IMAGE_STUDIO_IMMICH_ADMIN_PASSWORD: ${IMAGE_STUDIO_IMMICH_ADMIN_PASSWORD:-}
+      IMAGE_STUDIO_IMMICH_API_URL: ${IMAGE_STUDIO_IMMICH_API_URL:-http://172.17.0.1:2283/api}
+      IMAGE_STUDIO_IMMICH_AUTO_PROVISION: ${IMAGE_STUDIO_IMMICH_AUTO_PROVISION:-true}
+
+  # ---- 保真模式前端（仅 --profile web-dist 时启动；vite 模式不需要它）----
+  frontend:
+    image: ${VOS_DEV_WEB_IMAGE:-nginx:alpine}
+    container_name: image-studio-vos-dev-web
+    profiles: ["web-dist"]
+    ports:
+      - "${VOS_DEV_DIST_PORT:-38090}:80"
+    volumes:
+      # make vos-dev-web 的构建产物；目录不存在时先构建（否则 nginx 403）
+      - ../frontend/dist-vos:/usr/share/nginx/html:ro
+      # 平台子路径 /app/com.ictrek.image-studio/ → 产物根目录
+      - ./vos-dev/nginx.vos-dev.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/app/com.ictrek.image-studio/index.html >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+
+networks:
+  vos_default:
+    external: true

@@ -4,6 +4,7 @@ __pycache__/
 dist/
 node_modules/
 frontend/dist/
+frontend/dist-vos/
 ictrek.app/dist/
 
 frontend/tsconfig.tsbuildinfo
@@ -14,3 +15,4 @@ frontend/tsconfig.tsbuildinfo
 results/
 run_dev.sh
 tmp/
+.pi/

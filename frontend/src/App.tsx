@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, Cpu, Database, ImageIcon, Info, ListChecks, Monitor, Moon, PlugZap, Sun } from 'lucide-react'
+import { AlertTriangle, CircleCheck, CircleOff, CircleX, Clock, Cpu, Database, ImageIcon, Info, ListChecks, LoaderCircle, Monitor, Moon, PlugZap, Sun } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Toaster } from '@/components/ui/sonner'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { api, AboutInfo, ModelInfo } from './api/client'
+import { api, AboutInfo, ImmichStatus, ModelInfo } from './api/client'
 import GeneratePage from './pages/GeneratePage'
 
 // 首屏只需要 GeneratePage，其余页面按需加载（实测延后约 41kB）。
@@ -36,6 +36,9 @@ export default function App() {
   const [error, setError] = useState('')
   const [language, setLanguage] = useState<Language>('zh-CN')
   const [aboutOpen, setAboutOpen] = useState(false)
+  // AI 相册（Immich）连通性：null = 检查中；独立于 refresh()（后者被下载轮询每 2s 调一次，
+  // 不能把 immich ping 也带成 2s 一次）
+  const [immich, setImmich] = useState<ImmichStatus | null>(null)
   const { theme, cycleTheme } = useTheme()
   const t = messages[language]
 
@@ -81,7 +84,42 @@ export default function App() {
       .catch(() => undefined)
   }, [])
 
+  // 连通性状态：挂载时查一次，窗口重新聚焦时复查（首传开通后回来即可见 connected）；
+  // 失败落终态而非保持 null，避免与"检查中"不可区分的永久旋转
+  useEffect(() => {
+    const load = () => api.immichStatus().then(setImmich)
+      .catch(() => setImmich({ state: 'unreachable', detail: t.immichStatusUnavailable }))
+    load()
+    window.addEventListener('focus', load)
+    return () => window.removeEventListener('focus', load)
+  }, [t])
+
   const visibleModels = models.flatMap(model => [...(model.variants || []), model])
+
+  // AI 相册状态指示：一张表查 label/颜色/形状（形状即状态：钩/钟/叉/圈，颜色作强化）；
+  // 文字全在 hover Tooltip 与 aria-label
+  const immichStates: Record<string, { label: string; tone: string; Icon: typeof CircleCheck }> = {
+    '': { label: t.immichStateChecking, tone: 'text-muted-foreground', Icon: LoaderCircle },
+    connected: { label: t.immichStateConnected, tone: 'text-green-600 dark:text-green-400', Icon: CircleCheck },
+    pending: { label: t.immichStatePending, tone: 'text-orange-600 dark:text-orange-400', Icon: Clock },
+    unreachable: { label: t.immichStateUnreachable, tone: 'text-red-600 dark:text-red-400', Icon: CircleX },
+    error: { label: t.immichStateError, tone: 'text-red-600 dark:text-red-400', Icon: CircleX },
+    disabled: { label: t.immichStateDisabled, tone: 'text-muted-foreground', Icon: CircleOff },
+  }
+  const immichState = immich?.state ?? ''
+  const { label: immichLabel, tone: immichTone, Icon: ImmichIcon } = immichStates[immichState] ?? immichStates['']
+  const immichChip = (
+    <Badge
+      variant="outline"
+      role="img"
+      aria-label={`${t.immichChipName} · ${immichLabel}`}
+      tabIndex={0}
+      className="h-[34px] gap-2 rounded-md px-3 text-xs font-medium text-muted-foreground"
+    >
+      <ImmichIcon size={16} className={`${immichTone} ${immich ? '' : 'animate-spin'}`} />
+      <span>{t.immichChipName}</span>
+    </Badge>
+  )
   const readyCount = visibleModels.filter(model => model.status === 'ready').length
 
   return (
@@ -103,6 +141,13 @@ export default function App() {
               <Badge variant="outline" className="h-[34px] gap-2 rounded-md px-3 text-xs font-medium text-muted-foreground"><PlugZap size={16} /><span className="max-w-[220px] truncate">{about?.sd_cpp_bin || 'sd-cli'}</span></Badge>
             </TooltipTrigger>
             <TooltipContent className="max-w-[80vw] break-all"><p>{about?.sd_cpp_bin || 'sd-cli'}</p></TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>{immichChip}</TooltipTrigger>
+            <TooltipContent className="max-w-[80vw] break-all">
+              <p>{t.immichChipName} · {immichLabel}</p>
+              {immich?.detail && <p className="mt-1 opacity-80">{immich.detail}</p>}
+            </TooltipContent>
           </Tooltip>
           <Button variant="outline" className="h-[34px] gap-2 rounded-md px-3 text-xs font-semibold text-foreground shadow-none" onClick={() => setAboutOpen(true)}>
             <Info size={16} /><span>{t.about}</span>

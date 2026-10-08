@@ -66,9 +66,9 @@ configs:
       zh-CN: VOS 旧版用户校验地址
       en: Legacy VOS User Check URL
     description:
-      zh-CN: App 容器访问 VOS backend `/v1000/user/check` 的地址，用于旧版 VOS token 校验。
-      en: URL for the app container to reach VOS backend `/v1000/user/check` for legacy VOS token verification.
-    default: http://172.17.0.1:8105/v1000/user/check
+      zh-CN: 留空即由应用按平台内部网关推导（VOS_HOST_GW_IP:VOS_API_GW_PORT_INTERNAL，默认 172.17.0.1:1182 + /v1000/user/check），无需记忆端口；仅在需要指向其它地址时填写。
+      en: Leave blank to derive it from the platform internal gateway (VOS_HOST_GW_IP:VOS_API_GW_PORT_INTERNAL, default 172.17.0.1:1182 + /v1000/user/check). Set only to point at another address.
+    default: ""
 
   - name: IMAGE_STUDIO_VOS_OIDC_USERINFO_URL
     type: string
@@ -76,9 +76,9 @@ configs:
       zh-CN: VOS OIDC 用户信息地址
       en: VOS OIDC Userinfo URL
     description:
-      zh-CN: App 容器访问 VOS backend `/v1000/oauth2/userinfo` 的地址，用于 OIDC Fastpath token 校验。
-      en: URL for the app container to reach VOS backend `/v1000/oauth2/userinfo` for OIDC Fastpath token verification.
-    default: http://172.17.0.1:8105/v1000/oauth2/userinfo
+      zh-CN: 留空即由应用按平台内部网关推导（默认 172.17.0.1:1182 + /v1000/oauth2/userinfo），用于 OIDC Fastpath token 校验；仅在需要指向其它地址时填写。
+      en: Leave blank to derive it from the platform internal gateway (default 172.17.0.1:1182 + /v1000/oauth2/userinfo) for OIDC Fastpath token verification. Set only to point at another address.
+    default: ""
 
   - name: SD_CPP_BIN
     type: string

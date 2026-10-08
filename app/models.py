@@ -67,16 +67,12 @@ class GenerateRequest(BaseModel):
     params_backend: str = Field(default="", max_length=200)
 
 
-class ImmichSettingsUpdate(BaseModel):
-    api_url: str = Field(default="", max_length=500)
-    api_key: str | None = Field(default=None, max_length=500)
-    verify_ssl: bool = True
+class ImmichStatusResponse(BaseModel):
+    """Immich 连通性状态响应。"""
 
-
-class ImmichSettingsResponse(BaseModel):
-    api_url: str = ""
-    configured: bool = False
-    verify_ssl: bool = True
+    state: Literal["disabled", "pending", "connected", "unreachable", "error"]
+    # 不可达原因或上次开通失败原因（仅服务端已知错误才携带，不返凭据）。
+    detail: str = ""
 
 
 class ImmichUploadRecord(BaseModel):

@@ -171,10 +171,11 @@ export interface VRouterStatus {
   error: string
 }
 
-export interface ImmichSettings {
-  api_url: string
-  configured: boolean
-  verify_ssl: boolean
+export interface ImmichStatus {
+  // Immich 连通性：disabled / pending / connected / unreachable / error
+  state: 'disabled' | 'pending' | 'connected' | 'unreachable' | 'error'
+  // 不可达原因或上次开通失败原因（不含任何凭据）
+  detail?: string
 }
 
 export interface ImmichUploadRecord {
@@ -240,9 +241,7 @@ export const api = {
   me: () => request<SessionInfo>('/api/v1/me'),
   settings: () => request<UserSettings>('/api/v1/settings'),
   updateSettings: (payload: UserSettings) => request<UserSettings>('/api/v1/settings', { method: 'PUT', body: JSON.stringify(payload) }),
-  immichSettings: () => request<ImmichSettings>('/api/v1/immich'),
-  updateImmichSettings: (payload: { api_url: string; api_key?: string; verify_ssl: boolean }) =>
-    request<ImmichSettings>('/api/v1/immich', { method: 'PUT', body: JSON.stringify(payload) }),
+  immichStatus: () => request<ImmichStatus>('/api/v1/immich'),
   listModels: () => request<ModelInfo[]>('/api/v1/models'),
   vRouterStatus: () => request<VRouterStatus>('/api/v1/v-router/status'),
   pullModel: (key: string, force = false, variant = '') => {

@@ -81,16 +81,21 @@ services:
     environment:
       # ---- VOS SSO：开启后后端按 Bearer token 验 VOS 身份（取值与平台已安装应用一致）----
       IMAGE_STUDIO_VOS_SSO_ENABLED: "true"
-      IMAGE_STUDIO_VOS_USERINFO_URL: http://${VOS_HOST_GW_IP:-172.17.0.1}:8105/v1000/user/check
-      IMAGE_STUDIO_VOS_OIDC_USERINFO_URL: http://${VOS_HOST_GW_IP:-172.17.0.1}:8105/v1000/oauth2/userinfo
+      # 平台内部网关（Traefik web-internal，HTTP 无 TLS）：VOS 与 Immich 统一按
+      # host + port + app 路径前缀推导，不需要记忆各应用宿主端口；留空即自动推导。
+      VOS_HOST_GW_IP: ${VOS_HOST_GW_IP:-172.17.0.1}
+      VOS_API_GW_PORT_INTERNAL: ${VOS_API_GW_PORT_INTERNAL:-1182}
+      IMAGE_STUDIO_VOS_USERINFO_URL: ${IMAGE_STUDIO_VOS_USERINFO_URL:-}
+      IMAGE_STUDIO_VOS_OIDC_USERINFO_URL: ${IMAGE_STUDIO_VOS_OIDC_USERINFO_URL:-}
       # ---- 平台共享服务：加入 vos_default 后按服务名直连 ----
       MODEL_HUB_API_URL: http://model-hub-backend:5005
       IMAGE_STUDIO_V_ROUTER_API_URL: http://v-router:8080
       IMAGE_STUDIO_V_ROUTER_HOST_API_URL: http://host.docker.internal:22888
-      # ---- Immich 免申请 API Key（按需在宿主侧 export 后传入）----
-      IMAGE_STUDIO_IMMICH_ADMIN_EMAIL: ${IMAGE_STUDIO_IMMICH_ADMIN_EMAIL:-}
-      IMAGE_STUDIO_IMMICH_ADMIN_PASSWORD: ${IMAGE_STUDIO_IMMICH_ADMIN_PASSWORD:-}
-      IMAGE_STUDIO_IMMICH_API_URL: ${IMAGE_STUDIO_IMMICH_API_URL:-http://172.17.0.1:2283/api}
+      # ---- Immich 零接触凭据（用当前 VOS 令牌换专属 Key）----
+      # 留空即走内部网关 http://172.17.0.1:1182/app/com.ictrek.ai-album/api
+      IMAGE_STUDIO_IMMICH_API_URL: ${IMAGE_STUDIO_IMMICH_API_URL:-}
+      # 仅当上面覆盖为自签名 HTTPS 地址时才需要关；网关纯 HTTP 下无影响
+      IMAGE_STUDIO_IMMICH_VERIFY_SSL: ${IMAGE_STUDIO_IMMICH_VERIFY_SSL:-true}
       IMAGE_STUDIO_IMMICH_AUTO_PROVISION: ${IMAGE_STUDIO_IMMICH_AUTO_PROVISION:-true}
 
   # ---- 保真模式前端（仅 --profile web-dist 时启动；vite 模式不需要它）----

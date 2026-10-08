@@ -60,18 +60,37 @@ Image Studio can upload completed images and videos to a self-hosted Immich
 instance. The browser never talks to Immich directly — the backend holds the
 credentials and performs the upload.
 
-- Configure the **Immich API base URL** (e.g. `https://host/app/com.ictrek.ai-album/api`)
-  and a scoped **API key** in the frontend (`API` → `Immich settings`), or via
-  `PUT /api/v1/immich`.
-- The API key is stored in the per-user settings file and is never returned by
-  any endpoint.
-- `GET /api/v1/immich` never returns the key; it only reports whether a key is
-  configured.
-- Self-signed certificates (common for Immich on a private network) are rejected
-  by default. Uncheck **Verify HTTPS certificate** in the frontend Immich
-  settings for a single user. Disabling verification exposes uploads to
-  man-in-the-middle interception — prefer installing the Immich CA certificate
-  instead when possible.
+- **Zero-touch mode (no API key application needed)**: users never create or
+  paste an Immich API key, and there is no Immich settings form or persisted
+  credential of any kind — vos-exchange is the only path. On the first upload
+  the backend posts the caller's VOS access token to Immich's
+  `POST /oauth/vos-exchange` endpoint, which verifies the token (issuer,
+  audience and JWKS signature), resolves or creates the matching Immich user,
+  and returns a dedicated key limited to `asset.upload`. The key lives only in
+  the backend's process memory: the upload queue, retries and background
+  workers reuse it, it never touches disk, and a backend restart simply
+  exchanges a fresh key on the next upload (the user must be present with a
+  valid VOS token). No Immich admin credentials are involved anywhere.
+  `GET /api/v1/immich` reports a connectivity status for the UI
+  (`disabled` / `pending` / `connected` / `unreachable` / `error`, plus a
+  `detail` reason), probed with a live Immich `server/ping`; requests without
+  a VOS token are rejected with `409`, and disabling
+  `IMAGE_STUDIO_IMMICH_AUTO_PROVISION` turns the feature (and Immich uploads)
+  off.
+- The Immich address goes through the platform internal gateway (Traefik
+  `web-internal`, plain HTTP without TLS) and is addressed by app path prefix,
+  so no per-app host port has to be memorised:
+  `http://172.17.0.1:1182/app/com.ictrek.ai-album/api`. It is derived from
+  `VOS_HOST_GW_IP` and `VOS_API_GW_PORT_INTERNAL` (default `172.17.0.1:1182`);
+  set `IMAGE_STUDIO_IMMICH_API_URL` only to point somewhere else. The VOS
+  userinfo endpoints used for token verification are derived the same way.
+- Keys never touch disk and are never returned by any endpoint; the settings
+  files carry no Immich fields at all.
+- HTTPS certificate verification is on by default; set
+  `IMAGE_STUDIO_IMMICH_VERIFY_SSL=false` only for a self-signed HTTPS Immich
+  endpoint (disabling it exposes uploads to man-in-the-middle interception —
+  prefer installing the Immich CA certificate instead). The internal gateway
+  address is plain HTTP, where this flag has no effect.
 - A generation job must be `succeeded` before its outputs can be uploaded.
   Each output is uploaded through:
   1. `POST /assets/bulk-upload-check` (SHA-1 dedupe),

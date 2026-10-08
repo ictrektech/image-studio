@@ -4,16 +4,19 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 
 from app.config import settings as app_settings
-from app.models import GenerateRequest, ImmichSettingsResponse, ImmichSettingsUpdate
+from app.models import GenerateRequest, ImmichStatusResponse
 from app.services.generation import cancel_job, create_job
 from app.services.immich import (
+    ExchangeError,
     ImmichUploadError,
+    cached_api_key,
     cancel_job_uploads,
+    check_reachable,
     enqueue_job as enqueue_immich_job,
-    load_immich_settings,
-    normalize_base_url,
+    ensure_api_key,
+    last_error,
     retry_job as retry_immich_job,
-    save_immich_settings,
+    zero_touch_available,
 )
 from app.services.models import get_model, get_model_def, list_model_defs_with_hub_state, model_info, pull_model, stop_model, sync_model_hub
 from app.services.v_router import registration_payload, v_router_connection_status
@@ -94,31 +97,20 @@ async def update_settings(request: Request, payload: dict):
     return save_settings(await current_user_key(request), payload)
 
 
-@router.get("/immich", response_model=ImmichSettingsResponse)
-async def immich_settings(request: Request):
-    config = load_immich_settings(await current_user_key(request))
-    return ImmichSettingsResponse(
-        api_url=config["api_url"],
-        configured=config["configured"],
-        verify_ssl=config["verify_ssl"],
-    )
-
-
-@router.put("/immich", response_model=ImmichSettingsResponse)
-async def update_immich_settings(request: Request, payload: ImmichSettingsUpdate):
+@router.get("/immich", response_model=ImmichStatusResponse)
+async def immich_status(request: Request):
+    """Immich 连通性状态（五态见 ImmichStatusResponse，不返回任何凭据）。"""
+    if not zero_touch_available():
+        return ImmichStatusResponse(state="disabled")
+    reason = await check_reachable()
+    if reason:
+        return ImmichStatusResponse(state="unreachable", detail=reason)
     user_key = await current_user_key(request)
-    current = load_immich_settings(user_key)
-    api_key = payload.api_key if payload.api_key is not None else current["api_key"]
-    try:
-        api_url = normalize_base_url(payload.api_url)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    config = save_immich_settings(user_key, api_url, api_key, payload.verify_ssl)
-    return ImmichSettingsResponse(
-        api_url=config["api_url"],
-        configured=config["configured"],
-        verify_ssl=config["verify_ssl"],
-    )
+    if error := last_error(user_key):
+        return ImmichStatusResponse(state="error", detail=error)
+    if cached_api_key(user_key):
+        return ImmichStatusResponse(state="connected")
+    return ImmichStatusResponse(state="pending")
 
 
 @router.post("/generate")
@@ -142,8 +134,10 @@ async def jobs(request: Request):
 
 @router.post("/jobs/{job_id}/immich-upload", status_code=202)
 async def upload_job_to_immich(request: Request, job_id: str, force: bool = False):
+    user_key = await current_user_key(request)
+    await _ensure_key(request, user_key)
     try:
-        return await enqueue_immich_job(await current_user_key(request), job_id, force=force)
+        return await enqueue_immich_job(user_key, job_id, force=force)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except ImmichUploadError as exc:
@@ -152,10 +146,26 @@ async def upload_job_to_immich(request: Request, job_id: str, force: bool = Fals
 
 @router.post("/jobs/{job_id}/immich-upload/retry", status_code=202)
 async def retry_job_immich_upload(request: Request, job_id: str):
+    user_key = await current_user_key(request)
+    await _ensure_key(request, user_key)
     try:
-        return await retry_immich_job(await current_user_key(request), job_id)
+        return await retry_immich_job(user_key, job_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+
+
+async def _ensure_key(request: Request, user_key: str) -> None:
+    """零接触：上传前用当前 VOS 令牌换取（或复用本进程缓存的）Immich Key。
+
+    Key 只存在进程内存：首次上传或后端重启后需要用户在场（持有效令牌），
+    失败即时反馈；成功后队列、重试、后台上传都直接用缓存。
+    """
+    if not zero_touch_available():
+        raise HTTPException(status_code=409, detail="零接触免密互传未启用，无法上传到 Immich")
+    try:
+        await ensure_api_key(user_key, bearer_token(request))
+    except ExchangeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
 
 @router.get("/jobs/{job_id}")

@@ -29,6 +29,15 @@ class Settings:
     # 留空（或未设置）即按内部网关推导；显式配置时以配置值为准。
     vos_userinfo_url = os.getenv("IMAGE_STUDIO_VOS_USERINFO_URL") or f"{vos_gateway_base_url}/v1000/user/check"
     vos_oidc_userinfo_url = os.getenv("IMAGE_STUDIO_VOS_OIDC_USERINFO_URL") or f"{vos_gateway_base_url}/v1000/oauth2/userinfo"
+    # 零接触 Immich：上传时用当前 VOS 登录令牌向 Immich 换取专属 API Key（首次上传时
+    # 自动完成）；关闭开关则整个免密互传功能停用。
+    immich_default_api_url = os.getenv(
+        "IMAGE_STUDIO_IMMICH_API_URL"
+    ) or f"{vos_gateway_base_url}/app/com.ictrek.ai-album/api"
+    immich_default_api_url = immich_default_api_url.rstrip("/")
+    immich_auto_provision = os.getenv("IMAGE_STUDIO_IMMICH_AUTO_PROVISION", "true").lower() in {"1", "true", "yes"}
+    # HTTPS 校验（内部网关是纯 HTTP，不受此开关影响；指向自签名 HTTPS 时才需关闭）。
+    immich_verify_ssl = os.getenv("IMAGE_STUDIO_IMMICH_VERIFY_SSL", "true").lower() in {"1", "true", "yes"}
     sd_cpp_bin = os.getenv("SD_CPP_BIN", "sd-cli")
     sd_cpp_extra_args = os.getenv("SD_CPP_EXTRA_ARGS", "")
     default_timeout_seconds = int(os.getenv("IMAGE_STUDIO_GENERATE_TIMEOUT_SECONDS", "900"))

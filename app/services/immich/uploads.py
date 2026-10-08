@@ -11,7 +11,7 @@ from app.models import ImmichUploadRecord, JobRecord
 from app.services.storage import job_dir, list_jobs, load_job, save_job
 
 from .client import ImmichClient, ImmichError
-from .settings import load_immich_settings
+from .exchange import cached_api_key
 
 logger = logging.getLogger("image-studio.immich")
 _queue: asyncio.Queue[tuple[str, str, str]] = asyncio.Queue()
@@ -29,10 +29,12 @@ def _now() -> datetime:
 
 
 def _client_for(user_key: str) -> ImmichClient:
-    config = load_immich_settings(user_key)
-    if not config["configured"]:
-        raise ImmichUploadError("请先配置 Immich API 地址和 API Key")
-    return ImmichClient(config["api_url"], config["api_key"], verify_ssl=config["verify_ssl"])
+    # 凭据来自 vos-exchange 的进程内缓存（api 层在入队前已确保换取成功）。
+    # 重启后缓存清空，恢复的旧任务会走到这里失败并标记，由用户重新点击上传换取。
+    api_key = cached_api_key(user_key)
+    if not api_key:
+        raise ImmichUploadError("Immich 凭据未就绪（服务已重启），请重新点击上传以自动换取")
+    return ImmichClient(settings.immich_default_api_url, api_key, verify_ssl=settings.immich_verify_ssl)
 
 
 def _output_path(user_key: str, job_id: str, filename: str) -> Path:

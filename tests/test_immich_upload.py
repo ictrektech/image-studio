@@ -9,7 +9,8 @@ import httpx
 from app.models import ImmichUploadRecord, JobRecord
 from app.services.immich import ImmichClient, ImmichError, normalize_base_url
 from app.services import storage
-from app.services.immich import settings as immich_settings, uploads as immich_uploads
+from app.services.immich import exchange as immich_exchange
+from app.services.immich import uploads as immich_uploads
 
 
 class ImmichClientTest(unittest.IsolatedAsyncioTestCase):
@@ -156,7 +157,7 @@ class ImmichUploadServiceTest(unittest.IsolatedAsyncioTestCase):
             root = Path(raw_root)
             job, _ = self.job_and_output(root)
             with patch.object(storage.settings, "data_dir", root):
-                immich_settings.save_immich_settings("user", "https://immich.test/api", "secret-key")
+                immich_exchange._keys["user"] = "secret-key"  # 凭据来自进程内存缓存
                 storage.save_job(job)
                 with patch.object(immich_uploads, "ImmichClient", Client):
                     updated = await immich_uploads.enqueue_job("user", job.job_id)
@@ -172,7 +173,7 @@ class ImmichUploadServiceTest(unittest.IsolatedAsyncioTestCase):
             root = Path(raw_root)
             job, _ = self.job_and_output(root)
             with patch.object(storage.settings, "data_dir", root):
-                immich_settings.save_immich_settings("user", "https://immich.test/api", "secret-key")
+                immich_exchange._keys["user"] = "secret-key"  # 凭据来自进程内存缓存
                 job.immich_uploads["output.png"] = ImmichUploadRecord(
                     status="uploaded",
                     asset_id="asset-1",

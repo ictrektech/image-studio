@@ -3,11 +3,8 @@ import { KeyRound, ShieldCheck, UserCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { CheckRow, Field } from '@/components/app/field'
 import { Panel, PanelTitle } from '@/components/app/panel'
 import { api, ModelInfo, SessionInfo } from '../api/client'
 import { messages } from '../i18n'
@@ -274,42 +271,10 @@ function AuthCard({ warn, children }: { warn?: boolean; children: ReactNode }) {
 
 export default function ApiPage({ models, t }: { models: ModelInfo[]; t: T }) {
   const [session, setSession] = useState<SessionInfo | null>(null)
-  const [immichUrl, setImmichUrl] = useState('')
-  const [immichKey, setImmichKey] = useState('')
-  const [immichVerifySsl, setImmichVerifySsl] = useState(true)
-  const [immichConfigured, setImmichConfigured] = useState(false)
-  const [immichSaving, setImmichSaving] = useState(false)
-  const [immichMessage, setImmichMessage] = useState('')
-
-  const loadImmich = () => api.immichSettings().then(config => {
-    setImmichUrl(config.api_url)
-    setImmichVerifySsl(config.verify_ssl)
-    setImmichConfigured(config.configured)
-  }).catch(() => undefined)
 
   useEffect(() => {
     api.me().then(setSession).catch(() => undefined)
-    loadImmich()
   }, [])
-
-  const saveImmich = async () => {
-    setImmichSaving(true)
-    setImmichMessage('')
-    try {
-      const config = await api.updateImmichSettings({
-        api_url: immichUrl,
-        ...(immichKey ? { api_key: immichKey } : {}),
-        verify_ssl: immichVerifySsl,
-      })
-      setImmichKey('')
-      setImmichConfigured(config.configured)
-      setImmichMessage(t.immichSaved)
-    } catch (error: any) {
-      setImmichMessage(error.message || t.immichSaveFailed)
-    } finally {
-      setImmichSaving(false)
-    }
-  }
 
   const modelRows = models.length
     ? models.flatMap(model => [
@@ -360,23 +325,6 @@ export default function ApiPage({ models, t }: { models: ModelInfo[]; t: T }) {
     <Panel className="mx-auto max-w-[980px] p-3">
       <PanelTitle>{t.api}</PanelTitle>
       <p className="mt-0.5 text-xs text-muted-foreground">{t.apiHelp}</p>
-
-      <SectionHeading>{t.immichTitle}</SectionHeading>
-      <p className="mt-0.5 text-xs text-muted-foreground">{t.immichHelp}</p>
-      <AuthCard>
-        <Field label={t.immichApiUrl} className="mb-1">
-          <Input id="immich-api-url" value={immichUrl} onChange={event => setImmichUrl(event.target.value)} placeholder="https://immich.example.com/api" />
-        </Field>
-        <Field label={t.immichApiKey} className="mb-1">
-          <Input id="immich-api-key" type="password" value={immichKey} onChange={event => setImmichKey(event.target.value)} placeholder={immichConfigured ? t.immichKeyKeep : t.immichKeyPlaceholder} autoComplete="new-password" />
-        </Field>
-        <CheckRow className="my-2">
-          <Checkbox checked={immichVerifySsl} onCheckedChange={checked => setImmichVerifySsl(checked === true)} />
-          <span>{t.immichVerifySsl}</span>
-        </CheckRow>
-        <Button variant="outline" className="self-start" onClick={saveImmich} disabled={immichSaving || !immichUrl.trim() || (!immichConfigured && !immichKey.trim())}>{immichSaving ? t.submitting : t.immichSave}</Button>
-        {immichMessage && <p className="mt-2 text-xs text-muted-foreground" role="status">{immichMessage}</p>}
-      </AuthCard>
 
       <Table className="mt-3.5 text-xs">
         <TableBody>

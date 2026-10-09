@@ -11,6 +11,7 @@ from app.models import JobRecord
 
 INPUT_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 MAX_INPUT_BYTES = 20 * 1024 * 1024
+SUPPORTED_LANGUAGES = {"auto", "zh-CN", "zh-TW", "en"}
 
 
 def ensure_storage() -> None:
@@ -109,13 +110,13 @@ def _load_settings_raw(user_key: str) -> dict:
 def load_settings(user_key: str) -> dict:
     data = _load_settings_raw(user_key)
     language = data.get("language")
-    return {"language": language if language in {"zh-CN", "en"} else "zh-CN"}
+    return {"language": language if language in SUPPORTED_LANGUAGES else "auto"}
 
 
 def save_settings(user_key: str, data: dict) -> dict:
     current = _load_settings_raw(user_key)
     language = data.get("language")
-    if language in {"zh-CN", "en"}:
+    if language in SUPPORTED_LANGUAGES:
         current["language"] = language
     settings_path(user_key).write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
     return load_settings(user_key)

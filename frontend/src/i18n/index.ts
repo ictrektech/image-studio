@@ -1,5 +1,6 @@
-export type Language = 'zh-CN' | 'en'
+import { useSyncExternalStore } from 'react'
 
+// 简中是源文本，en / zhTW 与之逐键对齐（zhTW: typeof zh 由 tsc 保证不缺键不漏键）。
 const zh = {
   appSubtitle: 'sd.cpp · 本地 Stable Diffusion 工作台',
   generate: '生成',
@@ -318,11 +319,340 @@ const zh = {
   themeLight: '浅色',
   themeDark: '深色',
   themeAuto: '跟随系统',
+  followVos: '跟随 VOS',
+  languageSelect: '切换界面语言',
   submitFailed: '生成任务提交失败',
   generationFailed: '生成失败',
   dialogCancel: '取消',
   dialogConfirm: '确认',
   copiedToClipboard: '已复制到剪贴板',
+}
+
+const zhTW: typeof zh = {
+  appSubtitle: 'sd.cpp · 本地 Stable Diffusion 工作臺',
+  generate: '生成',
+  models: '模型',
+  jobs: '任務',
+  api: 'API',
+  about: '關於',
+  aboutTitle: '關於 Image Studio',
+  vosAppVersion: 'VOS App 版本',
+  frontendImage: '前端映像',
+  backendImage: '後端映像',
+  deploymentProfile: '部署設定',
+  unavailable: '未提供',
+  close: '關閉',
+  prompt: 'Prompt',
+  positivePrompt: '正向提示詞',
+  negativePrompt: '負向提示詞',
+  model: '模型',
+  modelReady: '模型已就緒',
+  modelMissing: '模型未就緒',
+  width: '寬度',
+  height: '高度',
+  steps: 'Steps',
+  cfgScale: 'CFG Scale',
+  strength: '重繪強度',
+  sampler: 'Sampler',
+  seed: 'Seed',
+  submit: '生成圖片',
+  submitVideo: '生成影片',
+  submitting: '提交中',
+  reset: '重設',
+  resetModelDefaults: '還原目前模型預設參數',
+  templateSave: '存為範本',
+  templateApply: '套用範本',
+  templateNameLabel: '範本名稱',
+  templateRename: '重新命名',
+  templateDeleteTitle: '刪除範本',
+  templateSaveFailed: '儲存範本失敗',
+  clear: '清空',
+  generationSettings: '生成設定',
+  parameters: '生成參數',
+  advancedSettings: '進階設定',
+  imagePreview: '影像預覽',
+  recentOutputs: '最近輸出',
+  imageCount: '張',
+  progress: '進度',
+  jobId: '任務 ID',
+  promptLength: '提示詞長度',
+  modelInfo: '模型資訊',
+  runtime: '執行環境',
+  modelPath: '模型路徑',
+  outputReady: '輸出已就緒',
+  waitingOutput: '等待輸出',
+  randomSeedHint: '-1 表示隨機',
+  batch: '出圖張數',
+  preview: '預覽',
+  previewHint: '提交任務後會在此處顯示輸出。',
+  noOutput: '暫無輸出',
+  currentJob: 'Current Job',
+  downloadOutput: '下載輸出',
+  reuseOutput: '以此圖為基礎生成',
+  deleteOutput: '刪除圖片',
+  deleteVideoOutput: '刪除影片',
+  deleteJob: '刪除任務',
+  imageToImage: '圖生圖',
+  textToImage: '文生圖',
+  imageEdit: '影像編輯',
+  imageEditHint: '已選取參考圖，將依提示詞對圖片進行編輯修改。',
+  sourceImage: '參考圖',
+  sourceImageHint: '選取一張已生成的圖片後，可在保留構圖的基礎上繼續修改。',
+  continueThread: '繼續這一輪',
+  conversation: '連續生成',
+  mySession: '我的生成會話',
+  sessionIsolationHint: '依目前 VOS 帳戶隔離',
+  basedOnRound: '基於第',
+  turnWord: '輪',
+  turnSource: '來源',
+  latestTurn: '最新一輪',
+  chooseModelHint: '請選擇已就緒且支援圖片生成的模型。',
+  refreshModels: '重新整理模型狀態',
+  noJobs: '還沒有生成任務',
+  modelManagement: '模型管理',
+  modelManagementHelp: '本地模型由 Model Hub 管理；V-Router 雲端模型無需下載，設定完成後會自動出現在獨立區塊。',
+  localModels: '本地模型',
+  localModelsHelp: '透過 Model Hub 下載到目前裝置，並由 Image Studio 在本地執行。',
+  vRouterCloudModels: 'V-Router 雲端模型',
+  vRouterCloudModelsHelp: '在 V-Router 中新增支援生圖、圖片編輯或生影片介面的模型，重新整理後會自動顯示在這裡。',
+  vRouterConnected: '已連線 V-Router',
+  vRouterUnavailable: 'V-Router 無法使用',
+  vRouterNoModels: '連線正常，但還沒有符合條件的雲端模型。',
+  vRouterModelCount: '個可用雲端模型',
+  openVRouter: '開啟 V-Router 新增模型',
+  capabilityFilter: '依能力篩選',
+  capabilityFilterHelp: '可複選；只顯示同時支援已選能力的模型。',
+  clearCapabilityFilters: '清除篩選',
+  noModelsMatchFilter: '沒有模型同時支援這些能力',
+  capability_txt2img: '文生圖',
+  capability_img2img: '圖生圖',
+  capability_edit: '影像編輯',
+  capability_video: '影片',
+  capability_txt2video: '文生影片',
+  capability_img2video: '圖生影片',
+  modelVariant: '模型版本',
+  defaultModelVariant: '預設版本',
+  modelId: '模型 ID',
+  expectedFiles: '預期檔案',
+  family: '模型族',
+  capabilities: '能力',
+  preferredModel: '推薦',
+  downloadModel: '下載模型',
+  downloaded: '已下載',
+  stopDownload: '停止下載',
+  redownload: '重新下載',
+  stopSubmitted: '已向 Model Hub 請求停止下載',
+  modelDownloading: '下載中',
+  modelFailed: '下載失敗',
+  downloadingFile: '正在下載',
+  syncModel: '同步模型',
+  noModelsConfigured: '暫無可用模型設定',
+  openModelManagement: '開啟模型管理',
+  modelHubPathGuide: 'Model Hub 路徑對接',
+  modelHubPathHelp: '生成服務會從下方的共享路徑讀取模型檔案；路徑缺失時請先在本頁觸發下載或同步。',
+  refresh: '重新整理',
+  source: '來源',
+  status: '狀態',
+  size: '大小',
+  loadPath: '載入路徑',
+  actions: '操作',
+  pullSubmitted: '已向 Model Hub 提交下載任務',
+  syncSubmitted: '已觸發 Model Hub 本地同步',
+  modelActionFailed: '模型操作失敗',
+  jobsHelp: '這裡只顯示目前 VOS 用戶情境下的生成任務。',
+  noTask: '暫無任務',
+  apiHelp: '同帳戶 VOS app 可透過同域閘道呼叫 Image Studio。生成的檔案依 VOS 用戶情境隔離，呼叫方不需要管理內部用戶目錄。',
+  immichChipName: 'AI 相簿',
+  immichStateChecking: '檢查中',
+  immichStatusUnavailable: '無法取得狀態（服務未回應）',
+  immichStateConnected: '已連線',
+  immichStatePending: '首次上傳自動開通',
+  immichStateUnreachable: '無法連線',
+  immichStateError: '開通失敗',
+  immichStateDisabled: '未啟用',
+  immichUpload: '上傳到 Immich',
+  immichUploading: '上傳中',
+  immichUploaded: '已上傳到 Immich',
+  immichDuplicate: 'Immich 中已存在',
+  immichUploadFailed: 'Immich 上傳失敗',
+  immichRetry: '重試上傳',
+  immichReuploadConfirm: '該任務已上傳過 Immich，是否再次上傳？',
+  authGuide: '鑑權與用戶會話',
+  authIntro: 'API 依 VOS 帳戶隔離：由誰的身分權杖發起請求，任務和圖片就歸屬誰。三種呼叫方式如下。',
+  authSameAccountTitle: 'VOS 內同帳戶呼叫（推薦）',
+  authSameAccountBody: '登入 VOS 後，同域閘道下的 app 前端直接攜帶目前用戶的 Bearer token 呼叫即可。生成紀錄、輸出圖片和語言設定自動歸屬該帳戶，其他帳戶看不到，也不需要額外申請密鑰。',
+  authExternalTitle: 'VOS 外部呼叫',
+  authExternalBody: '先用目標 VOS 帳戶登入取得 access token，再向 VOS 閘道域名發起請求並攜帶 Authorization: Bearer <token>。token 對應哪個帳戶，資料就歸屬哪個帳戶；token 過期後需要重新取得。',
+  authAnonymousTitle: '未攜帶 token（不推薦）',
+  authAnonymousBody: '請求沒有 token 時會落入依來源指紋雜湊的匿名會話，資料不歸屬任何帳戶、更換網路環境即遺失，僅適合暫時測試。',
+  apiCurrentSession: '目前頁面的會話用戶：',
+  anonymousSession: '匿名會話',
+  sessionUser: '會話用戶',
+  baseUrl: 'Base URL',
+  createImage: '生成圖片',
+  jobList: '任務列表',
+  outputFile: '輸出檔案',
+  modelList: '模型列表',
+  healthCheck: '健康檢查',
+  apiFlowTitle: '生成流程（背景任務，非阻斷）',
+  apiFlowHelp: 'POST /api/v1/generate 驗證參數後立即回傳 job 紀錄，生成在背景執行，不會阻斷請求。輪詢 GET /api/v1/jobs/{job_id} 直到 status 變成 succeeded 或 failed，再用 outputs 介面取圖。',
+  apiStatusNote: 'status 依序為 queued → running → succeeded / failed；progress 為 0~1；outputs 為檔案名稱陣列；failed 時 error 含失敗原因（附 sd-cli 結束資訊）。刪除任務用 DELETE /api/v1/jobs/{job_id}。',
+  apiSetupNote: '以下範例均假設先設定這兩個變數；<token> 為目標帳戶的 VOS access token（三份鑑權說明見頁面底部）。',
+  apiRecipeA: '流程 A · 文生圖：生成 → 輪詢 → 下載',
+  apiRecipeB: '流程 B · 上傳參考圖 → img2img / edit 模型 → 下載',
+  apiRecipeBNote: '支援參考圖的模型見下方模型表中能力為 img2img / edit 的條目；strength 僅圖生圖（-i）模型生效，edit（-r）模型自動忽略。',
+  apiRecipeC: '流程 C · 引用歷史輸出繼續編輯（編輯鏈）',
+  apiRecipeCNote: '網頁端「繼續此圖」按鈕的 API 形式：把上一輪 job 的輸出作為下一輪輸入，可以持續迭代同一張圖；也可跨模型（如 SDXL 生成後交給 Qwen-Image-Edit 修改）。',
+  apiRecipeD: '流程 D · 模型未就緒：觸發下載 → 等待就緒 → 生成',
+  apiRecipeDNote: '模型未下載時 POST /generate 回傳 409「模型檔案未就緒」。下載在背景執行，就緒後即可生成；強制重下加 ?force=true，停止下載見下方「模型下載 API」。',
+  apiRecipeE: '流程 E · 批次出圖與結果重現',
+  apiRecipeENote: 'batch_count 一次任務出多張圖（outputs 陣列有多個檔案名稱，逐個下載）；固定 seed 並保持參數一致可重現同一張圖，seed=-1 為隨機。',
+  apiRecipeF: '流程 F · 任務、圖片與參考圖管理',
+  apiRecipeG: '流程 G · 文生影片 / 圖生影片',
+  apiRecipeGNote: '影片模型仍使用 POST /generate 建立背景任務。純 T2V 不傳參考圖；I2V/TI2V/Ref2VA 傳 init_input_id 或歷史輸出。顯示記憶體不足時先降低寬高、幀數和 steps，再開啟 VAE/時間分塊或 CPU fallback。',
+  apiRecipeH: '流程 H · 量化版本與低記憶體執行',
+  apiRecipeHNote: '量化模型是獨立可選入口：generation 用 model_variant，下載/停止用 variant 查詢參數。優先使用已量化檔案降低記憶體用量，weight_type 只是 sd-cli 參數覆寫。',
+  apiModelShapeTitle: '模型列表回傳結構',
+  apiModelShapeNote: 'GET /api/v1/models 回傳 45 個基礎模型，每個基礎模型可帶 variants；前端會把基礎模型和 variants 展開成可選取的模型入口。',
+  apiErrorsTitle: '錯誤與排查',
+  apiErrList: '· 401：token 缺失或失效，重新取得後重試\n· 404 model not found：model_key 拼寫錯誤，以 GET /api/v1/models 回傳為準\n· 409 模型檔案未就緒：先走流程 D 下載模型\n· 409 影片模型 / 參數非法：換影像家族模型或檢查參數範圍\n· 任務 failed：查看 job 的 error 欄位（附 sd-cli 結束碼與輸出尾端）\n· GET /api/v1/me 可隨時確認目前 token 歸屬哪個帳戶',
+  apiParamsTitle: '生成參數（POST /api/v1/generate）',
+  apiParamsHelp: '所有參數都可省略，省略時使用模型家族預設值（GET /api/v1/models 回傳的 runtime.defaults）。每個模型或量化版本會回傳 runtime.parameters，不支援的參數會在提交時自動忽略，不會報錯。影片家族模型預設回傳 output.webm。',
+  apiColParam: '參數',
+  apiColType: '類型 / 範圍',
+  apiColDefault: '預設值',
+  apiColDesc: '說明',
+  apiModelsTitle: '可用模型 key',
+  apiModelsHelp: '下方依目前 GET /api/v1/models 即時結果展開基礎模型和量化版本；服務暫時無法使用時才回退到內建基礎模型快照。',
+  apiPullTitle: '模型下載 API',
+  apiPullHelp: '下載在背景非同步執行，介面立即回傳；用 GET /api/v1/models 輪詢進度（status=downloading、progress、downloaded_bytes / total_bytes）。',
+  apiColKey: 'Key',
+  apiColVariant: 'Variant',
+  apiColFamily: '家族',
+  apiColName: '名稱',
+  apiColCaps: '能力',
+  apiP_prompt: '正向提示詞',
+  apiP_model_key: '模型 key，見下方列表；影片家族會生成 output.webm',
+  apiP_model_variant: '可選量化/替代版本 ID；量化版本是獨立可選模型入口。留空使用預設版本，以模型回傳的 variants 為準',
+  apiP_negative_prompt: '負向提示詞；FLUX 系列不支援，傳入會被忽略',
+  apiP_size: '輸出尺寸（像素）；各家族建議值見 runtime.defaults',
+  apiP_steps: '取樣步數；turbo 系列預設 4',
+  apiP_cfg: '引導強度；FLUX / turbo 固定 1.0',
+  apiP_strength: '參考圖強度，僅 img2img（-i）模型生效；edit（-r）模型自動忽略',
+  apiP_sampler: '採樣器，對應 sd-cli --sampling-method；頁面提供 sd-cli 支援的主要枚舉值',
+  apiP_seed: '隨機種子，-1 表示隨機',
+  apiP_batch: '單一任務出圖張數（batch>1 時輸出 output_01.png…，固定 seed 逐張 +i；影片任務忽略）',
+  apiP_init_job: '參考圖來源任務 ID（搭配 img2img / edit 模型）',
+  apiP_init_file: '參考圖檔案名稱（該任務 outputs 中的檔案名稱）',
+  apiP_init_input: '上傳的參考圖 ID（POST /api/v1/inputs 回傳的 input_id），優先於 init_job_id',
+  chatTitle: '生成對話',
+  chatEmptyHint: '像聊天一樣創作：底部左側填正向提示詞、右側填負向提示詞；圖片位可上傳或引用歷史輸出作為 img2img / edit 的參考圖。',
+  uploadImage: '上傳圖片',
+  pickFromHistory: '引用歷史輸出',
+  clearImage: '清除參考圖',
+  uploadedImage: '上傳圖',
+  pickSourceTitle: '選取參考圖',
+  uploadedImages: '已上傳圖片',
+  uploadFailed: '參考圖上傳失敗',
+  closePicker: '關閉',
+  modelPanelTitle: '模型',
+  paramsPanelTitle: '參數',
+  meLabel: '我',
+  videoParamsTitle: '影片生成參數',
+  videoFrames: '影片幀數',
+  videoFps: '幀率 (fps)',
+  videoDurationHint: '時長約',
+  videoSeconds: '秒',
+  videoGenerate: '影片生成',
+  text2Video: '文生影片',
+  img2Video: '圖生影片（首幀參考）',
+  videoBadge: '影片',
+  videoPlayHint: '點擊播放',
+  closeVideo: '結束播放',
+  videoModelHint: '影片生成耗時明顯長於出圖，可在任務列表即時查看進度。',
+  videoNoRefHint: '該影片模型為純文生影片，不支援參考圖。',
+  paramIgnoredTag: '忽略',
+  paramsIgnoredHint: '標示「忽略」的參數不適用於目前模型，提交時自動忽略，不會報錯。',
+  negativeIgnoredHint: '目前模型家族忽略負向提示詞',
+  paramsLabel: '參數量',
+  imageParamsTitle: '圖片生成參數',
+  baseParamsTitle: '基礎生成參數',
+  imageAdvancedParamsTitle: '進階生成參數',
+  memoryParamsTitle: '顯示記憶體與執行參數',
+  modelDefault: '模型預設',
+  sameAsRng: '跟隨 RNG',
+  disabled: '關閉',
+  scheduler: 'Scheduler',
+  clipSkip: 'CLIP Skip',
+  guidance: 'Guidance',
+  imgCfgScale: '影像 CFG',
+  eta: 'Eta',
+  flowShift: 'Flow Shift',
+  highNoiseSteps: '高雜訊 Steps',
+  highNoiseCfg: '高雜訊 CFG',
+  highNoiseSampler: '高雜訊 Sampler',
+  slgScale: 'SLG Scale',
+  skipLayerRange: 'SLG 區間',
+  rng: 'RNG',
+  samplerRng: 'Sampler RNG',
+  prediction: 'Prediction',
+  weightType: '權重類型',
+  tensorTypeRules: '張量類型規則',
+  qwenImageLayers: 'Qwen 分層數',
+  hires: '高解析度第二階段',
+  hiresScale: '放大倍率',
+  hiresSize: '目標尺寸',
+  hiresSteps: '第二階段 Steps',
+  hiresDenoise: '第二階段重繪',
+  cacheMode: '快取模式',
+  cacheOption: '快取參數',
+  vaeTiling: 'VAE 分塊',
+  streamLayers: '串流載入',
+  maxVram: '顯示記憶體預算 GiB',
+  vaeTileSize: 'VAE 塊大小',
+  vaeTileOverlap: 'VAE 重疊',
+  autoFit: '自動放置',
+  clipOnCpu: 'CLIP 轉 CPU',
+  offloadToCpu: '權重轉 CPU',
+  vaeCpuFallback: 'VAE 失敗轉 CPU',
+  temporalTiling: '時間分塊',
+  temporalTileFrames: '時間塊幀數',
+  temporalTileOverlap: '時間塊重疊',
+  paramsBackend: '參數後端',
+  backendAssign: '設備分配',
+  filesCountLabel: '個檔案',
+  apiVideoNote: '能力為 video 的模型屬於影片家族：生成時自動附加 -M vid_gen，寬高、步數、CFG、採樣器、seed、video_frames、fps 會參與生成，預設輸出 output.webm（任務耗時明顯更長）。',
+  apiP_video_frames: '影片幀數（僅影片家族；0 = 家族預設，如 33 幀 @24fps ≈ 1.4 秒）',
+  apiP_video_fps: '幀率（僅影片家族；0 = 家族預設 24）',
+  apiP_scheduler: '雜訊調度器；空值表示 sd-cli/model 預設',
+  apiP_clip_skip: '跳過 CLIP 末端層數；-1 表示依模型預設',
+  apiP_guidance: '蒸餾模型 guidance；0 表示不指定',
+  apiP_img_cfg: '影像編輯/inpaint 的 image guidance；僅支援的模型生效',
+  apiP_eta: '取樣雜訊倍率；0 表示採樣器預設',
+  apiP_flow_shift: 'Flow/Wan/SD3 等模型的 timestep shift；0 表示自動或模型預設',
+  apiP_high_noise: 'Wan 2.2 A14B 雙階段高雜訊分支參數；其他模型忽略',
+  apiP_slg: 'DiT 模型 skip-layer guidance；slg_scale=0 關閉',
+  apiP_rng: '隨機數設備；空值表示 sd-cli 預設',
+  apiP_prediction: 'prediction type 覆寫；空值表示自動',
+  apiP_weight_type: 'sd-cli --type 權重類型覆寫；真正降低記憶體使用優先使用已量化模型檔案',
+  apiP_cache: 'sd-cli cache-mode/cache-option，用於加速部分 DiT/UNet 取樣',
+  apiP_qwen_layers: 'Qwen Image layered 輸出層數；僅 Qwen Image 系列生效',
+  apiP_hires: '高解析度第二階段；影片模型忽略',
+  apiP_memory: '低記憶體相關：VAE 分塊、CLIP 轉 CPU、記憶體預算、串流載入、自動放置、CPU fallback、權重轉 CPU 與設備分配。offload_to_cpu 預設關閉，只在明確需要時開啟',
+  confirmDelete: '確認刪除這張圖片和對應任務？',
+  confirmDeleteVideo: '確認刪除這個影片和對應任務？',
+  serviceUnavailable: '服務暫時無法使用',
+  loading: '載入中…',
+  themeLight: '淺色',
+  themeDark: '深色',
+  themeAuto: '跟隨系統',
+  followVos: '跟隨 VOS',
+  languageSelect: '切換介面語言',
+  submitFailed: '生成任務提交失敗',
+  generationFailed: '生成失敗',
+  dialogCancel: '取消',
+  dialogConfirm: '確認',
+  copiedToClipboard: '已複製到剪貼簿',
 }
 
 const en: typeof zh = {
@@ -643,6 +973,8 @@ const en: typeof zh = {
   themeLight: 'Light',
   themeDark: 'Dark',
   themeAuto: 'System',
+  followVos: 'Follow VOS',
+  languageSelect: 'Switch interface language',
   submitFailed: 'Failed to submit generation job',
   generationFailed: 'Generation failed',
   dialogCancel: 'Cancel',
@@ -650,4 +982,103 @@ const en: typeof zh = {
   copiedToClipboard: 'Copied to clipboard',
 }
 
-export const messages = { 'zh-CN': zh, en }
+export const messages = { 'zh-CN': zh, 'zh-TW': zhTW, en }
+
+export type { LanguageMode } from './vosLocale'
+
+import { api } from '../api/client'
+import { listenForVosBridgeLocale } from './vosBridge'
+import {
+  isVosLocaleKey,
+  normalizeLocale,
+  readVosLocale,
+  resolveLocale,
+  VOS_APP_PATH,
+  type LanguageMode,
+  type Locale,
+} from './vosLocale'
+
+// 跟随 VOS 的语言状态：
+// - 手动模式（zh-CN / zh-TW / en）与 auto 都持久化在后端 settings，按 VOS 账户隔离；
+// - auto 的解析链：VOS 桥（getState 快照 + locale-change 通知）→ 同源 localStorage
+//   的 preferences-locale（旧版 VOS 回退）→ 浏览器语言 → zh-CN。
+let bridgeLocale: Locale | null = null
+let backedMode: LanguageMode | null = null
+
+function isInVosApp() {
+  return window.location.pathname.startsWith(VOS_APP_PATH)
+}
+
+function currentLanguage(): { mode: LanguageMode; locale: Locale } {
+  const mode: LanguageMode = backedMode ?? 'auto'
+  let hostLocale = bridgeLocale
+  try {
+    // window.localStorage 属性访问本身就可能抛错（沙箱 iframe 的 SecurityError），
+    // readVosLocale 内部的 try 覆盖不到参数求值，所以这里必须包住整个调用。
+    if (isInVosApp()) hostLocale = bridgeLocale ?? readVosLocale(window.localStorage)
+  } catch {
+    /* Storage may be unavailable in an embedded browser. */
+  }
+  return { mode, locale: resolveLocale(mode, hostLocale, navigator.languages || [navigator.language]) }
+}
+
+let language = currentLanguage()
+const listeners = new Set<() => void>()
+let bootstrapStarted = false
+
+function refreshLanguage() {
+  const next = currentLanguage()
+  if (next.mode === language.mode && next.locale === language.locale) return
+  language = next
+  document.documentElement.lang = next.locale
+  listeners.forEach(listener => listener())
+}
+
+// 后端 settings 是语言模式的唯一持久化来源；模块加载时读一次。
+// 若用户已先手动选择过，不覆盖（保留本次会话内用户的选择）。
+function bootstrap() {
+  if (bootstrapStarted) return
+  bootstrapStarted = true
+  api.settings()
+    .then(settings => {
+      const mode = settings.language === 'auto' ? 'auto' : normalizeLocale(settings.language)
+      if (!mode || backedMode !== null) return
+      backedMode = mode
+      refreshLanguage()
+    })
+    .catch(() => undefined)
+}
+
+function onStorage(event: StorageEvent) {
+  // VOS 主应用（或其他标签页）更新 preferences-locale 时即时跟随。
+  if (event.key === null || isVosLocaleKey(event.key)) refreshLanguage()
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
+// 监听器只挂一次（模块生命周期与页面一致）。
+window.addEventListener('storage', onStorage)
+window.addEventListener('languagechange', refreshLanguage)
+window.addEventListener('focus', refreshLanguage)
+listenForVosBridgeLocale(locale => {
+  bridgeLocale = locale
+  refreshLanguage()
+})
+bootstrap()
+refreshLanguage()
+
+/** 当前语言模式（auto / zh-CN / zh-TW / en）与解析后的实际语言。 */
+export function useLanguage() {
+  return useSyncExternalStore(subscribe, () => language)
+}
+
+/** 手动选择语言或回到跟随 VOS；选择持久化到后端设置并按当前账户隔离。 */
+export function setLanguageMode(mode: LanguageMode) {
+  backedMode = mode
+  api.updateSettings({ language: mode }).catch(() => undefined)
+  refreshLanguage()
+}
+

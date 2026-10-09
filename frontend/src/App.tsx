@@ -4,7 +4,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { LocaleSwitcher } from '@/components/ui/locale-switcher'
 import { Toaster } from '@/components/ui/sonner'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -16,7 +16,7 @@ import GeneratePage from './pages/GeneratePage'
 const ModelsPage = lazy(() => import('./pages/ModelsPage'))
 const JobsPage = lazy(() => import('./pages/JobsPage'))
 const ApiPage = lazy(() => import('./pages/ApiPage'))
-import { Language, messages } from './i18n'
+import { messages, useLanguage } from './i18n'
 import appIcon from './assets/icon.png'
 import { useTheme } from './hooks/useTheme'
 
@@ -34,18 +34,13 @@ export default function App() {
   const [models, setModels] = useState<ModelInfo[]>([])
   const [about, setAbout] = useState<AboutInfo | null>(null)
   const [error, setError] = useState('')
-  const [language, setLanguage] = useState<Language>('zh-CN')
+  const { locale } = useLanguage()
+  const t = messages[locale]
   const [aboutOpen, setAboutOpen] = useState(false)
   // AI 相册（Immich）连通性：null = 检查中；独立于 refresh()（后者被下载轮询每 2s 调一次，
   // 不能把 immich ping 也带成 2s 一次）
   const [immich, setImmich] = useState<ImmichStatus | null>(null)
   const { theme, cycleTheme } = useTheme()
-  const t = messages[language]
-
-  const changeLanguage = (next: Language) => {
-    setLanguage(next)
-    api.updateSettings({ language: next }).catch(() => undefined)
-  }
 
   const refresh = useCallback(async () => {
     let nextError = ''
@@ -77,12 +72,6 @@ export default function App() {
     const timer = window.setInterval(() => refresh(), 2000)
     return () => window.clearInterval(timer)
   }, [models, refresh])
-
-  useEffect(() => {
-    api.settings()
-      .then(settings => setLanguage(settings.language === 'en' ? 'en' : 'zh-CN'))
-      .catch(() => undefined)
-  }, [])
 
   // 连通性状态：挂载时查一次，窗口重新聚焦时复查（首传开通后回来即可见 connected）；
   // 失败落终态而非保持 null，避免与"检查中"不可区分的永久旋转
@@ -166,13 +155,7 @@ export default function App() {
             </TooltipTrigger>
             <TooltipContent>{theme === 'light' ? t.themeLight : theme === 'dark' ? t.themeDark : t.themeAuto}</TooltipContent>
           </Tooltip>
-          <Select value={language} onValueChange={value => changeLanguage(value as Language)}>
-            <SelectTrigger size="sm" className="w-[110px] bg-card text-xs text-foreground shadow-none"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="zh-CN">中文</SelectItem>
-              <SelectItem value="en">English</SelectItem>
-            </SelectContent>
-          </Select>
+          <LocaleSwitcher />
         </div>
       </header>
       <nav className="shrink-0 border-b bg-card px-4 py-2 md:px-6">

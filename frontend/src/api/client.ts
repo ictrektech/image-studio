@@ -160,7 +160,7 @@ export interface AboutInfo {
 }
 
 export interface UserSettings {
-  language: 'zh-CN' | 'en'
+  language: 'auto' | 'zh-CN' | 'zh-TW' | 'en'
 }
 
 export interface VRouterStatus {

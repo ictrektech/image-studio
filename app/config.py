@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 from pathlib import Path
 
 
@@ -46,10 +47,13 @@ class Settings:
     max_concurrency = int(os.getenv("IMAGE_STUDIO_MAX_CONCURRENCY", "1"))
     mock_when_runtime_missing = os.getenv("IMAGE_STUDIO_MOCK_WHEN_RUNTIME_MISSING", "true").lower() == "true"
 
-    scheduler_url = os.getenv("IMAGE_STUDIO_SCHEDULER_URL", "").rstrip("/")
-    scheduler_token = os.getenv("IMAGE_STUDIO_SCHEDULER_TOKEN", "")
-    scheduler_executor_token = os.getenv("IMAGE_STUDIO_SCHEDULER_EXECUTOR_TOKEN", "")
-    scheduler_executor_id = os.getenv("IMAGE_STUDIO_SCHEDULER_EXECUTOR_ID", "image-studio.generate")
+    # Keep service credentials in the app's private storage, outside VOS public configs.
+    scheduler_config_path = Path(os.getenv("IMAGE_STUDIO_SCHEDULER_CONFIG", str(data_dir / "scheduler.json")))
+    scheduler_config = json.loads(scheduler_config_path.read_text()) if scheduler_config_path.exists() else {}
+    scheduler_url = (os.getenv("IMAGE_STUDIO_SCHEDULER_URL") or scheduler_config.get("url", "")).rstrip("/")
+    scheduler_token = os.getenv("IMAGE_STUDIO_SCHEDULER_TOKEN") or scheduler_config.get("token", "")
+    scheduler_executor_token = os.getenv("IMAGE_STUDIO_SCHEDULER_EXECUTOR_TOKEN") or scheduler_config.get("executor_token", "")
+    scheduler_executor_id = os.getenv("IMAGE_STUDIO_SCHEDULER_EXECUTOR_ID") or scheduler_config.get("executor_id", "image-studio.generate")
 
     @property
     def sessions_dir(self) -> Path:

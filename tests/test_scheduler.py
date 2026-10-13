@@ -1,6 +1,8 @@
 import asyncio
 import json
 import sys
+import os
+import subprocess
 import tempfile
 import time
 import unittest
@@ -12,6 +14,17 @@ from app.services.scheduler import _atomic, _authorize, _path
 
 
 class SchedulerAdapterTests(unittest.TestCase):
+    def test_private_storage_config_and_explicit_override(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "scheduler.json").write_text(json.dumps({"url": "http://scheduler/api/v1", "token": "x" * 32, "executor_token": "y" * 32}))
+            env = {k: v for k, v in os.environ.items() if not k.startswith("IMAGE_STUDIO_SCHEDULER_")}
+            env["IMAGE_STUDIO_DATA_DIR"] = folder
+            code = "from app.config import settings as s; assert s.scheduler_url=='http://scheduler/api/v1'; assert s.scheduler_executor_token=='y'*32; assert s.scheduler_token=='x'*32"
+            subprocess.run([sys.executable, "-c", code], env=env, check=True)
+            env["IMAGE_STUDIO_SCHEDULER_TOKEN"] = "z" * 32
+            subprocess.run([sys.executable, "-c", "from app.config import settings as s; assert s.scheduler_token=='z'*32"], env=env, check=True)
+
     def test_internal_execution_requires_dedicated_credential(self):
         with patch.object(settings, "scheduler_executor_token", "x" * 32):
             with self.assertRaises(HTTPException):

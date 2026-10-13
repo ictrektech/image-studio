@@ -344,7 +344,7 @@ by the VOS package at container startup, so they match the installed profile.
 
 ## Optional V-Scheduler admission
 
-Set `IMAGE_STUDIO_SCHEDULER_URL` to the controller's `/api/v1` base and provision separate `IMAGE_STUDIO_SCHEDULER_TOKEN` (app submitter) and `IMAGE_STUDIO_SCHEDULER_EXECUTOR_TOKEN` (executor adapter). Approve `image-studio.generate` in the controller and bind its node Agent to this backend. Configuration unset preserves the current execution path.
+Provision `/data/scheduler.json` in Image Studio's private App Storage with `url`, `token`, `executor_token` and `executor_id` (mode `0600`); it is loaded automatically. Explicit environment variables take precedence. Alternatively, set `IMAGE_STUDIO_SCHEDULER_URL` to the controller's `/api/v1` base and provision separate `IMAGE_STUDIO_SCHEDULER_TOKEN` (app submitter) and `IMAGE_STUDIO_SCHEDULER_EXECUTOR_TOKEN` (executor adapter). Approve `image-studio.generate` in the controller and bind its node Agent to this backend. Configuration unset preserves the current execution path.
 
 Native local image jobs use a durable local outbox and application job ID as the scheduler idempotency key. Submission failure leaves the job queued for retry; it does not fall back to unscheduled computation. Executor start/inspect/cancel endpoints under `/api/v1/scheduler/executions` require the dedicated executor token and only accept bound local job references. A Linux lease supervisor stops and reaps the sd-cli child independently of Agent availability. Retry is allowed only after the previous attempt is confirmed stopped; outputs remain owned by Image Studio.
 

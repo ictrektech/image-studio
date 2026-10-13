@@ -10,8 +10,8 @@ from app.config import settings
 from app.models import ImmichUploadRecord, JobRecord
 from app.services.storage import job_dir, list_jobs, load_job, save_job
 
-from .client import ImmichClient, ImmichError
-from .exchange import cached_api_key
+from .client import ImmichAuthError, ImmichClient, ImmichError
+from .exchange import ExchangeError, cached_api_key, refresh_api_key
 
 logger = logging.getLogger("image-studio.immich")
 _queue: asyncio.Queue[tuple[str, str, str]] = asyncio.Queue()
@@ -29,11 +29,11 @@ def _now() -> datetime:
 
 
 def _client_for(user_key: str) -> ImmichClient:
-    # 凭据来自 vos-exchange 的进程内缓存（api 层在入队前已确保换取成功）。
-    # 重启后缓存清空，恢复的旧任务会走到这里失败并标记，由用户重新点击上传换取。
+    # 凭据来自 vos-exchange 的进程内缓存（api 层在入队前已确保换取成功）；
+    # 缓存为空时由用户重新点击上传换取。
     api_key = cached_api_key(user_key)
     if not api_key:
-        raise ImmichUploadError("Immich 凭据未就绪（服务已重启），请重新点击上传以自动换取")
+        raise ImmichUploadError("Immich 凭据未就绪（服务已重启或凭据已失效），请重新点击上传以自动换取")
     return ImmichClient(settings.immich_default_api_url, api_key, verify_ssl=settings.immich_verify_ssl)
 
 
@@ -204,11 +204,55 @@ async def _process(user_key: str, job_id: str, filename: str) -> None:
         "Immich 上传处理开始: user=%s job=%s file=%s size=%d 第 %d/%d 次",
         user_key, job_id, filename, path.stat().st_size, current.attempts, MAX_ATTEMPTS,
     )
+    refreshed = False
     while True:
         try:
             client = _client_for(user_key)
             result = await client.upload(path, f"image-studio:{job_id}:{filename}", job.created_at)
             break
+        except ImmichAuthError as exc:
+            # 401/403 说明缓存的 Key 已失效：丢掉旧 Key、用记住的 VOS 令牌重换一次，
+            # 再用新 Key 重试本次请求；重换后仍被拒才判最终失败。
+            current.updated_at = _now()
+            if refreshed:
+                # 本次上传只重换一次：换成新 Key 仍被拒说明不是 Key 的问题。
+                current.error = f"{exc}（重换后仍被拒）"
+                current.status = "failed"
+                save_job(job)
+                logger.error(
+                    "Immich 上传最终失败（重换 Key 后仍被拒）: user=%s job=%s file=%s 第 %d/%d 次 elapsed=%.2fs error=%s",
+                    user_key, job_id, filename, current.attempts, MAX_ATTEMPTS,
+                    time.monotonic() - started, exc,
+                )
+                return
+            refreshed = True
+            logger.warning(
+                "Immich 拒绝当前 Key，尝试重新换取: user=%s job=%s file=%s error=%s",
+                user_key, job_id, filename, exc,
+            )
+            try:
+                await refresh_api_key(user_key)
+            except ExchangeError as refresh_exc:
+                current.error = f"{exc}（重换失败：{refresh_exc}）"
+                current.status = "failed"
+                current.updated_at = _now()
+                save_job(job)
+                logger.error(
+                    "Immich 上传最终失败（凭据重换无效）: user=%s job=%s file=%s elapsed=%.2fs error=%s",
+                    user_key, job_id, filename, time.monotonic() - started, refresh_exc,
+                )
+                return
+            logger.info("Immich 凭据已重换，用新 Key 重试本次上传: user=%s job=%s file=%s", user_key, job_id, filename)
+            # 换取可能要几秒：重新读盘，任务被删/被取消就不再上传。
+            job = load_job(user_key, job_id)
+            current = job.immich_uploads.get(filename) if job else None
+            if not current or current.status not in {"queued", "uploading"}:
+                logger.warning(
+                    "Immich 重换凭据后任务已删除或状态变更，放弃上传: user=%s job=%s file=%s",
+                    user_key, job_id, filename,
+                )
+                return
+            continue
         except ImmichError as exc:
             current.error = str(exc)
             current.updated_at = _now()

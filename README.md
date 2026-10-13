@@ -86,6 +86,16 @@ credentials and performs the upload.
   userinfo endpoints used for token verification are derived the same way.
 - Keys never touch disk and are never returned by any endpoint; the settings
   files carry no Immich fields at all.
+- A cached key can stop being accepted by Immich — typically after Immich is
+  redeployed/reinstalled and the same VOS identity maps to a different Immich
+  user. A `401`/`403` while uploading is therefore treated as a stale-credential
+  signal, not a final failure: the backend drops the cached key, re-runs
+  `POST /oauth/vos-exchange` once with the remembered VOS token, and retries the
+  same request with the new key. Only a rejection after that re-exchange (or a
+  failed re-exchange) marks the upload as failed, so a redeployed Immich does
+  not require a backend restart and the user does not need to retry by hand.
+  Each upload attempt re-exchanges at most once, which keeps a failing exchange
+  from looping.
 - HTTPS certificate verification is on by default; set
   `IMAGE_STUDIO_IMMICH_VERIFY_SSL=false` only for a self-signed HTTPS Immich
   endpoint (disabling it exposes uploads to man-in-the-middle interception —

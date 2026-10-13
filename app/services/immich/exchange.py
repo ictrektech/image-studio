@@ -3,7 +3,8 @@
 Immich 侧提供 ``POST /oauth/vos-exchange``：校验 VOS token（JWKS 验签 + iss/aud）
 → 按 sub 查找/创建 Immich 用户 → 建一个仅含 ``asset.upload`` 权限的 Key → 返回明文。
 
-Key 只存进程内存（见 ``_keys``），不落盘。
+Key 只存进程内存（见 ``_keys``），不落盘；用于 401/403 后重换的 VOS 令牌
+（见 ``_tokens``）同样只进内存。
 """
 
 from __future__ import annotations
@@ -30,6 +31,9 @@ class ExchangeError(ValueError):
 # 约束：每个 Immich 只对应一个 image-studio 进程——第二个实例的交换会轮换掉
 # 本进程缓存的 Key（immich 侧按 用户×app 单槽位），届时需重启本进程重新换取。
 _keys: dict[str, str] = {}
+# 最近一次成功交换所用的 VOS 令牌：仅供缓存 Key 被 Immich 拒绝（401/403）后
+# 在进程内重换一次使用。只存内存、不落盘、绝不进日志。
+_tokens: dict[str, str] = {}
 # 每用户最近一次开通失败原因（成功后清除），供连通性状态展示。
 _last_errors: dict[str, str] = {}
 # 交换串行锁：交换会轮换 Immich 侧 Key，并发首次上传不能各换各的。
@@ -92,7 +96,29 @@ async def ensure_api_key(user_key: str, access_token: str) -> str:
             raise
         _last_errors.pop(user_key, None)
         _keys[user_key] = key
+        _tokens[user_key] = access_token
         logger.info("Immich 凭据已换取并缓存到进程内存: user=%s", user_key)
+        return key
+
+
+async def refresh_api_key(user_key: str) -> str:
+    """缓存 Key 被 Immich 拒绝（401/403）后，丢弃旧 Key 并用记住的令牌重换一次。
+
+    调用方必须限制频次（见 ``uploads._process``：每次上传尝试最多重换一次），
+    否则「换成功→仍 401→再换」会无限循环。换取失败时直接抛错，由调用方判最终失败。
+    """
+    async with _lock:
+        _keys.pop(user_key, None)
+        try:
+            key = await exchange_user_api_key(
+                _tokens.get(user_key, ""), settings.immich_default_api_url, verify_ssl=settings.immich_verify_ssl
+            )
+        except ExchangeError as exc:
+            _last_errors[user_key] = str(exc)
+            raise
+        _last_errors.pop(user_key, None)
+        _keys[user_key] = key
+        logger.info("Immich 凭据已重换并更新进程内缓存: user=%s", user_key)
         return key
 
 

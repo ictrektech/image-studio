@@ -1,4 +1,4 @@
-from .client import ImmichClient, ImmichError, ImmichUploadResult, normalize_base_url
+from .client import ImmichAuthError, ImmichClient, ImmichError, ImmichUploadResult, normalize_base_url
 from .exchange import (
     ExchangeError,
     cached_api_key,
@@ -18,6 +18,7 @@ from .uploads import (
 
 __all__ = [
     "ExchangeError",
+    "ImmichAuthError",
     "ImmichClient",
     "ImmichError",
     "ImmichUploadError",

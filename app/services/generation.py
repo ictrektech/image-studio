@@ -8,6 +8,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import uuid
 from collections import deque
 from datetime import datetime, timezone
@@ -172,6 +173,12 @@ async def create_job(user_key: str, request: GenerateRequest, access_token: str 
         created_at=now,
         updated_at=now,
     )
+    if settings.scheduler_url:
+        if video_mode:
+            raise ValueError("V-Scheduler MVP only supports local image generation")
+        from app.services.scheduler import prepare
+        await prepare(job)
+        return job
     save_job(job)
     task_key = (job.user_key, job.job_id)
     task = asyncio.create_task(run_job(job))
@@ -226,7 +233,12 @@ async def create_v_router_job(user_key: str, request: GenerateRequest, access_to
     return job
 
 
-async def cancel_job(user_key: str, job_id: str) -> bool:
+async def cancel_job(user_key: str, job_id: str, local_only: bool = False) -> bool:
+    if not local_only:
+        item = load_job(user_key, job_id)
+        if item and item.metadata.get("scheduler_managed"):
+            from app.services.scheduler import request_cancel
+            return await request_cancel(user_key, job_id)
     task_key = (user_key, job_id)
     cancelled = False
     task = _job_tasks.get(task_key)
@@ -525,6 +537,9 @@ async def run_sd_cpp(
     video_mode = get_model_def(job.model_key, job.model_variant)["runtime"].get("mode") == "video"
     timeout = settings.video_timeout_seconds if video_mode else settings.default_timeout_seconds
     task_key = (job.user_key, job.job_id)
+    lease_path = job.metadata.get("_scheduler_lease_path")
+    if lease_path:
+        args = [sys.executable, "-m", "app.services.scheduler_process", lease_path, *args]
     process = await asyncio.create_subprocess_exec(
         *args,
         stdout=asyncio.subprocess.PIPE,

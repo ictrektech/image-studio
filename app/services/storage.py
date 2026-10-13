@@ -40,7 +40,10 @@ def job_path(user_key: str, job_id: str) -> Path:
 
 def save_job(job: JobRecord) -> None:
     job.updated_at = datetime.utcnow()
-    job_path(job.user_key, job.job_id).write_text(job.model_dump_json(indent=2), encoding="utf-8")
+    path = job_path(job.user_key, job.job_id)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(job.model_dump_json(indent=2), encoding="utf-8")
+    temporary.replace(path)
 
 
 def load_job(user_key: str, job_id: str) -> JobRecord | None:
@@ -70,6 +73,8 @@ def reconcile_orphaned_active_jobs() -> None:
         try:
             job = JobRecord.model_validate(json.loads(path.read_text(encoding="utf-8")))
         except Exception:
+            continue
+        if job.metadata.get("scheduler_managed"):
             continue
         if job.status not in {"queued", "running"}:
             continue

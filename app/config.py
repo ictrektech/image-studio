@@ -46,6 +46,11 @@ class Settings:
     max_concurrency = int(os.getenv("IMAGE_STUDIO_MAX_CONCURRENCY", "1"))
     mock_when_runtime_missing = os.getenv("IMAGE_STUDIO_MOCK_WHEN_RUNTIME_MISSING", "true").lower() == "true"
 
+    scheduler_url = os.getenv("IMAGE_STUDIO_SCHEDULER_URL", "").rstrip("/")
+    scheduler_token = os.getenv("IMAGE_STUDIO_SCHEDULER_TOKEN", "")
+    scheduler_executor_token = os.getenv("IMAGE_STUDIO_SCHEDULER_EXECUTOR_TOKEN", "")
+    scheduler_executor_id = os.getenv("IMAGE_STUDIO_SCHEDULER_EXECUTOR_ID", "image-studio.generate")
+
     @property
     def sessions_dir(self) -> Path:
         return self.data_dir / "sessions"

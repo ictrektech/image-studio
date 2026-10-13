@@ -9,6 +9,7 @@ from app.config import settings
 from app.routers.api import router
 from app.services.immich import start as start_immich_uploads, stop as stop_immich_uploads
 from app.services.storage import ensure_storage
+from app.services import scheduler
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,17 +24,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(router)
+app.include_router(scheduler.router)
 
 
 @app.on_event("startup")
 async def startup() -> None:
     ensure_storage()
+    await scheduler.start()
     await start_immich_uploads()
 
 
 @app.on_event("shutdown")
 async def shutdown() -> None:
     stop_immich_uploads()
+    await scheduler.stop()
 
 
 @app.get("/health")

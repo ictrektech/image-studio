@@ -340,3 +340,12 @@ is the authoritative package builder and VOS App Store publisher.
 The top-right **About** dialog reports the VOS app version, frontend and backend
 image references, and the active deployment profile. These values are injected
 by the VOS package at container startup, so they match the installed profile.
+
+
+## Optional V-Scheduler admission
+
+Set `IMAGE_STUDIO_SCHEDULER_URL` to the controller's `/api/v1` base and provision separate `IMAGE_STUDIO_SCHEDULER_TOKEN` (app submitter) and `IMAGE_STUDIO_SCHEDULER_EXECUTOR_TOKEN` (executor adapter). Approve `image-studio.generate` in the controller and bind its node Agent to this backend. Configuration unset preserves the current execution path.
+
+Native local image jobs use a durable local outbox and application job ID as the scheduler idempotency key. Submission failure leaves the job queued for retry; it does not fall back to unscheduled computation. Executor start/inspect/cancel endpoints under `/api/v1/scheduler/executions` require the dedicated executor token and only accept bound local job references. A Linux lease supervisor stops and reaps the sd-cli child independently of Agent availability. Retry is allowed only after the previous attempt is confirmed stopped; outputs remain owned by Image Studio.
+
+This adapter supports native local image generation, not local video jobs. V-Router jobs retain their route, with local upstream admission configured once in V-Router; cloud upstreams bypass local scheduling. Before deleting a managed Image Studio job, cancellation must reach a stopped terminal state.

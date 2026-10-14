@@ -236,8 +236,43 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((Path(tmp) / "output.png").read_bytes(), b"image-bytes")
         client.get.assert_awaited_once_with(
             "https://cdn.example.test/result.png",
-            headers={"Authorization": "Bearer secret-token"},
+            headers={},
         )
+
+    async def test_cloud_forwarding_does_not_wait_for_local_compute_slot(self):
+        job = self._v_router_job()
+        job.metadata["v_router_endpoints"] = ["images/generations"]
+        local_slots = asyncio.Semaphore(1)
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            generation, "_semaphore", local_slots
+        ), patch.object(generation, "_router_semaphore", asyncio.Semaphore(1)), patch.object(
+            generation, "load_job", return_value=job
+        ), patch.object(generation, "save_job"), patch.object(
+            generation, "job_dir", return_value=Path(tmp)
+        ), patch.object(generation, "_call_v_router_generation", new=AsyncMock(return_value={"data": []})), patch.object(
+            generation, "_save_v_router_outputs", new=AsyncMock(return_value=["output.png"])
+        ):
+            async with local_slots:
+                await asyncio.wait_for(generation.run_v_router_job(job, "token"), 1)
+        self.assertEqual(job.status, "succeeded")
+
+    async def test_result_connection_retry_does_not_repeat_generation(self):
+        job = self._v_router_job()
+        response = type("Response", (), {
+            "content": b"image-bytes", "headers": {"Content-Type": "image/png"},
+            "raise_for_status": lambda self: None,
+        })()
+        client = AsyncMock()
+        client.get.side_effect = [generation.httpx.ConnectError("temporary CDN connection failure"), response]
+        client.__aenter__.return_value = client
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            generation.httpx, "AsyncClient", return_value=client
+        ), patch.object(generation.asyncio, "sleep", new=AsyncMock()):
+            name = await generation._save_v_router_item(
+                job, {"url": "https://cdn.example.test/result.png"}, Path(tmp), 1, "secret-token"
+            )
+            self.assertEqual((Path(tmp) / name).read_bytes(), b"image-bytes")
+        self.assertEqual(client.get.await_count, 2)
 
     async def test_v_router_relative_image_url_uses_model_base_url(self):
         job = self._v_router_job()

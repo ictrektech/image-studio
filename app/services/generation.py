@@ -13,7 +13,7 @@ import uuid
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 
@@ -26,6 +26,8 @@ logger = logging.getLogger("image-studio.sd")
 
 
 _semaphore = asyncio.Semaphore(settings.max_concurrency)
+# Forwarding waits on a remote service; it must not occupy local compute slots.
+_router_semaphore = asyncio.Semaphore(settings.max_concurrency)
 _job_tasks: dict[tuple[str, str], asyncio.Task] = {}
 _job_processes: dict[tuple[str, str], asyncio.subprocess.Process] = {}
 
@@ -320,7 +322,7 @@ async def run_job(job: JobRecord) -> None:
 
 async def run_v_router_job(job: JobRecord, access_token: str = "") -> None:
     try:
-        async with _semaphore:
+        async with _router_semaphore:
             if load_job(job.user_key, job.job_id) is None:
                 return
             job.status = "running"
@@ -440,10 +442,24 @@ async def _save_v_router_item(job: JobRecord, item: dict, output_dir: Path, inde
     if not isinstance(raw_url, str) or not raw_url:
         return ""
     url = urljoin(job.model_path.rstrip("/") + "/", raw_url)
-    headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
-    async with httpx.AsyncClient(timeout=settings.video_timeout_seconds) as client:
-        resp = await client.get(url, headers=headers)
-        resp.raise_for_status()
+    origin = urlsplit(job.model_path)
+    target = urlsplit(url)
+    same_origin = (origin.scheme, origin.hostname, origin.port) == (target.scheme, target.hostname, target.port)
+    headers = {"Authorization": f"Bearer {access_token}"} if access_token and same_origin else {}
+    async with httpx.AsyncClient(timeout=settings.video_timeout_seconds, follow_redirects=True) as client:
+        for attempt in range(3):
+            try:
+                resp = await client.get(url, headers=headers)
+                resp.raise_for_status()
+                break
+            except httpx.HTTPStatusError as exc:
+                if attempt == 2 or exc.response.status_code not in {404, 408, 429} and exc.response.status_code < 500:
+                    raise
+            except httpx.TransportError:
+                if attempt == 2:
+                    raise
+            # Retry only the existing result download, never the paid generation.
+            await asyncio.sleep(2 * (attempt + 1))
         data = resp.content
         content_type = resp.headers.get("Content-Type", "")
     ext = _extension_for_output(raw_url, content_type, data)

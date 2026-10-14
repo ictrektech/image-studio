@@ -365,7 +365,8 @@ class GenerationLifecycleTest(unittest.IsolatedAsyncioTestCase):
         task = asyncio.create_task(worker())
         await asyncio.sleep(0)
         generation._job_tasks[("user", "job")] = task
-        self.assertTrue(await generation.cancel_job("user", "job"))
+        with patch.object(generation, "load_job", return_value=None):
+            self.assertTrue(await generation.cancel_job("user", "job"))
         self.assertTrue(task.done())
         self.assertTrue(finished.is_set())
 

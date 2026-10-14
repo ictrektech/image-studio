@@ -11,6 +11,14 @@ from app.routers import api
 from app.services.immich import exchange
 
 
+def reset_exchange_state() -> None:
+    """清进程内状态；锁需重建，否则 IsolatedAsyncioTestCase 的新事件循环会撞 loop 绑定。"""
+    exchange._keys.clear()
+    exchange._tokens.clear()
+    exchange._last_errors.clear()
+    exchange._lock = asyncio.Lock()
+
+
 def make_request(headers: dict[str, str] | None = None) -> Request:
     raw = [(key.lower().encode(), value.encode()) for key, value in (headers or {}).items()]
     return Request({"type": "http", "method": "POST", "path": "/api/v1/jobs/j1/immich-upload", "headers": raw, "query_string": b""})
@@ -22,13 +30,6 @@ def make_client(calls: list[httpx.Request], response: httpx.Response) -> httpx.A
         return response
 
     return httpx.AsyncClient(transport=httpx.MockTransport(handler))
-
-
-def reset_exchange_state() -> None:
-    """清进程内状态；锁需重建，否则 IsolatedAsyncioTestCase 的新事件循环会撞 loop 绑定。"""
-    exchange._keys.clear()
-    exchange._last_errors.clear()
-    exchange._lock = asyncio.Lock()
 
 
 class ZeroTouchAvailableTest(unittest.TestCase):
@@ -143,6 +144,55 @@ class EnsureApiKeyCacheTest(unittest.IsolatedAsyncioTestCase):
 
     def test_cached_api_key_is_empty_when_nothing_exchanged(self):
         self.assertEqual(exchange.cached_api_key("nobody"), "")
+
+
+class RefreshApiKeyTest(unittest.IsolatedAsyncioTestCase):
+    """缓存 Key 被 Immich 拒绝（401/403）后：丢弃旧 Key、用记住的令牌重换一个。"""
+
+    def setUp(self):
+        reset_exchange_state()
+        self.addCleanup(reset_exchange_state)
+        for patcher in (
+            patch.object(settings, "immich_default_api_url", "http://immich.test/api"),
+            patch.object(settings, "immich_verify_ssl", True),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    async def test_refresh_drops_stale_key_and_reexchanges_with_remembered_token(self):
+        mock = AsyncMock(side_effect=["k1", "k2"])
+        with patch.object(exchange, "exchange_user_api_key", mock):
+            self.assertEqual(await exchange.ensure_api_key("alice", "tok"), "k1")
+            self.assertEqual(await exchange.refresh_api_key("alice"), "k2")
+
+        self.assertEqual(exchange.cached_api_key("alice"), "k2")
+        self.assertEqual(exchange.last_error("alice"), "")
+        self.assertEqual(mock.await_count, 2)
+        # 重换复用的是 ensure_api_key 记住的那个 VOS 令牌。
+        mock.assert_awaited_with("tok", "http://immich.test/api", verify_ssl=True)
+
+    async def test_refresh_replaces_key_every_time(self):
+        mock = AsyncMock(side_effect=["k1", "k2", "k3"])
+        with patch.object(exchange, "exchange_user_api_key", mock):
+            await exchange.ensure_api_key("alice", "tok")
+            self.assertEqual(await exchange.refresh_api_key("alice"), "k2")
+            self.assertEqual(exchange.cached_api_key("alice"), "k2")
+            await exchange.refresh_api_key("alice")
+
+        # 频次由调用方限制（uploads._process 每次尝试一次），这里不再自带配额。
+        self.assertEqual([c.args[0] for c in mock.await_args_list], ["tok", "tok", "tok"])
+        self.assertEqual(mock.await_count, 3)
+
+    async def test_refresh_exchange_failure_records_last_error(self):
+        mock = AsyncMock(side_effect=["k1", exchange.ExchangeError("Immich 拒绝该 VOS 登录令牌（HTTP 401）")])
+        with patch.object(exchange, "exchange_user_api_key", mock):
+            await exchange.ensure_api_key("alice", "tok")
+            with self.assertRaises(exchange.ExchangeError):
+                await exchange.refresh_api_key("alice")
+
+        self.assertIn("401", exchange.last_error("alice"))
+        self.assertEqual(exchange.cached_api_key("alice"), "")
+        self.assertEqual(mock.await_count, 2)
 
 
 class EnsureKeyRouteTest(unittest.IsolatedAsyncioTestCase):

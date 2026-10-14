@@ -27,6 +27,10 @@ class ImmichError(RuntimeError):
         self.retryable = retryable
 
 
+class ImmichAuthError(ImmichError):
+    """API Key 被 Immich 拒绝（HTTP 401/403）：应丢弃缓存凭据、重换一次再重试。"""
+
+
 @dataclass(frozen=True)
 class ImmichUploadResult:
     status: str
@@ -154,7 +158,7 @@ class ImmichClient:
                     "Immich 鉴权失败: %s %s -> HTTP %d api=%s body=%s",
                     method, path, response.status_code, self.base_url, _summarize(response),
                 )
-                raise ImmichError("Immich API Key 无效或没有上传权限" + suffix)
+                raise ImmichAuthError("Immich API Key 无效或没有上传权限" + suffix)
             logger.error(
                 "Immich 请求被拒绝: %s %s -> HTTP %d elapsed=%.2fs body=%s",
                 method, path, response.status_code, elapsed, _summarize(response),

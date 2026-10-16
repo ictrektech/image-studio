@@ -90,6 +90,14 @@ configs:
       en: stable-diffusion.cpp CLI path inside the container; defaults to sd-cli in PATH.
     default: sd-cli
 
+  - name: SD_CPP_EXTRA_ARGS
+    type: string
+    title: {zh-CN: 原生运行参数, en: Native Runtime Arguments}
+    description:
+      zh-CN: 默认限制原生 CPU 线程为 4；修改后必须重新校准调度预算。
+      en: Limits native CPU threads to 4 by default; changes require Scheduler recalibration.
+    default: "--threads 4"
+
   - name: IMAGE_STUDIO_MAX_CONCURRENCY
     type: integer
     title:

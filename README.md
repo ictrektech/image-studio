@@ -365,6 +365,8 @@ This adapter supports native local image generation, not local video jobs. V-Rou
 Image Studio's own local model jobs go directly through its Scheduler adapter, including jobs submitted by another app to its native model API. Other apps may also reach that same adapter through V-Router. Remote forwarding uses a separate concurrency pool and does not hold a local compute slot. Cloud result downloads retry temporary connection/CDN failures without submitting another generation; VOS authorization is sent only to result URLs on the V-Router origin.
 # V-Scheduler 接入
 
+VOS 的 `SD_CPP_EXTRA_ARGS` 默认 `--threads 4`，由现有生成器真实传给原生 sd-cli；其完整字符串的 SHA-256 进入 `execution_settings`。修改线程或其他原生参数后必须重新校准，不能沿用旧资源预算。此配置不等于已经证明峰值低于四核，最终授权仍以实测为准。
+
 VOS 安装依赖统一应用 `com.ictrek.v-scheduler`，打包时从已发布的 GitHub Release 或应用商店解析依赖版本，查询失败则停止打包。模型管理默认地址为 `http://v-scheduler-model-hub:6005`；保留 `MODEL_HUB_API_URL` 配置键供现有安装升级使用，已有安装需将该参数切换到新地址。
 
 共享模型目录继续使用 `MODEL_HUB_SHARED_MODELS_PATH`（默认 `/data/vos_workspace/model_hub`），保留现有模型、导出路径和下载记录。统一模型网关仍使用 `http://v-router:8080/v1`；资源调度接口为 `http://v-router:8080/scheduler/api/v1`。接入及资源授权契约见 [V-Scheduler 接入指南](https://github.com/ictrektech/V-Scheduler/blob/main/docs/application-integration.md)。模型目录可见不代表本地推理已获调度授权。

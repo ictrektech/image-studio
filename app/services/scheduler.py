@@ -65,6 +65,9 @@ def model_id(job: JobRecord) -> str:
 def validate_limits(job: JobRecord) -> None:
     if not settings.scheduler_required:
         return
+    from app.services.scheduler_binding import execution_settings
+    if settings.scheduler_config.get("execution_settings") != execution_settings():
+        raise HTTPException(503, "Runtime settings no longer match calibrated binding")
     limits = settings.scheduler_model_limits.get(model_id(job), {})
     for field in ("width", "height", "steps", "batch_count", "video_frames"):
         maximum = limits.get(field)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import hashlib
 import os
 import secrets
 import threading
@@ -17,6 +18,11 @@ UPSTREAM = "http://image-studio-backend:5000/v1"
 URL = "http://v-router:8080/scheduler/api/v1"
 router = APIRouter(prefix="/api/v1/scheduler")
 lock = threading.RLock()
+
+
+def execution_settings():
+    from app.config import settings
+    return {"profile": settings.profile, "runtime": "stable-diffusion.cpp", "logical_cpu_count": os.cpu_count(), "max_concurrency": settings.max_concurrency, "sd_cpp_extra_args_sha256": hashlib.sha256(settings.sd_cpp_extra_args.encode()).hexdigest()}
 
 
 def required():
@@ -38,6 +44,8 @@ def read_config():
             raise ValueError("invalid service binding")
         if len(value.get("token", "")) < 32:
             raise ValueError("missing service identity")
+        if value.get("execution_settings") != execution_settings():
+            raise ValueError("runtime settings no longer match approval")
         return value
     except (OSError, ValueError, TypeError, AttributeError):
         raise HTTPException(503, "V-Scheduler binding required") from None
@@ -104,6 +112,8 @@ async def bind(request: Request):
             raise ValueError()
         if not isinstance(config.get("model_limits"), dict):
             raise ValueError()
+        if config.get("execution_settings") != execution_settings():
+            raise ValueError()
         for model in config["models"]:
             limits = config["model_limits"].get(model, {})
             if not isinstance(limits, dict) or any(type(limits.get(field)) is not int or limits[field] < 0 for field in ("width", "height", "steps", "batch_count", "video_frames")):
@@ -143,5 +153,6 @@ async def bind(request: Request):
     settings.scheduler_executor_token = config["executor_token"]
     settings.scheduler_models = config["models"]
     settings.scheduler_model_limits = config["model_limits"]
+    settings.scheduler_config = config
     await scheduler.start()
     return {"configured": True, "binding_revision": config["binding_revision"]}

@@ -18,6 +18,7 @@ class BindingTests(unittest.TestCase):
         app = FastAPI()
         app.include_router(binding.router)
         config = {'protocol_version': 1, 'binding_revision': 2, 'app_id': binding.APP_ID, 'url': binding.URL, 'upstream_url': binding.UPSTREAM, 'token': 'a' * 32, 'executor_token': 'b' * 32, 'models': {'model': 'app.model'}, 'model_limits': {'model': {'width': 512, 'height': 512, 'steps': 10, 'batch_count': 1, 'video_frames': 0}}}
+        config['execution_settings'] = binding.execution_settings()
         client = AsyncMock()
         client.__aenter__.return_value = client
         executor = {'id': 'app.model', 'app_id': binding.APP_ID, 'contract_version': '1', 'task_type': 'image.generate', 'upstream_urls': [binding.UPSTREAM]}

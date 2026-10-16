@@ -18,7 +18,8 @@ class SchedulerAdapterTests(unittest.TestCase):
     def test_calibrated_limits_cover_variant_video_and_high_resolution(self):
         job = SimpleNamespace(model_key="model", model_variant="q4", width=512, height=512, steps=10, batch_count=1, video_frames=0, hires=False, hires_width=0, hires_height=0, hires_scale=2, hires_steps=0)
         limits = {"width": 512, "height": 512, "steps": 10, "batch_count": 1, "video_frames": 0}
-        with patch.object(settings, "scheduler_required", True), patch.object(settings, "scheduler_model_limits", {"model@q4": limits}):
+        from app.services.scheduler_binding import execution_settings
+        with patch.object(settings, "scheduler_required", True), patch.object(settings, "scheduler_config", {"execution_settings": execution_settings()}), patch.object(settings, "scheduler_model_limits", {"model@q4": limits}):
             self.assertEqual(model_id(job), "model@q4")
             validate_limits(job)
             job.video_frames = 16

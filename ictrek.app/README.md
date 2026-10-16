@@ -46,7 +46,7 @@ CPU 与 CUDA/L4T/Thor 镜像 tag 分开维护，不假设带加速环境的镜�
 
 ## VOS 集成
 
-`manifest.yml` 声明依赖 `com.ictrek.model-hub`，模型文件由 Model Hub 管理，
+`manifest.yml` 声明依赖 `com.ictrek.v-scheduler`，依赖版本在打包时核验最新正式发布；模型文件由 V-Scheduler 模型管理服务维护，
 Image Studio 只读挂载共享目录。用户界面使用 VOS OIDC Fastpath 获取当前平台
 用户 token，后端通过 VOS `/v1000/oauth2/userinfo` 校验后，将语言设置、生成任务
 和输出文件写入 `${VOS_APP_STORAGE_PATH}/data` 下当前 VOS 用户上下文对应的数据目录。该私有目录不再作为安装参数或跨应用共享目录暴露。

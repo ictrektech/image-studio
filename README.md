@@ -363,6 +363,8 @@ Native local jobs use a durable local outbox and application job ID as the sched
 
 Bindings also match the complete stable `execution_settings` object. `model_parameters` must match the actual job's memory-affecting backend, precision, cache, tiling and offload flags plus reference-input presence; the canonical fields are `RUNTIME_PARAMETER_FIELDS` and `runtime_parameters()` in `app/services/scheduler.py`. Text lengths are bounded by `prompt_characters` and `negative_prompt_characters`. An uncalibrated runtime combination is rejected before job execution, even when its model and image dimensions are approved.
 
+During upgrades, an authenticated, executor-approved binding may replace the private legacy standalone scheduler configuration, or a lower-revision binding whose runtime settings have changed. Neither legacy nor stale settings authorize inference; insecure files and revision rollback remain rejected. Existing jobs and model files are preserved.
+
 This adapter supports native local image generation, not local video jobs. V-Router jobs retain their route, with local upstream admission configured once in V-Router; cloud upstreams bypass local scheduling. Before deleting a managed Image Studio job, cancellation must reach a stopped terminal state.
 
 Image Studio's own local model jobs go directly through its Scheduler adapter, including jobs submitted by another app to its native model API. Other apps may also reach that same adapter through V-Router. Remote forwarding uses a separate concurrency pool and does not hold a local compute slot. Cloud result downloads retry temporary connection/CDN failures without submitting another generation; VOS authorization is sent only to result URLs on the V-Router origin.

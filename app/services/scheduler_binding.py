@@ -33,18 +33,19 @@ def config_path():
     return Path(os.getenv(PREFIX + "_SCHEDULER_CONFIG", "/data/scheduler.json"))
 
 
-def read_config():
+def read_config(*, for_rebinding=False):
     path = config_path()
     try:
         info = path.lstat()
         if path.is_symlink() or not path.is_file() or info.st_mode & 0o077 or info.st_size > 262144:
             raise ValueError("private configuration required")
         value = json.loads(path.read_text())
-        if value.get("url") != URL or value.get("app_id") != APP_ID or value.get("upstream_url") != UPSTREAM:
+        legacy = for_rebinding and value.get("url") == "http://v-scheduler:38120/api/v1" and all(field not in value for field in ("app_id", "upstream_url", "binding_revision", "protocol_version"))
+        if not legacy and (value.get("url") != URL or value.get("app_id") != APP_ID or value.get("upstream_url") != UPSTREAM):
             raise ValueError("invalid service binding")
         if len(value.get("token", "")) < 32:
             raise ValueError("missing service identity")
-        if value.get("execution_settings") != execution_settings():
+        if not for_rebinding and value.get("execution_settings") != execution_settings():
             raise ValueError("runtime settings no longer match approval")
         return value
     except (OSError, ValueError, TypeError, AttributeError):
@@ -141,7 +142,7 @@ async def bind(request: Request):
             raise HTTPException(409, "Binding waits for active execution")
         path = config_path()
         if path.exists():
-            previous = read_config()
+            previous = read_config(for_rebinding=True)
             if previous.get("binding_revision", 0) >= config["binding_revision"]:
                 if previous != config:
                     raise HTTPException(409, "Binding revision conflict")

@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import time
 import unittest
+import uuid
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -73,6 +74,50 @@ class SchedulerAdapterTests(unittest.TestCase):
             with ThreadPoolExecutor(max_workers=3) as pool:
                 list(pool.map(writer, enumerate(paths)))
             self.assertEqual([json.loads(p.read_text())["file"] for p in paths], [0, 1, 2])
+
+
+class AdapterCancellationTests(unittest.IsolatedAsyncioTestCase):
+    async def check_cancellation(self, native_alive):
+        from app.services import generation, scheduler
+        entered = asyncio.Event()
+        finished = asyncio.Event()
+        job = SimpleNamespace(user_key="synthetic", job_id="synthetic", status="running", outputs=[], error="", progress=0.5)
+
+        async def native_work(_job):
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                finished.set()
+
+        with tempfile.TemporaryDirectory() as folder, patch.object(settings, "data_dir", Path(folder)), patch.object(settings, "scheduler_executor_token", "x" * 32), patch.object(generation, "run_job", native_work), patch.object(scheduler, "load_job", return_value=job), patch.object(scheduler, "_marker", return_value={"stopped": not native_alive}), patch.object(scheduler, "_alive", return_value=native_alive):
+            attempt = str(uuid.uuid4())
+            body = {"fence": 1, "parameters": {"user_key": job.user_key, "job_id": job.job_id}}
+            record = {"attempt_id": attempt, "fence": 1, "parameters": body["parameters"], "status": "running", "stopped": False}
+            path = scheduler._path(attempt)
+            scheduler._atomic(path, record)
+            scheduler._lease(path, time.monotonic() + 60)
+            task = asyncio.create_task(scheduler._execute(path, record, job))
+            scheduler._executions[attempt] = task
+            try:
+                await entered.wait()
+                result = await scheduler.cancel(attempt, body, "Bearer " + "x" * 32)
+                self.assertTrue(task.done())
+                self.assertTrue(finished.is_set())
+                self.assertEqual(job.status, "running")
+                self.assertEqual(result["status"], "unknown" if native_alive else "cancelled")
+                self.assertEqual(result["stopped"], not native_alive)
+                persisted = json.loads(path.read_text())
+                self.assertEqual(persisted["status"], result["status"])
+            finally:
+                scheduler._executions.pop(attempt, None)
+                scheduler._locks.pop(attempt, None)
+
+    async def test_cancelled_adapter_is_terminal_even_before_business_job_status_sync(self):
+        await self.check_cancellation(False)
+
+    async def test_native_process_still_alive_never_reports_stopped(self):
+        await self.check_cancellation(True)
 
 
 @unittest.skipUnless(sys.platform.startswith("linux"), "Linux process supervisor")

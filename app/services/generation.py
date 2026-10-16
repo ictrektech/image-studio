@@ -175,9 +175,7 @@ async def create_job(user_key: str, request: GenerateRequest, access_token: str 
         created_at=now,
         updated_at=now,
     )
-    if settings.scheduler_url:
-        if video_mode:
-            raise ValueError("V-Scheduler MVP only supports local image generation")
+    if settings.scheduler_url or settings.scheduler_required:
         from app.services.scheduler import prepare
         await prepare(job)
         return job

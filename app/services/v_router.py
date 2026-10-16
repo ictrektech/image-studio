@@ -41,6 +41,7 @@ def model_metadata(model_key: str, capabilities: list[str], *, variant_id: str =
 
 
 def registration_payload(models: list[dict[str, Any]], *, ready_only: bool = True) -> dict[str, Any]:
+    from app.services.scheduler_binding import binding_status
     rows: list[dict[str, Any]] = []
     for model in models:
         base_meta = model.get("v_router") or {}
@@ -73,6 +74,7 @@ def registration_payload(models: list[dict[str, Any]], *, ready_only: bool = Tru
         "model_kind": "unknown",
         "models": rows,
         "ttl_seconds": 90,
+        "scheduler": {"protocol_version": 1, "app_id": "com.ictrek.image-studio", "binding_endpoint": "/api/v1/scheduler/binding", "executor_base_url": "http://image-studio-backend:5000", "upstream_url": "http://image-studio-backend:5000/v1", "async_models": [{"id": row["id"], "task_type": "video.generate" if "videos/generations" in row["endpoints"] else "image.generate"} for row in rows], "binding": binding_status()},
     }
 
 

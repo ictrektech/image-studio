@@ -58,10 +58,37 @@ async def _controller(method: str, path: str, **kwargs) -> dict:
         return response.json()["data"]
 
 
+def model_id(job: JobRecord) -> str:
+    return job.model_key + ("@" + job.model_variant if job.model_variant else "")
+
+
+def validate_limits(job: JobRecord) -> None:
+    if not settings.scheduler_required:
+        return
+    limits = settings.scheduler_model_limits.get(model_id(job), {})
+    for field in ("width", "height", "steps", "batch_count", "video_frames"):
+        maximum = limits.get(field)
+        if type(maximum) is not int or maximum < 0 or getattr(job, field) > maximum:
+            raise HTTPException(422, "Job exceeds calibrated model limit: " + field)
+    if job.hires:
+        width = job.hires_width or int(job.width * job.hires_scale)
+        height = job.hires_height or int(job.height * job.hires_scale)
+        for field, value in (("hires_width", width), ("hires_height", height), ("hires_steps", job.hires_steps or job.steps)):
+            maximum = limits.get(field)
+            if type(maximum) is not int or value > maximum:
+                raise HTTPException(422, "Job exceeds calibrated model limit: " + field)
+
+
 async def submit(job: JobRecord) -> None:
+    validate_limits(job)
+    executor = settings.scheduler_models.get(model_id(job))
+    if not executor:
+        if settings.scheduler_required:
+            raise HTTPException(503, "Model executor is not approved")
+        executor = settings.scheduler_executor_id
     task = await _controller("POST", "/tasks", headers={"Idempotency-Key": job.job_id}, json={
         "protocol_version": 1, "app_task_id": job.job_id,
-        "executor": {"id": settings.scheduler_executor_id, "contract_version": "1", "task_type": "image.generate"},
+        "executor": {"id": executor, "contract_version": "1", "task_type": "video.generate" if job.video_frames else "image.generate"},
         "parameters": {"user_key": job.user_key, "job_id": job.job_id}, "inputs": [],
     })
     # Reload so an execution finishing during submission cannot be overwritten by queued state.
@@ -72,6 +99,9 @@ async def submit(job: JobRecord) -> None:
 
 
 async def prepare(job: JobRecord) -> None:
+    if settings.scheduler_required and not settings.scheduler_models.get(model_id(job)):
+        raise HTTPException(503, "V-Scheduler model binding required")
+    validate_limits(job)
     job.metadata["scheduler_managed"] = True
     job.metadata["scheduler_state"] = "queued"
     save_job(job)  # durable local outbox before trying the remote controller
@@ -131,6 +161,8 @@ async def _outbox() -> None:
 
 async def start() -> None:
     global _loop
+    if _loop and not _loop.done():
+        return
     if settings.scheduler_url:
         if len(settings.scheduler_token) < 32 or len(settings.scheduler_executor_token) < 32:
             raise RuntimeError("V-Scheduler enabled but scoped credentials are missing/too short")
@@ -229,8 +261,9 @@ async def execute(attempt: str, body: dict, authorization: str = Header(default=
             job.metadata.pop("scheduler_cancel_requested", None)
         if job.metadata.get("scheduler_task_id") != body.get("task_id"):
             raise HTTPException(409, "task/job binding conflict")
-        if job.model_key.startswith("v-router/") or job.video_frames:
-            raise HTTPException(422, "MVP executor accepts local image jobs only")
+        if job.model_key.startswith("v-router/"):
+            raise HTTPException(422, "Executor accepts local jobs only")
+        validate_limits(job)
         record = {"attempt_id": attempt, "fence": body["fence"], "parameters": parameters, "status": "running", "stopped": False, "result": {}}
         _atomic(path, record)
         _lease(path, min(30, int(body.get("lease_seconds", 30))))

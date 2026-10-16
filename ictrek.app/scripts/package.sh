@@ -494,6 +494,7 @@ for file in manifest.yml configs.yml routers.yml; do
   fi
 done
 cp "${SRC_DIR}/icon.png" "${STAGE_DIR}/icon.png"
+python3 "${ROOT_DIR}/scripts/resolve_dependencies.py" "${STAGE_DIR}/manifest.yml" --repositories "${ROOT_DIR}/scripts/dependency-releases.json"
 render_text_file "${SRC_DIR}/README.zh-CN.md" "${STAGE_DIR}/README.zh-CN.md"
 if [[ -f "${SRC_DIR}/README.en.md" ]]; then
   render_text_file "${SRC_DIR}/README.en.md" "${STAGE_DIR}/README.en.md"

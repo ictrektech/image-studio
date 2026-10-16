@@ -33,6 +33,12 @@ jobs:
           python -m pip install -r requirements.txt
           python -m unittest discover -s tests -v
 
+      - name: Connect dependency catalog tunnel
+        env:
+          APPSTORE_IP: ${{ secrets.APPSTORE_IP }}
+          APPSTORE_TOKEN: ${{ secrets.APPSTORE_TOKEN }}
+        run: bash ictrek.app/scripts/appstore_tunnel.sh open
+
       - name: Build pull-mode package
         env:
           FEISHU_SPREADSHEET_TOKEN: ${{ secrets.FEISHU_SPREADSHEET_TOKEN }}
@@ -41,6 +47,12 @@ jobs:
           VERSION="${GITHUB_REF_NAME#vos-image-studio-v}"
           PACKAGE_VERSION="$VERSION" ./ictrek.app/scripts/package.sh
           test -f "ictrek.app/dist/image_studio_${VERSION}_pull.tar"
+
+      - name: Close dependency catalog tunnel
+        if: always()
+        env:
+          APPSTORE_IP: ${{ secrets.APPSTORE_IP }}
+        run: bash ictrek.app/scripts/appstore_tunnel.sh close
 
       - name: Create release notes
         env:

@@ -6,7 +6,9 @@ x-image-studio-backend-env: &image-studio-backend-env
   IMAGE_STUDIO_APP_VERSION: "__APP_VERSION__"
   IMAGE_STUDIO_DATA_DIR: /data
   MODEL_HUB_SHARED_MODELS_PATH: /modelhub
-  MODEL_HUB_API_URL: ${MODEL_HUB_API_URL:-http://model-hub-backend:5005}
+  IMAGE_STUDIO_SCHEDULER_REQUIRED: "true"
+  VOS_USERINFO_URL: http://${VOS_HOST_GW_IP}:${VOS_API_GW_PORT_INTERNAL}/v1000/oauth2/userinfo
+  MODEL_HUB_API_URL: ${MODEL_HUB_API_URL:-http://v-scheduler-model-hub:6005}
   IMAGE_STUDIO_V_ROUTER_API_URL: ${IMAGE_STUDIO_V_ROUTER_API_URL:-http://v-router:8080}
   IMAGE_STUDIO_V_ROUTER_HOST_API_URL: ${IMAGE_STUDIO_V_ROUTER_HOST_API_URL:-http://host.docker.internal:22888}
   IMAGE_STUDIO_V_ROUTER_BASE_URL: ${IMAGE_STUDIO_V_ROUTER_BASE_URL:-http://image-studio-backend:5000}

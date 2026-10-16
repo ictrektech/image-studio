@@ -12,7 +12,7 @@ class Settings:
     profile = os.getenv("IMAGE_STUDIO_PROFILE", "local")
     data_dir = Path(os.getenv("IMAGE_STUDIO_DATA_DIR", "/data")).resolve()
     modelhub_root = Path(os.getenv("MODEL_HUB_SHARED_MODELS_PATH", "/modelhub")).resolve()
-    model_hub_api_url = os.getenv("MODEL_HUB_API_URL", "http://model-hub-backend:5005").rstrip("/")
+    model_hub_api_url = os.getenv("MODEL_HUB_API_URL", "http://v-scheduler-model-hub:6005").rstrip("/")
     # Base URL that V-Router should call when Image Studio registers itself.
     # VOS containers share vos_default, so the internal backend DNS is the default.
     v_router_base_url = os.getenv("IMAGE_STUDIO_V_ROUTER_BASE_URL", "http://image-studio-backend:5000").rstrip("/")
@@ -54,6 +54,9 @@ class Settings:
     scheduler_token = os.getenv("IMAGE_STUDIO_SCHEDULER_TOKEN") or scheduler_config.get("token", "")
     scheduler_executor_token = os.getenv("IMAGE_STUDIO_SCHEDULER_EXECUTOR_TOKEN") or scheduler_config.get("executor_token", "")
     scheduler_executor_id = os.getenv("IMAGE_STUDIO_SCHEDULER_EXECUTOR_ID") or scheduler_config.get("executor_id", "image-studio.generate")
+    scheduler_required = os.getenv("IMAGE_STUDIO_SCHEDULER_REQUIRED") == "true"
+    scheduler_models = scheduler_config.get("models", {})
+    scheduler_model_limits = scheduler_config.get("model_limits", {})
 
     @property
     def sessions_dir(self) -> Path:

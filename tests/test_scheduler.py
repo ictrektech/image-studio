@@ -7,13 +7,32 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 from fastapi import HTTPException
 from app.config import settings
-from app.services.scheduler import _atomic, _authorize, _path
+from app.services.scheduler import _atomic, _authorize, _path, model_id, validate_limits
 
 
 class SchedulerAdapterTests(unittest.TestCase):
+    def test_calibrated_limits_cover_variant_video_and_high_resolution(self):
+        job = SimpleNamespace(model_key="model", model_variant="q4", width=512, height=512, steps=10, batch_count=1, video_frames=0, hires=False, hires_width=0, hires_height=0, hires_scale=2, hires_steps=0)
+        limits = {"width": 512, "height": 512, "steps": 10, "batch_count": 1, "video_frames": 0}
+        with patch.object(settings, "scheduler_required", True), patch.object(settings, "scheduler_model_limits", {"model@q4": limits}):
+            self.assertEqual(model_id(job), "model@q4")
+            validate_limits(job)
+            job.video_frames = 16
+            with self.assertRaises(HTTPException):
+                validate_limits(job)
+            job.video_frames = 0
+            job.hires = True
+            with self.assertRaises(HTTPException):
+                validate_limits(job)
+            job.hires = False
+            job.model_variant = "q8"
+            with self.assertRaises(HTTPException):
+                validate_limits(job)
+
     def test_private_storage_config_and_explicit_override(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

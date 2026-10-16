@@ -18,7 +18,7 @@ configs:
     description:
       zh-CN: VOS 网络内的 Model Hub 后端 API 地址，用于触发模型下载和同步。
       en: Model Hub backend API URL inside VOS network, used to trigger model pull and sync.
-    default: http://model-hub-backend:5005
+    default: http://v-scheduler-model-hub:6005
 
   - name: IMAGE_STUDIO_V_ROUTER_API_URL
     type: string

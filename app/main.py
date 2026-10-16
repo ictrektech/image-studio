@@ -10,6 +10,7 @@ from app.routers.api import router
 from app.services.immich import start as start_immich_uploads, stop as stop_immich_uploads
 from app.services.storage import ensure_storage
 from app.services import scheduler
+from app.services.scheduler_binding import router as scheduler_binding_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,6 +26,7 @@ app.add_middleware(
 )
 app.include_router(router)
 app.include_router(scheduler.router)
+app.include_router(scheduler_binding_router)
 
 
 @app.on_event("startup")

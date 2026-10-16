@@ -20,12 +20,9 @@ platform:
 
 dependencies:
   apps:
-    - id: com.ictrek.model-hub
-      version: ">=0.0.54"
+    - id: com.ictrek.v-scheduler
+      version: latest
       optional: false
-    - id: com.ictrek.v-router
-      version: ">=0.0.22"
-      optional: true
 
 oauth2:
   client:

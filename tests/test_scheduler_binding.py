@@ -16,6 +16,9 @@ from app.models import JobRecord
 
 
 class BindingTests(unittest.TestCase):
+    def test_native_scheduler_origin_is_not_an_openai_v1_endpoint(self):
+        self.assertEqual(binding.UPSTREAM, 'http://image-studio-backend:5000')
+
     def test_binding_requires_scheduler_identity_and_preserves_revision(self):
         app = FastAPI()
         app.include_router(binding.router)

@@ -1,5 +1,8 @@
 # Image Studio
 
+Scheduler 许可使用原生服务根地址 `http://image-studio-backend:5000`，
+任务 API 仍为 `/api/v1`；该执行器不是 OpenAI `/v1` 上游，不能追加 `/v1`。
+
 Image Studio is a VOS app for local Stable Diffusion / `stable-diffusion.cpp`
 image generation. It provides a browser workspace for text-to-image requests,
 job tracking, generated-file access, and Model Hub backed model management.

@@ -14,7 +14,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 APP_ID = "com.ictrek.image-studio"
 PREFIX = "IMAGE_STUDIO"
-UPSTREAM = "http://image-studio-backend:5000/v1"
+UPSTREAM = "http://image-studio-backend:5000"
 URL = "http://v-router:8080/scheduler/api/v1"
 router = APIRouter(prefix="/api/v1/scheduler")
 lock = threading.RLock()

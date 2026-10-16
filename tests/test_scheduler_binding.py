@@ -11,6 +11,8 @@ from fastapi.testclient import TestClient
 
 from app.config import settings
 from app.services import scheduler_binding as binding
+from app.services.scheduler import RUNTIME_PARAMETER_FIELDS
+from app.models import JobRecord
 
 
 class BindingTests(unittest.TestCase):
@@ -19,6 +21,8 @@ class BindingTests(unittest.TestCase):
         app.include_router(binding.router)
         config = {'protocol_version': 1, 'binding_revision': 2, 'app_id': binding.APP_ID, 'url': binding.URL, 'upstream_url': binding.UPSTREAM, 'token': 'a' * 32, 'executor_token': 'b' * 32, 'models': {'model': 'app.model'}, 'model_limits': {'model': {'width': 512, 'height': 512, 'steps': 10, 'batch_count': 1, 'video_frames': 0}}}
         config['execution_settings'] = binding.execution_settings()
+        config['model_limits']['model'].update(prompt_characters=32, negative_prompt_characters=32)
+        config['model_parameters'] = {'model': {**{field: JobRecord.model_fields[field].default for field in RUNTIME_PARAMETER_FIELDS}, 'has_reference': False}}
         client = AsyncMock()
         client.__aenter__.return_value = client
         executor = {'id': 'app.model', 'app_id': binding.APP_ID, 'contract_version': '1', 'task_type': 'image.generate', 'upstream_urls': [binding.UPSTREAM]}

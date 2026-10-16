@@ -11,17 +11,22 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from fastapi import HTTPException
 from app.config import settings
-from app.services.scheduler import _atomic, _authorize, _path, model_id, validate_limits
+from app.services.scheduler import RUNTIME_PARAMETER_FIELDS, _atomic, _authorize, _path, model_id, runtime_parameters, validate_limits
+from app.models import JobRecord
 
 
 class SchedulerAdapterTests(unittest.TestCase):
     def test_calibrated_limits_cover_variant_video_and_high_resolution(self):
-        job = SimpleNamespace(model_key="model", model_variant="q4", width=512, height=512, steps=10, batch_count=1, video_frames=0, hires=False, hires_width=0, hires_height=0, hires_scale=2, hires_steps=0)
-        limits = {"width": 512, "height": 512, "steps": 10, "batch_count": 1, "video_frames": 0}
+        job = SimpleNamespace(model_key="model", model_variant="q4", width=512, height=512, steps=10, batch_count=1, video_frames=0, hires=False, hires_width=0, hires_height=0, hires_scale=2, hires_steps=0, prompt="test", negative_prompt="", metadata={}, **{field: JobRecord.model_fields[field].default for field in RUNTIME_PARAMETER_FIELDS})
+        limits = {"width": 512, "height": 512, "steps": 10, "batch_count": 1, "video_frames": 0, "prompt_characters": 32, "negative_prompt_characters": 32}
         from app.services.scheduler_binding import execution_settings
-        with patch.object(settings, "scheduler_required", True), patch.object(settings, "scheduler_config", {"execution_settings": execution_settings()}), patch.object(settings, "scheduler_model_limits", {"model@q4": limits}):
+        with patch.object(settings, "scheduler_required", True), patch.object(settings, "scheduler_config", {"execution_settings": execution_settings()}), patch.object(settings, "scheduler_model_limits", {"model@q4": limits}), patch.object(settings, "scheduler_model_parameters", {"model@q4": runtime_parameters(job)}):
             self.assertEqual(model_id(job), "model@q4")
             validate_limits(job)
+            job.backend = "cpu"
+            with self.assertRaises(HTTPException):
+                validate_limits(job)
+            job.backend = ""
             job.video_frames = 16
             with self.assertRaises(HTTPException):
                 validate_limits(job)

@@ -116,7 +116,11 @@ async def bind(request: Request):
             raise ValueError()
         for model in config["models"]:
             limits = config["model_limits"].get(model, {})
-            if not isinstance(limits, dict) or any(type(limits.get(field)) is not int or limits[field] < 0 for field in ("width", "height", "steps", "batch_count", "video_frames")):
+            if not isinstance(limits, dict) or any(type(limits.get(field)) is not int or limits[field] < 0 for field in ("width", "height", "steps", "batch_count", "video_frames", "prompt_characters", "negative_prompt_characters")):
+                raise ValueError()
+            from app.services.scheduler import RUNTIME_PARAMETER_FIELDS
+            parameters = config.get("model_parameters", {}).get(model)
+            if not isinstance(parameters, dict) or set(parameters) != set(RUNTIME_PARAMETER_FIELDS) | {"has_reference"}:
                 raise ValueError()
         for field in ("models", "gateway_executors"):
             mapping = config.get(field, {})
@@ -153,6 +157,7 @@ async def bind(request: Request):
     settings.scheduler_executor_token = config["executor_token"]
     settings.scheduler_models = config["models"]
     settings.scheduler_model_limits = config["model_limits"]
+    settings.scheduler_model_parameters = config["model_parameters"]
     settings.scheduler_config = config
     await scheduler.start()
     return {"configured": True, "binding_revision": config["binding_revision"]}

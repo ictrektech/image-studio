@@ -20,6 +20,7 @@ router = APIRouter(prefix="/api/v1/scheduler")
 _loop: asyncio.Task | None = None
 _executions: dict[str, asyncio.Task] = {}
 _locks: dict[str, asyncio.Lock] = {}
+RUNTIME_PARAMETER_FIELDS = ("weight_type", "tensor_type_rules", "cache_mode", "cache_option", "qwen_image_layers", "vae_tiling", "vae_tile_size", "vae_tile_overlap", "temporal_tiling", "temporal_tile_frames", "temporal_tile_overlap", "max_vram", "stream_layers", "auto_fit", "clip_on_cpu", "offload_to_cpu", "vae_cpu_fallback", "backend", "params_backend")
 
 
 def _atomic(path: Path, value: dict) -> None:
@@ -62,17 +63,27 @@ def model_id(job: JobRecord) -> str:
     return job.model_key + ("@" + job.model_variant if job.model_variant else "")
 
 
+def runtime_parameters(job: JobRecord) -> dict:
+    return {**{field: getattr(job, field) for field in RUNTIME_PARAMETER_FIELDS}, "has_reference": bool(job.metadata.get("init_input_id") or (job.metadata.get("init_job_id") and job.metadata.get("init_filename")))}
+
+
 def validate_limits(job: JobRecord) -> None:
     if not settings.scheduler_required:
         return
     from app.services.scheduler_binding import execution_settings
     if settings.scheduler_config.get("execution_settings") != execution_settings():
         raise HTTPException(503, "Runtime settings no longer match calibrated binding")
+    if settings.scheduler_model_parameters.get(model_id(job)) != runtime_parameters(job):
+        raise HTTPException(422, "Runtime parameters are not calibrated for this model")
     limits = settings.scheduler_model_limits.get(model_id(job), {})
     for field in ("width", "height", "steps", "batch_count", "video_frames"):
         maximum = limits.get(field)
         if type(maximum) is not int or maximum < 0 or getattr(job, field) > maximum:
             raise HTTPException(422, "Job exceeds calibrated model limit: " + field)
+    for field in ("prompt", "negative_prompt"):
+        maximum = limits.get(field + "_characters")
+        if type(maximum) is not int or len(getattr(job, field)) > maximum:
+            raise HTTPException(422, "Job exceeds calibrated text limit: " + field)
     if job.hires:
         width = job.hires_width or int(job.width * job.hires_scale)
         height = job.hires_height or int(job.height * job.hires_scale)

@@ -57,6 +57,7 @@ class Settings:
     scheduler_required = os.getenv("IMAGE_STUDIO_SCHEDULER_REQUIRED") == "true"
     scheduler_models = scheduler_config.get("models", {})
     scheduler_model_limits = scheduler_config.get("model_limits", {})
+    scheduler_model_parameters = scheduler_config.get("model_parameters", {})
 
     @property
     def sessions_dir(self) -> Path:

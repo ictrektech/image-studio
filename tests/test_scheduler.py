@@ -9,7 +9,7 @@ import unittest
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock, Mock
 from fastapi import HTTPException
 from app.config import settings
 from app.services.scheduler import RUNTIME_PARAMETER_FIELDS, _atomic, _authorize, _path, model_id, runtime_parameters, validate_limits
@@ -88,6 +88,30 @@ class SchedulerAdapterTests(unittest.TestCase):
 
 
 class AdapterCancellationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_rejected_submission_is_visible_and_never_replayed_by_delete(self):
+        from app.services import scheduler
+        job = SimpleNamespace(user_key="synthetic", job_id="synthetic", status="queued", error="", metadata={"scheduling":{"preemptible":True}})
+        with patch.object(scheduler, "validate_limits"), patch.object(scheduler, "save_job"), patch.object(settings, "scheduler_required", False), patch.object(scheduler, "submit", new=AsyncMock(side_effect=HTTPException(422,"EXECUTOR_RESTART_NOT_SUPPORTED"))) as submit:
+            with self.assertRaises(HTTPException) as error:
+                await scheduler.prepare(job)
+            self.assertEqual(error.exception.status_code, 422)
+            self.assertEqual(job.status,"failed")
+            self.assertTrue(job.metadata["scheduler_submission_rejected"])
+            with patch.object(scheduler,"load_job",return_value=job):
+                self.assertTrue(await scheduler.request_cancel(job.user_key,job.job_id))
+            self.assertEqual(submit.await_count,1,"deleting a rejected job must never create work")
+
+    async def test_controller_keeps_status_and_machine_reason(self):
+        from app.services import scheduler
+        import httpx
+        client=AsyncMock();client.__aenter__.return_value=client
+        client.request.return_value=httpx.Response(422,json={"code":"EXECUTOR_RESTART_NOT_SUPPORTED"},request=httpx.Request("POST","http://scheduler/tasks"))
+        with patch.object(settings,"scheduler_token","synthetic"),patch.object(scheduler.httpx,"AsyncClient",return_value=client):
+            with self.assertRaises(HTTPException) as error:
+                await scheduler._controller("POST","/tasks")
+            self.assertEqual(error.exception.status_code,422)
+            self.assertIn("EXECUTOR_RESTART_NOT_SUPPORTED",error.exception.detail)
+
     async def check_cancellation(self, native_alive, preempted=False):
         from app.services import generation, scheduler
         entered = asyncio.Event()

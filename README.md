@@ -407,3 +407,8 @@ L4T SD-Turbo defaults to Q4 weights and `max_vram=2.0` from the original shared
 checkpoint. These settings match its measured calibration; AMD CUDA retains its own
 profile settings and calibration. Oversized or altered execution settings require a
 matching approved calibration.
+
+Scheduler validation errors (HTTP 422) are returned immediately and the rejected
+job is marked failed, rather than retried forever in the local outbox. Deleting a
+rejected, unaccepted job never submits new work. A preempted job waiting for its
+next attempt is shown as queued.

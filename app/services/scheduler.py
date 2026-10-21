@@ -55,7 +55,12 @@ async def _controller(method: str, path: str, **kwargs) -> dict:
     async with httpx.AsyncClient(timeout=8) as client:
         headers = {"Authorization": f"Bearer {settings.scheduler_token}", **kwargs.pop("headers", {})}
         response = await client.request(method, settings.scheduler_url + path, headers=headers, **kwargs)
-        response.raise_for_status()
+        if response.is_error:
+            try:
+                code = response.json().get("code", "SCHEDULER_REQUEST_FAILED")
+            except (ValueError, AttributeError):
+                code = "SCHEDULER_REQUEST_FAILED"
+            raise HTTPException(response.status_code, "V-Scheduler: " + str(code))
         return response.json()["data"]
 
 
@@ -130,7 +135,13 @@ async def prepare(job: JobRecord, operator_authorization: str = "") -> None:
     save_job(job)  # durable local outbox before trying the remote controller
     try:
         await submit(job, operator_authorization=operator_authorization)
-    except (httpx.HTTPError, HTTPException):
+    except (httpx.HTTPError, HTTPException) as exc:
+        if isinstance(exc, HTTPException) and exc.status_code == 422:
+            job.status = "failed"
+            job.error = str(exc.detail)
+            job.metadata["scheduler_submission_rejected"] = True
+            save_job(job)
+            raise
         if job.metadata.get("scheduling", {}).get("force_admission"):
             job.metadata["scheduler_authorization_required"] = True
             job.error = "强制调度提交未获确认，请重新授权后提交；管理员凭证不会保存"
@@ -146,6 +157,8 @@ async def request_cancel(user_key: str, job_id: str) -> bool:
     job.metadata["scheduler_cancel_requested"] = True
     save_job(job)
     if not job.metadata.get("scheduler_task_id"):
+        if job.metadata.get("scheduler_submission_rejected"):
+            return True  # 控制器明确拒绝过提交，未创建任务或启动原生进程。
         await submit(job)
         job = load_job(user_key, job_id)
     task_id = job.metadata["scheduler_task_id"]
@@ -170,7 +183,12 @@ async def _outbox() -> None:
                         # 已受理的幂等回执不需要保存或重放管理员凭证。
                         await submit(job)
                     except HTTPException as exc:
-                        if exc.status_code == 403 and job.metadata.get("scheduling", {}).get("force_admission"):
+                        if exc.status_code == 422:
+                            job.status = "failed"
+                            job.error = str(exc.detail)
+                            job.metadata["scheduler_submission_rejected"] = True
+                            save_job(job)
+                        elif exc.status_code == 403 and job.metadata.get("scheduling", {}).get("force_admission"):
                             job.status = "failed"
                             job.error = "强制调度需要管理员重新授权，请重新提交任务"
                             job.metadata["scheduler_authorization_required"] = True
@@ -186,6 +204,8 @@ async def _outbox() -> None:
                     continue
                 current.metadata["scheduler_state"] = state["status"]
                 current.metadata["scheduler_wait_reasons"] = state.get("wait_reasons", [])
+                if state["status"] == "queued" and isinstance(state.get("result"), dict) and state["result"].get("reason") == "preempted_restart":
+                    current.status, current.progress, current.error, current.outputs = "queued", 0, "", []
                 if state["status"] in {"cancelled", "failed"}:
                     current.status = "failed"
                     current.outputs = []

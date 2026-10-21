@@ -2,4 +2,4 @@ ARG APPLICATION_BASE_IMAGE
 FROM ${APPLICATION_BASE_IMAGE}
 # 应用层更新沿用已核验的同 profile 原生运行时和依赖。
 COPY app /app/app
-RUN python -m compileall -q /app/app
+RUN python3 -m compileall -q /app/app

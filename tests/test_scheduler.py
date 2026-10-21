@@ -17,6 +17,17 @@ from app.models import JobRecord
 
 
 class SchedulerAdapterTests(unittest.TestCase):
+    def test_scheduling_contract_rejects_coercion_and_extra_budget(self):
+        from app.models import SchedulingOptions
+        from pydantic import ValidationError
+        for value in ({"priority": "urgent"}, {"preemptible": "true"}, {"resources": {"memory_mib": 1}}):
+            with self.assertRaises(ValidationError):
+                SchedulingOptions.model_validate(value)
+        from app.services.scheduling_options import operator_headers
+        with self.assertRaises(HTTPException):
+            operator_headers({"force_admission": True}, "")
+        self.assertEqual(operator_headers({"force_admission": False}, "Bearer private"), {})
+
     def test_calibrated_limits_cover_variant_video_and_high_resolution(self):
         job = SimpleNamespace(model_key="model", model_variant="q4", width=512, height=512, steps=10, batch_count=1, video_frames=0, hires=False, hires_width=0, hires_height=0, hires_scale=2, hires_steps=0, prompt="test", negative_prompt="", metadata={}, **{field: JobRecord.model_fields[field].default for field in RUNTIME_PARAMETER_FIELDS})
         limits = {"width": 512, "height": 512, "steps": 10, "batch_count": 1, "video_frames": 0, "prompt_characters": 32, "negative_prompt_characters": 32}
@@ -77,7 +88,7 @@ class SchedulerAdapterTests(unittest.TestCase):
 
 
 class AdapterCancellationTests(unittest.IsolatedAsyncioTestCase):
-    async def check_cancellation(self, native_alive):
+    async def check_cancellation(self, native_alive, preempted=False):
         from app.services import generation, scheduler
         entered = asyncio.Event()
         finished = asyncio.Event()
@@ -92,7 +103,7 @@ class AdapterCancellationTests(unittest.IsolatedAsyncioTestCase):
 
         with tempfile.TemporaryDirectory() as folder, patch.object(settings, "data_dir", Path(folder)), patch.object(settings, "scheduler_executor_token", "x" * 32), patch.object(generation, "run_job", native_work), patch.object(scheduler, "load_job", return_value=job), patch.object(scheduler, "_marker", return_value={"stopped": not native_alive}), patch.object(scheduler, "_alive", return_value=native_alive):
             attempt = str(uuid.uuid4())
-            body = {"fence": 1, "parameters": {"user_key": job.user_key, "job_id": job.job_id}}
+            body = {"preempted": preempted, "fence": 1, "parameters": {"user_key": job.user_key, "job_id": job.job_id}}
             record = {"attempt_id": attempt, "fence": 1, "parameters": body["parameters"], "status": "running", "stopped": False}
             path = scheduler._path(attempt)
             scheduler._atomic(path, record)
@@ -105,7 +116,7 @@ class AdapterCancellationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(task.done())
                 self.assertTrue(finished.is_set())
                 self.assertEqual(job.status, "running")
-                self.assertEqual(result["status"], "unknown" if native_alive else "cancelled")
+                self.assertEqual(result["status"], "unknown" if native_alive else ("failed" if preempted else "cancelled"))
                 self.assertEqual(result["stopped"], not native_alive)
                 persisted = json.loads(path.read_text())
                 self.assertEqual(persisted["status"], result["status"])
@@ -115,6 +126,10 @@ class AdapterCancellationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_cancelled_adapter_is_terminal_even_before_business_job_status_sync(self):
         await self.check_cancellation(False)
+
+    async def test_preemption_is_restartable_only_after_native_exit(self):
+        await self.check_cancellation(False, preempted=True)
+        await self.check_cancellation(True, preempted=True)
 
     async def test_native_process_still_alive_never_reports_stopped(self):
         await self.check_cancellation(True)

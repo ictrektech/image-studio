@@ -385,3 +385,25 @@ VOS 安装后，应用通过 Scheduler 的可信绑定获得 `lifecycle_protocol
 完整流程、身份和接口见 [V-Scheduler 统一接入指南](https://github.com/ictrektech/V-Scheduler/blob/main/docs/application-integration.md#unified-lifecycle)。
 
 仅应用层变更可在对应架构构建机设置 `IMAGE_STUDIO_APPLICATION_BASE_IMAGE=<已核验的同 profile 发布镜像>`，再运行原有 `docker/build_image.sh --sheet <sheet> --component backend`。此方式保留原生依赖与已校准的运行环境，只替换当前 `app/`；变更原生依赖或推理参数时仍须完整构建。
+
+### Scheduling options
+
+`POST /api/v1/generate` accepts an optional `scheduling` object:
+```json
+{"priority":"high","preemptible":false,"allow_preemption":true,"force_admission":false}
+```
+The default is background priority with all flags off. A low-priority job with
+`preemptible:true` may yield to a consenting higher-priority request. Native exit
+must be confirmed before release; restart uses a new attempt and fence and starts
+from the beginning, with at most three attempts. User cancellation wins over restart;
+a generation that already succeeded is never duplicated. Administrator force admission
+uses the current request's Bearer identity without persisting it. An accepted task can
+recover its idempotent receipt after restart; an unaccepted force request requires fresh
+authorization. Force does not bypass hard budgets, stale telemetry or stop confirmation.
+The V-Scheduler gateway accepts the equivalent `X-VScheduler-*` headers and passes the
+options to this first-party executor. See the [unified guide](https://github.com/ictrektech/V-Scheduler/blob/main/docs/application-integration.md).
+
+L4T SD-Turbo defaults to Q4 weights and `max_vram=2.0` from the original shared
+checkpoint. These settings match its measured calibration; AMD CUDA retains its own
+profile settings and calibration. Oversized or altered execution settings require a
+matching approved calibration.

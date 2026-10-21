@@ -3,10 +3,19 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict, StrictBool
+
+
+class SchedulingOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    priority: Literal["background", "interactive", "high"] = "background"
+    preemptible: StrictBool = False
+    allow_preemption: StrictBool = False
+    force_admission: StrictBool = False
 
 
 class GenerateRequest(BaseModel):
+    scheduling: SchedulingOptions | None = None
     prompt: str = Field(min_length=1, max_length=4000)
     negative_prompt: str = ""
     model_key: str = "sd15"

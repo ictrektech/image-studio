@@ -168,6 +168,7 @@ async def create_job(user_key: str, request: GenerateRequest, access_token: str 
         backend=request.backend.strip() if parameters.get("backend", True) else "",
         params_backend=request.params_backend.strip() if parameters.get("params_backend", True) else "",
         metadata={
+            "scheduling": request.scheduling.model_dump() if request.scheduling else {},
             "init_job_id": request.init_job_id if supports_reference else "",
             "init_filename": request.init_filename if supports_reference else "",
             "init_input_id": request.init_input_id if supports_reference else "",
@@ -177,7 +178,7 @@ async def create_job(user_key: str, request: GenerateRequest, access_token: str 
     )
     if settings.scheduler_url or settings.scheduler_required:
         from app.services.scheduler import prepare
-        await prepare(job)
+        await prepare(job, operator_authorization=("Bearer " + access_token) if access_token else "")
         return job
     save_job(job)
     task_key = (job.user_key, job.job_id)

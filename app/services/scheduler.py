@@ -93,7 +93,7 @@ def validate_limits(job: JobRecord) -> None:
                 raise HTTPException(422, "Job exceeds calibrated model limit: " + field)
 
 
-async def submit(job: JobRecord) -> None:
+async def submit(job: JobRecord, operator_authorization: str = "") -> None:
     if settings.scheduler_config.get("lifecycle_protocol_version") == 1:
         from .scheduler_lifecycle import LifecycleError
         try:
@@ -106,10 +106,13 @@ async def submit(job: JobRecord) -> None:
         if settings.scheduler_required:
             raise HTTPException(503, "Model executor is not approved")
         executor = settings.scheduler_executor_id
-    task = await _controller("POST", "/tasks", headers={"Idempotency-Key": job.job_id}, json={
+    from .scheduling_options import operator_headers
+    options = job.metadata.get("scheduling", {})
+    task = await _controller("POST", "/tasks", headers={"Idempotency-Key": job.job_id, **operator_headers(options, operator_authorization)}, json={
         "protocol_version": 1, "app_task_id": job.job_id,
         "executor": {"id": executor, "contract_version": "1", "task_type": "video.generate" if job.video_frames else "image.generate"},
         "parameters": {"user_key": job.user_key, "job_id": job.job_id}, "inputs": [],
+        **({"scheduling": options} if options else {}),
     })
     # Reload so an execution finishing during submission cannot be overwritten by queued state.
     current = load_job(job.user_key, job.job_id)
@@ -118,7 +121,7 @@ async def submit(job: JobRecord) -> None:
         save_job(current)
 
 
-async def prepare(job: JobRecord) -> None:
+async def prepare(job: JobRecord, operator_authorization: str = "") -> None:
     if settings.scheduler_required and not settings.scheduler_models.get(model_id(job)):
         raise HTTPException(503, "V-Scheduler model binding required")
     validate_limits(job)
@@ -126,8 +129,13 @@ async def prepare(job: JobRecord) -> None:
     job.metadata["scheduler_state"] = "queued"
     save_job(job)  # durable local outbox before trying the remote controller
     try:
-        await submit(job)
+        await submit(job, operator_authorization=operator_authorization)
     except (httpx.HTTPError, HTTPException):
+        if job.metadata.get("scheduling", {}).get("force_admission"):
+            job.metadata["scheduler_authorization_required"] = True
+            job.error = "强制调度提交未获确认，请重新授权后提交；管理员凭证不会保存"
+            save_job(job)
+            raise
         pass  # startup/background outbox replays the same idempotency key
 
 
@@ -155,10 +163,19 @@ async def _outbox() -> None:
         for path in settings.jobs_dir.glob("*/*.json"):
             try:
                 job = JobRecord.model_validate_json(path.read_text())
-                if not job.metadata.get("scheduler_managed"):
+                if not job.metadata.get("scheduler_managed") or (job.status == "failed" and not job.metadata.get("scheduler_task_id")):
                     continue
                 if not job.metadata.get("scheduler_task_id"):
-                    await submit(job)
+                    try:
+                        # 已受理的幂等回执不需要保存或重放管理员凭证。
+                        await submit(job)
+                    except HTTPException as exc:
+                        if exc.status_code == 403 and job.metadata.get("scheduling", {}).get("force_admission"):
+                            job.status = "failed"
+                            job.error = "强制调度需要管理员重新授权，请重新提交任务"
+                            job.metadata["scheduler_authorization_required"] = True
+                            save_job(job)
+                        raise
                     job = load_job(job.user_key, job.job_id)
                 task_id = job.metadata["scheduler_task_id"]
                 if job.metadata.get("scheduler_cancel_requested"):
@@ -252,6 +269,8 @@ async def _execute(path: Path, record: dict, job: JobRecord) -> None:
         await asyncio.gather(watcher, return_exceptions=True)
         marker = _marker(path)
         record["stopped"] = not _alive(marker)
+        if record["stopped"] and _read(path).get("preempted"):
+            record.update(status="failed", preempted=True, result={"code": "SCHEDULER_PREEMPTED", "retryable": True})
         if not record["stopped"]:
             record["status"] = "unknown"
         _atomic(path, record)
@@ -336,6 +355,7 @@ async def cancel(attempt: str, body: dict, authorization: str = Header(default="
         if record["fence"] != body.get("fence"):
             raise HTTPException(409, "stale fence")
         record["cancel_requested"] = True
+        record["preempted"] = body.get("preempted") is True
         _atomic(path, record)
         _lease(path, 0)
         task = _executions.get(attempt)

@@ -94,6 +94,12 @@ def validate_limits(job: JobRecord) -> None:
 
 
 async def submit(job: JobRecord) -> None:
+    if settings.scheduler_config.get("lifecycle_protocol_version") == 1:
+        from .scheduler_lifecycle import LifecycleError
+        try:
+            await asyncio.to_thread(application_lifecycle().ensure, settings.scheduler_config)
+        except (LifecycleError, OSError):
+            raise HTTPException(503, "Application lifecycle unavailable") from None
     validate_limits(job)
     executor = settings.scheduler_models.get(model_id(job))
     if not executor:
@@ -175,6 +181,8 @@ async def _outbox() -> None:
 
 async def start() -> None:
     global _loop
+    if settings.scheduler_required:
+        application_lifecycle().start()
     if _loop and not _loop.done():
         return
     if settings.scheduler_url:
@@ -184,6 +192,8 @@ async def start() -> None:
 
 
 async def stop() -> None:
+    if _lifecycle is not None:
+        await asyncio.to_thread(_lifecycle.close)
     if _loop:
         _loop.cancel()
         await asyncio.gather(_loop, return_exceptions=True)
@@ -333,3 +343,13 @@ async def cancel(attempt: str, body: dict, authorization: str = Header(default="
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         return await inspect(attempt, body, authorization)
+
+
+_lifecycle = None
+
+def application_lifecycle():
+    global _lifecycle
+    if _lifecycle is None:
+        from .scheduler_lifecycle import Lifecycle
+        _lifecycle = Lifecycle(lambda: settings.scheduler_config, settings.data_dir / "scheduler.lifecycle.json")
+    return _lifecycle

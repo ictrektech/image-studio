@@ -74,7 +74,7 @@ def registration_payload(models: list[dict[str, Any]], *, ready_only: bool = Tru
         "model_kind": "unknown",
         "models": rows,
         "ttl_seconds": 90,
-        "scheduler": {"protocol_version": 1, "app_id": "com.ictrek.image-studio", "binding_endpoint": "/api/v1/scheduler/binding", "executor_base_url": "http://image-studio-backend:5000", "upstream_url": "http://image-studio-backend:5000", "async_models": [{"id": row["id"], "task_type": "video.generate" if "videos/generations" in row["endpoints"] else "image.generate"} for row in rows], "execution_settings": execution_settings(), "binding": binding_status()},
+        "scheduler": {"protocol_version": 1, "lifecycle_protocol_version": 1, "app_id": "com.ictrek.image-studio", "binding_endpoint": "/api/v1/scheduler/binding", "executor_base_url": "http://image-studio-backend:5000", "upstream_url": "http://image-studio-backend:5000", "async_models": [{"id": row["id"], "task_type": "video.generate" if "videos/generations" in row["endpoints"] else "image.generate"} for row in rows], "execution_settings": execution_settings(), "binding": binding_status()},
     }
 
 

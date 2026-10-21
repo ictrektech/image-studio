@@ -3,6 +3,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -49,5 +50,13 @@ class BindingTests(unittest.TestCase):
                 saved.write_text(json.dumps({**config, 'execution_settings': {'profile': 'old'}}))
                 self.assertEqual(api.get('/api/v1/scheduler/binding').json()['configured'], False)
                 self.assertEqual(api.post('/api/v1/scheduler/binding', json={**config, 'binding_revision': 3}).status_code, 200)
+                pending = SimpleNamespace(status="queued", metadata={"scheduler_managed": True})
+                with patch('app.services.storage.load_job', return_value=pending), patch.object(Path, 'glob', return_value=[Path('owned/pending.json')]):
+                    response = api.post('/api/v1/scheduler/binding', json={**config, 'binding_revision': 4})
+                    self.assertEqual(response.status_code, 200, response.text)
+                    pending.metadata['scheduler_task_id'] = 'accepted'
+                    self.assertEqual(api.post('/api/v1/scheduler/binding', json={**config, 'binding_revision': 5}).status_code, 409)
+                    pending.status = 'failed'
+                    self.assertEqual(api.post('/api/v1/scheduler/binding', json={**config, 'binding_revision': 5}).status_code, 200)
                 saved.chmod(0o644)
                 self.assertEqual(api.post('/api/v1/scheduler/binding', json={**config, 'binding_revision': 4}).status_code, 503)

@@ -133,32 +133,35 @@ async def bind(request: Request):
     approved = {row["id"] for row in executors if row.get("app_id") == APP_ID and row.get("task_type") in {"image.generate", "video.generate"} and row.get("contract_version") == "1"}
     if any(executor not in approved for executor in config["models"].values()):
         raise HTTPException(422, "Executor not approved for this application")
-    with lock:
-        from app.services import scheduler
-        from app.services.storage import load_job
-        from app.config import settings
-        pending = [load_job(path.parent.name, path.stem) for path in settings.jobs_dir.glob("*/*.json")]
-        if any(not task.done() for task in scheduler._executions.values()) or any(job and job.metadata.get("scheduler_managed") and job.status not in {"succeeded", "failed"} for job in pending):
-            raise HTTPException(409, "Binding waits for active execution")
-        path = config_path()
-        if path.exists():
-            previous = read_config(for_rebinding=True)
-            if previous.get("binding_revision", 0) >= config["binding_revision"]:
-                if previous != config:
-                    raise HTTPException(409, "Binding revision conflict")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_name(path.name + "." + secrets.token_hex(8) + ".tmp")
-        with open(temporary, "x", opener=lambda filename, flags: os.open(filename, flags, 0o600)) as stream:
-            json.dump(config, stream)
-            stream.flush()
-            os.fsync(stream.fileno())
-        temporary.replace(path)
-    settings.scheduler_url = config["url"]
-    settings.scheduler_token = config["token"]
-    settings.scheduler_executor_token = config["executor_token"]
-    settings.scheduler_models = config["models"]
-    settings.scheduler_model_limits = config["model_limits"]
-    settings.scheduler_model_parameters = config["model_parameters"]
-    settings.scheduler_config = config
+    from app.services import scheduler
+    # Unaccepted outbox entries may follow the new approved binding. Accepted
+    # tasks and native executions retain their original identity until stopped.
+    async with scheduler._submission_lock:
+        with lock:
+            from app.services.storage import load_job
+            from app.config import settings
+            pending = [load_job(path.parent.name, path.stem) for path in settings.jobs_dir.glob("*/*.json")]
+            if any(not task.done() for task in scheduler._executions.values()) or any(job and job.metadata.get("scheduler_managed") and job.metadata.get("scheduler_task_id") and job.status not in {"succeeded", "failed"} for job in pending):
+                raise HTTPException(409, "Binding waits for active execution")
+            path = config_path()
+            if path.exists():
+                previous = read_config(for_rebinding=True)
+                if previous.get("binding_revision", 0) >= config["binding_revision"]:
+                    if previous != config:
+                        raise HTTPException(409, "Binding revision conflict")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_name(path.name + "." + secrets.token_hex(8) + ".tmp")
+            with open(temporary, "x", opener=lambda filename, flags: os.open(filename, flags, 0o600)) as stream:
+                json.dump(config, stream)
+                stream.flush()
+                os.fsync(stream.fileno())
+            temporary.replace(path)
+        settings.scheduler_url = config["url"]
+        settings.scheduler_token = config["token"]
+        settings.scheduler_executor_token = config["executor_token"]
+        settings.scheduler_models = config["models"]
+        settings.scheduler_model_limits = config["model_limits"]
+        settings.scheduler_model_parameters = config["model_parameters"]
+        settings.scheduler_config = config
     await scheduler.start()
     return {"configured": True, "binding_revision": config["binding_revision"]}

@@ -20,6 +20,7 @@ router = APIRouter(prefix="/api/v1/scheduler")
 _loop: asyncio.Task | None = None
 _executions: dict[str, asyncio.Task] = {}
 _locks: dict[str, asyncio.Lock] = {}
+_submission_lock = asyncio.Lock()
 RUNTIME_PARAMETER_FIELDS = ("weight_type", "tensor_type_rules", "cache_mode", "cache_option", "qwen_image_layers", "vae_tiling", "vae_tile_size", "vae_tile_overlap", "temporal_tiling", "temporal_tile_frames", "temporal_tile_overlap", "max_vram", "stream_layers", "auto_fit", "clip_on_cpu", "offload_to_cpu", "vae_cpu_fallback", "backend", "params_backend")
 
 
@@ -99,31 +100,33 @@ def validate_limits(job: JobRecord) -> None:
 
 
 async def submit(job: JobRecord, operator_authorization: str = "") -> None:
-    if settings.scheduler_config.get("lifecycle_protocol_version") == 1:
-        from .scheduler_lifecycle import LifecycleError
-        try:
-            await asyncio.to_thread(application_lifecycle().ensure, settings.scheduler_config)
-        except (LifecycleError, OSError):
-            raise HTTPException(503, "Application lifecycle unavailable") from None
-    validate_limits(job)
-    executor = settings.scheduler_models.get(model_id(job))
-    if not executor:
-        if settings.scheduler_required:
-            raise HTTPException(503, "Model executor is not approved")
-        executor = settings.scheduler_executor_id
-    from .scheduling_options import operator_headers
-    options = job.metadata.get("scheduling", {})
-    task = await _controller("POST", "/tasks", headers={"Idempotency-Key": job.job_id, **operator_headers(options, operator_authorization)}, json={
-        "protocol_version": 1, "app_task_id": job.job_id,
-        "executor": {"id": executor, "contract_version": "1", "task_type": "video.generate" if job.video_frames else "image.generate"},
-        "parameters": {"user_key": job.user_key, "job_id": job.job_id}, "inputs": [],
-        **({"scheduling": options} if options else {}),
-    })
-    # Reload so an execution finishing during submission cannot be overwritten by queued state.
-    current = load_job(job.user_key, job.job_id)
-    if current:
-        current.metadata["scheduler_task_id"] = task["task_id"]
-        save_job(current)
+    # Rebinding must not race a controller request whose receipt is not saved yet.
+    async with _submission_lock:
+        if settings.scheduler_config.get("lifecycle_protocol_version") == 1:
+            from .scheduler_lifecycle import LifecycleError
+            try:
+                await asyncio.to_thread(application_lifecycle().ensure, settings.scheduler_config)
+            except (LifecycleError, OSError):
+                raise HTTPException(503, "Application lifecycle unavailable") from None
+        validate_limits(job)
+        executor = settings.scheduler_models.get(model_id(job))
+        if not executor:
+            if settings.scheduler_required:
+                raise HTTPException(503, "Model executor is not approved")
+            executor = settings.scheduler_executor_id
+        from .scheduling_options import operator_headers
+        options = job.metadata.get("scheduling", {})
+        task = await _controller("POST", "/tasks", headers={"Idempotency-Key": job.job_id, **operator_headers(options, operator_authorization)}, json={
+            "protocol_version": 1, "app_task_id": job.job_id,
+            "executor": {"id": executor, "contract_version": "1", "task_type": "video.generate" if job.video_frames else "image.generate"},
+            "parameters": {"user_key": job.user_key, "job_id": job.job_id}, "inputs": [],
+            **({"scheduling": options} if options else {}),
+        })
+        # Reload so an execution finishing during submission cannot be overwritten by queued state.
+        current = load_job(job.user_key, job.job_id)
+        if current:
+            current.metadata["scheduler_task_id"] = task["task_id"]
+            save_job(current)
 
 
 async def prepare(job: JobRecord, operator_authorization: str = "") -> None:

@@ -412,3 +412,7 @@ Scheduler validation errors (HTTP 422) are returned immediately and the rejected
 job is marked failed, rather than retried forever in the local outbox. Deleting a
 rejected, unaccepted job never submits new work. A preempted job waiting for its
 next attempt is shown as queued.
+
+Unaccepted durable outbox jobs may follow a refreshed approved binding. Rebinding
+and submission share a lock so an in-flight submission cannot lose its receipt.
+Accepted tasks and native execution still block binding changes until stopped.

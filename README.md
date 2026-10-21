@@ -416,3 +416,7 @@ next attempt is shown as queued.
 Unaccepted durable outbox jobs may follow a refreshed approved binding. Rebinding
 and submission share a lock so an in-flight submission cannot lose its receipt.
 Accepted tasks and native execution still block binding changes until stopped.
+
+自动接入同时兼容新版 VOS 身份接口和旧版 VOS 的 `user/check` 应用身份核验；只接受 V-Scheduler 的精确已启用服务身份，普通用户及其他应用不能交接授权。用户无需手工配置服务令牌，既有共享目录和兼容地址继续保留。
+
+模型页面统一显示 V-Scheduler，添加云端模型入口打开 `com.ictrek.v-scheduler`；内部 `v-router` 协议标识及旧 API 路径仅用于兼容，不依赖单独的 V-Router 应用。

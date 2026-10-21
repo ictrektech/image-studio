@@ -83,7 +83,7 @@ function sortCapabilities(caps: string[]) {
 }
 
 export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo[]; onRefresh: () => void; t: typeof messages['zh-CN'] }) {
-  const vRouterSettingsUrl = `${window.location.origin}/#/app/app-drawer/com.ictrek.v-router/v-router`
+  const vRouterSettingsUrl = `${window.location.origin}/#/app/app-drawer/com.ictrek.v-scheduler/v-scheduler`
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
   const [selectedCapabilities, setSelectedCapabilities] = useState<string[]>([])

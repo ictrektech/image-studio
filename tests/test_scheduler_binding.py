@@ -17,6 +17,29 @@ from app.models import JobRecord
 
 
 class BindingTests(unittest.TestCase):
+    def test_legacy_vos_application_identity_is_checked_not_bypassed(self):
+        app = FastAPI()
+        app.include_router(binding.router)
+        for case in ['scheduler', 'admin', 'other-app', 'disabled', 'deleted', 'expired']:
+            with self.subTest(case=case):
+                user = {'id': 'context-user', 'username': 'com.ictrek.v-scheduler', 'role_code': 'system_admin', 'enable': 1, 'delete': 0}
+                code = 0
+                if case == 'admin': user['username'] = 'admin'
+                if case == 'other-app': user['username'] = 'com.ictrek.other'
+                if case == 'disabled': user['enable'] = 0
+                if case == 'deleted': user['delete'] = 1
+                if case == 'expired': code = 10001
+                client = AsyncMock()
+                client.__aenter__.return_value = client
+                client.get.side_effect = [
+                    httpx.Response(401, json={'error': 'invalid_token'}, request=httpx.Request('GET', 'http://identity/v1000/oauth2/userinfo')),
+                    httpx.Response(200, json={'code': code, 'data': user}, request=httpx.Request('GET', 'http://identity/v1000/user/check')),
+                ]
+                with patch.object(binding.httpx, 'AsyncClient', return_value=client), patch.dict(os.environ, {'VOS_USERINFO_URL': 'http://identity/v1000/oauth2/userinfo'}), TestClient(app) as api:
+                    response = api.post('/api/v1/scheduler/binding', json={}, headers={'Authorization':'Bearer fixture'})
+                    self.assertEqual(response.status_code, 422 if case == 'scheduler' else 403)
+                    self.assertEqual(client.get.call_args_list[1].args[0], 'http://identity/v1000/user/check')
+
     def test_native_scheduler_origin_is_not_an_openai_v1_endpoint(self):
         self.assertEqual(binding.UPSTREAM, 'http://image-studio-backend:5000')
 

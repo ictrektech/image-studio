@@ -89,8 +89,19 @@ async def bind(request: Request):
     try:
         async with httpx.AsyncClient(timeout=8, follow_redirects=False) as client:
             identity = await client.get(identity_url, headers={"Authorization": request.headers.get("authorization", "")})
-            identity.raise_for_status()
-            user = identity.json()
+            if identity.status_code == 401 and identity.json().get("error") == "invalid_token":
+                from urllib.parse import urlsplit, urlunsplit
+                endpoint = urlsplit(identity_url)
+                checked = await client.get(urlunsplit((endpoint.scheme, endpoint.netloc, "/v1000/user/check", "", "")), headers={"Authorization": request.headers.get("authorization", "")})
+                checked.raise_for_status()
+                envelope = checked.json()
+                verified = envelope.get("data", {})
+                if not (envelope.get("code") == 0 and verified.get("username") == "com.ictrek.v-scheduler" and verified.get("role_code") == "system_admin" and verified.get("enable") == 1 and verified.get("delete") == 0 and verified.get("id")):
+                    raise HTTPException(403, "V-Scheduler application identity required")
+                user = {"sub": verified["username"], "enable": verified["enable"]}
+            else:
+                identity.raise_for_status()
+                user = identity.json()
     except (httpx.HTTPError, ValueError):
         raise HTTPException(401, "VOS application identity required") from None
     if not isinstance(user, dict) or user.get("sub") != "com.ictrek.v-scheduler" or user.get("enable") != 1:

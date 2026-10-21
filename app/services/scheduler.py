@@ -335,7 +335,7 @@ async def inspect(attempt: str, body: dict, authorization: str = Header(default=
         record.update(status="failed", stopped=True, result={"error": "executor restarted; old execution confirmed stopped", "code": "EXECUTOR_RESTARTED", "retryable": True})
         _atomic(path, record)
     if record["status"] == "unknown" and _marker(path).get("stopped"):
-        record.update(status="cancelled" if record.get("cancel_requested") else "failed", stopped=True)
+        record.update(status="cancelled" if record.get("cancel_requested") and not record.get("preempted") else "failed", stopped=True)
         if record["status"] == "failed":
             record["result"] = {"error": "execution stopped after recovery", "retryable": True}
         _atomic(path, record)

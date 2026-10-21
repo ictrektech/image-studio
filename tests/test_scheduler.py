@@ -120,6 +120,12 @@ class AdapterCancellationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(result["stopped"], not native_alive)
                 persisted = json.loads(path.read_text())
                 self.assertEqual(persisted["status"], result["status"])
+                if native_alive and preempted:
+                    with patch.object(scheduler, "_marker", return_value={"stopped": True}), patch.object(scheduler, "_alive", return_value=False):
+                        recovered = await scheduler.inspect(attempt, body, "Bearer " + "x" * 32)
+                    self.assertEqual(recovered["status"], "failed")
+                    self.assertTrue(recovered["stopped"])
+                    self.assertTrue(recovered["result"]["retryable"])
             finally:
                 scheduler._executions.pop(attempt, None)
                 scheduler._locks.pop(attempt, None)

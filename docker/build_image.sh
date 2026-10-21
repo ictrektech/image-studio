@@ -520,6 +520,11 @@ for sheet in "${TARGET_SHEETS[@]}"; do
       backend)
         IMAGE="${BACKEND_REPOSITORY}:${TAG}"
         log "Building backend image: ${IMAGE}"
+        if [[ -n "${IMAGE_STUDIO_APPLICATION_BASE_IMAGE:-}" ]]; then
+          docker image inspect "$IMAGE_STUDIO_APPLICATION_BASE_IMAGE" >/dev/null
+          BACKEND_DOCKERFILE="docker/Dockerfile.application"
+          BUILD_ARGS+=(--build-arg "APPLICATION_BASE_IMAGE=$IMAGE_STUDIO_APPLICATION_BASE_IMAGE")
+        fi
         docker buildx build \
           --builder default \
           --load \

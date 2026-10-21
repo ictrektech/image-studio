@@ -192,8 +192,11 @@ def v_router_model_info(row: dict[str, Any]) -> dict[str, Any] | None:
 
 def v_router_api_candidates() -> list[str]:
     """Return V-Router addresses in VOS-network-first fallback order."""
+    preferred = settings.v_router_api_url
     candidates = [
-        settings.v_router_api_url,
+        *([preferred] if preferred not in {"http://v-router:8080", "http://v-router-backend:8080"} else []),
+        "http://v-scheduler:8080",
+        preferred,
         "http://v-router:8080",
         "http://v-router-backend:8080",
         settings.v_router_host_api_url,
@@ -229,7 +232,7 @@ async def _fetch_v_router_generation_models(access_token: str = "") -> tuple[lis
                     info["resolved_path"] = api_url
                     out.append(info)
             return out, api_url
-    raise RuntimeError("V-Router not found; tried " + ", ".join(errors))
+    raise RuntimeError("V-Scheduler unavailable; tried " + ", ".join(errors))
 
 
 async def fetch_v_router_generation_models(access_token: str = "") -> list[dict[str, Any]]:
@@ -245,7 +248,7 @@ async def v_router_connection_status(access_token: str = "") -> dict[str, Any]:
             "reachable": False,
             "api_url": "",
             "eligible_models": 0,
-            "error": "V-Router API URL is empty",
+            "error": "V-Scheduler API URL is empty",
         }
     try:
         models, api_url = await _fetch_v_router_generation_models(access_token)

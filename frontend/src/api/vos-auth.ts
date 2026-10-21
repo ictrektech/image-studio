@@ -230,10 +230,12 @@ function tokenFromLocalStorage(): string | null {
   return null
 }
 
-function tokenFromAccessStore(raw: string | null): string | null {
+export function tokenFromAccessStore(raw: string | null): string | null {
   if (!raw) return null
   try {
-    const data = JSON.parse(raw)
+    const stored = JSON.parse(raw)
+    const value = stored?.value ?? stored
+    const data = typeof value === 'string' ? JSON.parse(value) : value
     const token = data?.accessToken || data?.access_token || data?.token
     return typeof token === 'string' && token.trim() ? token.trim() : null
   } catch {

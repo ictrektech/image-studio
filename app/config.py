@@ -17,7 +17,7 @@ class Settings:
     # VOS containers share vos_default, so the internal backend DNS is the default.
     v_router_base_url = os.getenv("IMAGE_STUDIO_V_ROUTER_BASE_URL", "http://image-studio-backend:5000").rstrip("/")
     # V-Router API endpoint consumed by Image Studio for remote image/video models.
-    v_router_api_url = os.getenv("IMAGE_STUDIO_V_ROUTER_API_URL", "http://v-router:8080").rstrip("/")
+    v_router_api_url = os.getenv("IMAGE_STUDIO_V_ROUTER_API_URL", "http://v-scheduler:8080").rstrip("/")
     v_router_host_api_url = os.getenv(
         "IMAGE_STUDIO_V_ROUTER_HOST_API_URL", "http://host.docker.internal:22888"
     ).rstrip("/")

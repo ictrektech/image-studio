@@ -420,3 +420,5 @@ Accepted tasks and native execution still block binding changes until stopped.
 自动接入同时兼容新版 VOS 身份接口和旧版 VOS 的 `user/check` 应用身份核验；只接受 V-Scheduler 的精确已启用服务身份，普通用户及其他应用不能交接授权。用户无需手工配置服务令牌，既有共享目录和兼容地址继续保留。
 
 模型页面统一显示 V-Scheduler，添加云端模型入口打开 `com.ictrek.v-scheduler`；内部 `v-router` 协议标识及旧 API 路径仅用于兼容，不依赖单独的 V-Router 应用。
+
+VOS 登录态同时支持直接存储和旧版 `{value: ...}` 包装的 access store；沿用用户令牌，不把应用 context 身份提升为用户身份。统一推理入口默认 `http://v-scheduler:8080`，旧 `v-router` / `v-router-backend` 继续回退，自定义网关地址优先级保持不变。

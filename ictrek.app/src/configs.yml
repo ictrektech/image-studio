@@ -23,12 +23,12 @@ configs:
   - name: IMAGE_STUDIO_V_ROUTER_API_URL
     type: string
     title:
-      zh-CN: V-Router API 地址
-      en: V-Router API URL
+      zh-CN: V-Scheduler API 地址
+      en: V-Scheduler API URL
     description:
-      zh-CN: Image Studio 调用 V-Router 中已有生图/生视频模型的 API 地址；默认优先使用同一 VOS 网络内的 V-Router 别名。
-      en: API URL used by Image Studio to call image/video generation models already configured in V-Router. Defaults to the V-Router alias on the same VOS network.
-    default: http://v-router:8080
+      zh-CN: Image Studio 调用统一网关已有生图/生视频模型的地址；默认使用 v-scheduler，保留旧 V-Router 地址兼容。
+      en: Unified image/video gateway URL. Defaults to v-scheduler; legacy V-Router addresses remain compatible.
+    default: http://v-scheduler:8080
 
   - name: IMAGE_STUDIO_V_ROUTER_HOST_API_URL
     type: string

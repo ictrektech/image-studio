@@ -42,8 +42,13 @@ class VRouterModelsTest(unittest.IsolatedAsyncioTestCase):
         ):
             self.assertEqual(
                 v_router_api_candidates(),
-                ["http://v-router:8080", "http://v-router-backend:8080", "http://host.docker.internal:22888"],
+                ["http://v-scheduler:8080", "http://v-router:8080", "http://v-router-backend:8080", "http://host.docker.internal:22888"],
             )
+
+    def test_explicit_custom_gateway_remains_first(self):
+        with patch("app.services.v_router.settings.v_router_api_url", "http://custom-gateway:8080"):
+            self.assertEqual(v_router_api_candidates()[0], "http://custom-gateway:8080")
+            self.assertIn("http://v-router:8080", v_router_api_candidates())
 
     async def test_model_lookup_falls_back_to_host_port(self):
         failed = type("Response", (), {"raise_for_status": lambda self: (_ for _ in ()).throw(RuntimeError("missing"))})()
@@ -56,7 +61,7 @@ class VRouterModelsTest(unittest.IsolatedAsyncioTestCase):
             },
         )()
         client = AsyncMock()
-        client.get = AsyncMock(side_effect=[failed, failed, ready])
+        client.get = AsyncMock(side_effect=[failed, failed, failed, ready])
         client.__aenter__.return_value = client
         client.__aexit__.return_value = None
         with patch("app.services.v_router.httpx.AsyncClient", return_value=client), patch(

@@ -21,15 +21,19 @@ class PhotoCraftHandoffTests(unittest.TestCase):
             body = b"\x89PNG\r\n\x1a\ntransport-fixture"
             (root / "output.png").write_bytes(body)
             with (
-                patch.object(api, "verify_vos_identity", new=AsyncMock(side_effect=lambda token: token if token in {"owner", "other"} else "")),
+                patch.object(api, "current_user_key", new=AsyncMock(side_effect=lambda request: request.headers.get("x-vos-sub") or request.headers.get("authorization", "").removeprefix("Bearer "))),
                 patch.object(photocraft, "load_job", side_effect=lambda user, key: job if user == "owner" and key == "job" else None),
                 patch.object(photocraft, "job_dir", return_value=root),
                 TestClient(app) as client,
             ):
                 endpoint = "/api/v1/jobs/job/photocraft"
                 payload = {"filename": "output.png"}
-                self.assertEqual(client.post(endpoint, json=payload).status_code, 401)
+                self.assertEqual(client.post(endpoint, json=payload).status_code, 404)
                 self.assertEqual(client.post(endpoint, json=payload, headers={"Authorization": "Bearer other"}).status_code, 404)
+                # VOS may identify the same source owner through its proxy
+                # session headers rather than a frontend bearer token.
+                session = client.post(endpoint, json=payload, headers={"x-vos-sub": "owner"})
+                self.assertEqual(session.status_code, 200)
                 response = client.post(endpoint, json=payload, headers={"Authorization": "Bearer owner"})
                 self.assertEqual(response.status_code, 200)
                 handoff = response.json()

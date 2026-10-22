@@ -416,7 +416,8 @@ The old generic SD-Turbo precision/VRAM/tile preset cached on L4T is corrected
 on first load; prompts, dimensions and other saved settings are preserved.
 Generated images can be opened with **Edit in PhotoCraft** in both the generation
 conversation and job history. The handoff passes a same-origin output path;
-`POST /api/v1/jobs/{job_id}/photocraft` verifies the owner and returns a five-minute
+`POST /api/v1/jobs/{job_id}/photocraft` uses the same account/session ownership as
+generation and downloading, and returns a five-minute
 ticket for that image only. PhotoCraft can fetch it with its own app identity;
 the handoff does not expose or reuse the Image Studio user's VOS bearer token.
 Tickets expire on timeout or backend restart, and deleted outputs remain unavailable.

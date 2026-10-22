@@ -21,7 +21,7 @@ from app.services.immich import (
 from app.services.models import get_model, get_model_def, list_model_defs_with_hub_state, model_info, pull_model, stop_model, sync_model_hub
 from app.services.v_router import registration_payload, v_router_connection_status
 from app.services.templates import delete_template, default_template_id, list_templates, rename_template, save_template
-from app.services.session import bearer_token, current_user_key, sanitize, verify_vos_identity
+from app.services.session import bearer_token, current_user_key
 from app.services.storage import (
     delete_input,
     delete_job,
@@ -216,11 +216,9 @@ async def output_file(request: Request, job_id: str, filename: str):
 @router.post("/jobs/{job_id}/photocraft")
 async def photocraft_handoff(request: Request, job_id: str, payload: dict):
     from app.services.photocraft import issue
-    token = bearer_token(request)
-    identity = await verify_vos_identity(token) if token else ""
-    if not identity:
-        raise HTTPException(401, "VOS identity required")
-    return issue(sanitize(identity), job_id, str(payload.get("filename") or ""))
+    # Use the same account/session ownership as generation and downloading;
+    # reinterpreting the source token under another audience loses that owner.
+    return issue(await current_user_key(request), job_id, str(payload.get("filename") or ""))
 
 
 @router.get("/photocraft/handoffs/{ticket}/{filename}")

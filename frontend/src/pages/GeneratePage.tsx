@@ -321,7 +321,18 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
   useEffect(() => {
     if (initializedDefaults.current || !activeModel) return
     initializedDefaults.current = true
-    if (!hadStoredPayload.current) setPayload(current => applyRuntimeDefaults(current, activeModel, isVideoModel))
+    setPayload(current => {
+      if (!hadStoredPayload.current) return applyRuntimeDefaults(current, activeModel, isVideoModel)
+      const defaults = activeModel.runtime?.defaults || {}
+      // Repair only the old generic SD-Turbo preset cached on an L4T device.
+      // Keep prompts, dimensions and other saved/custom runtime settings.
+      if (current.model_key === 'sd-turbo' && !current.model_variant && defaults.weight_type === 'q4_0'
+        && defaults.max_vram === 2 && ['', 'f16'].includes(current.weight_type || '')
+        && current.max_vram === 0 && current.vae_tile_size === '128x128') {
+        return { ...current, weight_type: defaults.weight_type, max_vram: defaults.max_vram, vae_tile_size: defaults.vae_tile_size ?? '' }
+      }
+      return current
+    })
   }, [activeModel, isVideoModel])
 
   useEffect(() => {

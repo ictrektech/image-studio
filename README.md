@@ -409,6 +409,8 @@ both expose the effective profile defaults, including 512×512 and 4 steps for
 SD-Turbo. Omitted API fields use those defaults; explicitly supplied dimensions
 and runtime settings retain their normal calibration checks. The VOS package
 uses fixed internal Model Hub / V-Scheduler service URLs.
+The old generic SD-Turbo precision/VRAM/tile preset cached on L4T is corrected
+on first load; prompts, dimensions and other saved settings are preserved.
 Generated images can be opened with **Edit in PhotoCraft** in both the generation
 conversation and job history. The handoff passes a same-origin output path;
 PhotoCraft retrieves the image using the current VOS account.

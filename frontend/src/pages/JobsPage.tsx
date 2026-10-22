@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CloudUpload, Download, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
+import { CloudUpload, Download, Pencil, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -7,6 +7,7 @@ import { Panel, PanelTitle } from '@/components/app/panel'
 import { StatusBadge } from '@/components/app/status-badge'
 import { useConfirm } from '@/components/app/confirm'
 import { api, JobRecord } from '../api/client'
+import { openInPhotoCraft, photoCraftUrl } from '../api/photoCraft'
 import { messages } from '../i18n'
 import { hasFailedUpload, hasPendingUpload, hasPendingUploads, ImmichUploadStatus, useImmichUploads } from '../immichUploads'
 
@@ -80,6 +81,20 @@ export default function JobsPage({ t }: { t: typeof messages['zh-CN'] }) {
                 {output && (
                   <Button variant="outline" size="icon" asChild>
                     <a href={api.outputUrl(job.job_id, output)} download title={t.downloadOutput}><Download size={15} /></a>
+                  </Button>
+                )}
+                {output && !isVideo && (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    title={t.editInPhotoCraft}
+                    onClick={() => {
+                      // 无平台桥或 openTab 被拒时退化为新窗口。
+                      const fallback = () => window.open(photoCraftUrl(job.job_id, output), '_blank', 'noopener')
+                      openInPhotoCraft(job.job_id, output, t.editInPhotoCraft).then(opened => { if (!opened) fallback() }).catch(fallback)
+                    }}
+                  >
+                    <Pencil size={15} />
                   </Button>
                 )}
                 {job.status === 'succeeded' && !pending && !failed && (

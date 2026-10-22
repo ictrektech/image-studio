@@ -404,7 +404,12 @@ The V-Scheduler gateway accepts the equivalent `X-VScheduler-*` headers and pass
 options to this first-party executor. See the [unified guide](https://github.com/ictrektech/V-Scheduler/blob/main/docs/application-integration.md).
 
 L4T SD-Turbo defaults to Q4 weights and `max_vram=2.0` from the original shared
-checkpoint. These settings match its measured calibration; AMD CUDA retains its own
+checkpoint and uses the native VAE tile size. The model list and generation API
+both expose the effective profile defaults, including 512×512 and 4 steps for
+SD-Turbo. Omitted API fields use those defaults; explicitly supplied dimensions
+and runtime settings retain their normal calibration checks. The VOS package
+uses fixed internal Model Hub / V-Scheduler service URLs.
+These settings match its measured calibration; AMD CUDA retains its own
 profile settings and calibration. Oversized or altered execution settings require a
 matching approved calibration.
 

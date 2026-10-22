@@ -1315,7 +1315,7 @@ def get_model_def(key: str, variant_id: str = "") -> dict[str, Any]:
 def _effective_model_item(item: dict[str, Any], variant_id: str = "") -> dict[str, Any]:
     # Orin 的统一内存使用本机实测的低内存边界，保留原始共享权重。
     if item["key"] == "sd-turbo" and settings.profile == "l4t":
-        item = {**item, "runtime": _with_runtime_defaults(item["runtime"], weight_type="q4_0", max_vram=2.0)}
+        item = {**item, "runtime": _with_runtime_defaults(item["runtime"], weight_type="q4_0", max_vram=2.0, vae_tile_size="")}
     variant_id = (variant_id or "").strip()
     if not variant_id:
         return item
@@ -1370,7 +1370,8 @@ def _relative_candidates(item: dict[str, Any]) -> list[str]:
 
 
 def model_info(item: dict[str, Any]) -> ModelInfo:
-    return ModelInfo(**_model_payload(item, include_variants=True))
+    effective = _effective_model_item(item) if not item.get("variant_id") else item
+    return ModelInfo(**_model_payload(effective, include_variants=True))
 
 
 def _model_payload(item: dict[str, Any], include_variants: bool = False) -> dict[str, Any]:

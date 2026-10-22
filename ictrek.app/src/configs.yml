@@ -10,46 +10,6 @@ configs:
     default: /data/vos_workspace/model_hub
     hints: [com.ictrek.model.storage]
 
-  - name: MODEL_HUB_API_URL
-    type: string
-    title:
-      zh-CN: Model Hub API 地址
-      en: Model Hub API URL
-    description:
-      zh-CN: VOS 网络内的 Model Hub 后端 API 地址，用于触发模型下载和同步。
-      en: Model Hub backend API URL inside VOS network, used to trigger model pull and sync.
-    default: http://v-scheduler-model-hub:6005
-
-  - name: IMAGE_STUDIO_V_ROUTER_API_URL
-    type: string
-    title:
-      zh-CN: V-Scheduler API 地址
-      en: V-Scheduler API URL
-    description:
-      zh-CN: Image Studio 调用统一网关已有生图/生视频模型的地址；默认使用 v-scheduler，保留旧 V-Router 地址兼容。
-      en: Unified image/video gateway URL. Defaults to v-scheduler; legacy V-Router addresses remain compatible.
-    default: http://v-scheduler:8080
-
-  - name: IMAGE_STUDIO_V_ROUTER_HOST_API_URL
-    type: string
-    title:
-      zh-CN: V-Router 宿主机回退地址
-      en: V-Router host fallback URL
-    description:
-      zh-CN: vos_default 内部别名不可达时使用的宿主机地址；默认访问 V-Router 暴露端口 22888。
-      en: Host URL used when the vos_default aliases are unreachable. Defaults to V-Router's exposed port 22888.
-    default: http://host.docker.internal:22888
-
-  - name: IMAGE_STUDIO_V_ROUTER_BASE_URL
-    type: string
-    title:
-      zh-CN: Image Studio 对 V-Router 暴露地址
-      en: Image Studio URL for V-Router
-    description:
-      zh-CN: V-Router 自动发现或注册 Image Studio 本地 ready 模型时回调的 Image Studio 后端地址；不要填 V-Router 地址。
-      en: Image Studio backend URL that V-Router uses when discovering or registering Image Studio's local ready models. Do not set this to the V-Router URL.
-    default: http://image-studio-backend:5000
-
   - name: IMAGE_STUDIO_VOS_SSO_ENABLED
     type: boolean
     title:

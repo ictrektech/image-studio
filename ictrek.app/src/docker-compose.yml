@@ -8,10 +8,10 @@ x-image-studio-backend-env: &image-studio-backend-env
   MODEL_HUB_SHARED_MODELS_PATH: /modelhub
   IMAGE_STUDIO_SCHEDULER_REQUIRED: "true"
   VOS_USERINFO_URL: http://${VOS_HOST_GW_IP}:${VOS_API_GW_PORT_INTERNAL}/v1000/oauth2/userinfo
-  MODEL_HUB_API_URL: ${MODEL_HUB_API_URL:-http://v-scheduler-model-hub:6005}
-  IMAGE_STUDIO_V_ROUTER_API_URL: ${IMAGE_STUDIO_V_ROUTER_API_URL:-http://v-scheduler:8080}
-  IMAGE_STUDIO_V_ROUTER_HOST_API_URL: ${IMAGE_STUDIO_V_ROUTER_HOST_API_URL:-http://host.docker.internal:22888}
-  IMAGE_STUDIO_V_ROUTER_BASE_URL: ${IMAGE_STUDIO_V_ROUTER_BASE_URL:-http://image-studio-backend:5000}
+  MODEL_HUB_API_URL: http://v-scheduler-model-hub:6005
+  IMAGE_STUDIO_V_ROUTER_API_URL: http://v-scheduler:8080
+  IMAGE_STUDIO_V_ROUTER_HOST_API_URL: http://host.docker.internal:22888
+  IMAGE_STUDIO_V_ROUTER_BASE_URL: http://image-studio-backend:5000
   IMAGE_STUDIO_VOS_SSO_ENABLED: ${IMAGE_STUDIO_VOS_SSO_ENABLED:-true}
   # 平台内部网关（Traefik web-internal，HTTP 无 TLS）：VOS 与 Immich 的地址统一按
   # host + port + app 路径前缀推导，不需要记忆各应用自己的宿主端口。

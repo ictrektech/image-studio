@@ -88,6 +88,39 @@ class SchedulerAdapterTests(unittest.TestCase):
 
 
 class AdapterCancellationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_sd_turbo_picker_and_minimal_api_match_each_profile_calibration(self):
+        from app.services import generation, models, scheduler
+        from app.services.scheduler_binding import execution_settings
+        for profile in ("l4t", "thor", "amd-cuda"):
+            with self.subTest(profile=profile), patch.object(settings, "profile", profile):
+                expected = {field: JobRecord.model_fields[field].default for field in RUNTIME_PARAMETER_FIELDS}
+                expected.update(weight_type="q4_0" if profile == "l4t" else "f16",
+                                max_vram=2.0 if profile == "l4t" else 0.0,
+                                vae_tiling=True, vae_tile_size="" if profile == "l4t" else "128x128",
+                                has_reference=False)
+                limits = dict(width=512, height=512, steps=4, batch_count=1, video_frames=0,
+                              prompt_characters=4000, negative_prompt_characters=4000)
+                with (
+                    patch.object(settings, "scheduler_required", True),
+                    patch.object(settings, "scheduler_config", {"execution_settings": execution_settings()}),
+                    patch.object(settings, "scheduler_model_limits", {"sd-turbo": limits}),
+                    patch.object(settings, "scheduler_model_parameters", {"sd-turbo": expected}),
+                    patch.object(generation, "assert_model_hub_ready", new=AsyncMock()),
+                    patch.object(generation, "model_path_for", return_value=Path("/models/sd-turbo.safetensors")),
+                    patch.object(scheduler, "prepare", new=AsyncMock(side_effect=lambda job, **kwargs: validate_limits(job))),
+                ):
+                    info = models.get_model("sd-turbo")
+                    for options in ({}, info.runtime["defaults"]):
+                        job = await generation.create_job("synthetic", generation.GenerateRequest(
+                            **{**options, "prompt": "a cup", "model_key": "sd-turbo"}))
+                        self.assertEqual((job.width, job.height, job.steps), (512, 512, 4))
+                        self.assertEqual(runtime_parameters(job), expected)
+                    # Explicit input is never silently shrunk to bypass approval.
+                    with self.assertRaises(HTTPException) as error:
+                        await generation.create_job("synthetic", generation.GenerateRequest(
+                            prompt="a cup", model_key="sd-turbo", width=768))
+                    self.assertIn("width", error.exception.detail)
+
     async def test_rejected_submission_is_visible_and_never_replayed_by_delete(self):
         from app.services import scheduler
         job = SimpleNamespace(user_key="synthetic", job_id="synthetic", status="queued", error="", metadata={"scheduling":{"preemptible":True}})

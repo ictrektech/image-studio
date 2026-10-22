@@ -100,6 +100,13 @@ async def create_job(user_key: str, request: GenerateRequest, access_token: str 
     video_mode = runtime.get("mode") == "video"
     defaults = runtime.get("defaults") or {}
     parameters = runtime.get("parameters") or {}
+    # API callers and the model picker use the same family/profile defaults.
+    # Preserve explicit values, including values equal to the request schema defaults.
+    request = request.model_copy(update={
+        field: defaults[field]
+        for field in ("width", "height", "steps", "cfg_scale", "sampler", "vae_tile_size")
+        if field not in request.model_fields_set and field in defaults
+    })
     await assert_model_hub_ready(request.model_key, request.model_variant)
     model_path = model_path_for(request.model_key, request.model_variant)
     now = datetime.now(timezone.utc)

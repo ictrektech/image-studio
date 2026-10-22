@@ -257,6 +257,7 @@ export const api = {
   listJobs: () => request<JobRecord[]>('/api/v1/jobs'),
   getJob: (jobId: string) => request<JobRecord>(`/api/v1/jobs/${jobId}`),
   deleteJob: (jobId: string) => request<{ deleted: boolean; job_id: string }>(`/api/v1/jobs/${jobId}`, { method: 'DELETE' }),
+  photoCraftHandoff: (jobId: string, filename: string) => request<{ url: string; expires_at: number }>(`/api/v1/jobs/${jobId}/photocraft`, { method: 'POST', body: JSON.stringify({ filename }) }),
   uploadJobToImmich: (jobId: string, force = false) =>
     request<JobRecord>(`/api/v1/jobs/${jobId}/immich-upload${force ? '?force=true' : ''}`, { method: 'POST' }),
   retryImmichUpload: (jobId: string) => request<JobRecord>(`/api/v1/jobs/${jobId}/immich-upload/retry`, { method: 'POST' }),

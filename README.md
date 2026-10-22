@@ -403,8 +403,11 @@ authorization. Force does not bypass hard budgets, stale telemetry or stop confi
 The V-Scheduler gateway accepts the equivalent `X-VScheduler-*` headers and passes the
 options to this first-party executor. See the [unified guide](https://github.com/ictrektech/V-Scheduler/blob/main/docs/application-integration.md).
 
-L4T SD-Turbo defaults to Q4 weights and `max_vram=2.0` from the original shared
-checkpoint and uses the native VAE tile size. The model list and generation API
+L4T SD-Turbo defaults to Q4 weights, `max_vram=1.5`, 128×128 VAE tiles and
+`clip_on_cpu=true` from the original shared checkpoint. The short- and maximum-
+length prompt cases completed under a 2304 MiB calibration cgroup ceiling; the
+approved unified-memory budget is 2304 MiB, with node safety headroom retained.
+The model list and generation API
 both expose the effective profile defaults, including 512×512 and 4 steps for
 SD-Turbo. Omitted API fields use those defaults; explicitly supplied dimensions
 and runtime settings retain their normal calibration checks. The VOS package
@@ -413,7 +416,10 @@ The old generic SD-Turbo precision/VRAM/tile preset cached on L4T is corrected
 on first load; prompts, dimensions and other saved settings are preserved.
 Generated images can be opened with **Edit in PhotoCraft** in both the generation
 conversation and job history. The handoff passes a same-origin output path;
-PhotoCraft retrieves the image using the current VOS account.
+`POST /api/v1/jobs/{job_id}/photocraft` verifies the owner and returns a five-minute
+ticket for that image only. PhotoCraft can fetch it with its own app identity;
+the handoff does not expose or reuse the Image Studio user's VOS bearer token.
+Tickets expire on timeout or backend restart, and deleted outputs remain unavailable.
 These settings match its measured calibration; AMD CUDA retains its own
 profile settings and calibration. Oversized or altered execution settings require a
 matching approved calibration.

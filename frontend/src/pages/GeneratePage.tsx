@@ -24,7 +24,8 @@ import { Panel, PanelHeading, PanelTitle } from '@/components/app/panel'
 import { StatusBadge } from '@/components/app/status-badge'
 import { useConfirm } from '@/components/app/confirm'
 import { api, GeneratePayload, InputItem, JobRecord, ModelInfo, SessionInfo, TemplateInfo } from '../api/client'
-import { openInPhotoCraft, photoCraftUrl } from '../api/photoCraft'
+import { openInPhotoCraft } from '../api/photoCraft'
+import { repairLegacyL4TDefaults } from '../generationDefaults'
 import { messages } from '../i18n'
 import { hasFailedUpload, hasPendingUploads, ImmichUploadStatus, useImmichUploads } from '../immichUploads'
 
@@ -323,15 +324,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
     initializedDefaults.current = true
     setPayload(current => {
       if (!hadStoredPayload.current) return applyRuntimeDefaults(current, activeModel, isVideoModel)
-      const defaults = activeModel.runtime?.defaults || {}
-      // Repair only the old generic SD-Turbo preset cached on an L4T device.
-      // Keep prompts, dimensions and other saved/custom runtime settings.
-      if (current.model_key === 'sd-turbo' && !current.model_variant && defaults.weight_type === 'q4_0'
-        && defaults.max_vram === 2 && ['', 'f16'].includes(current.weight_type || '')
-        && current.max_vram === 0 && current.vae_tile_size === '128x128') {
-        return { ...current, weight_type: defaults.weight_type, max_vram: defaults.max_vram, vae_tile_size: defaults.vae_tile_size ?? '' }
-      }
-      return current
+      return repairLegacyL4TDefaults(current, activeModel.runtime?.defaults || {})
     })
   }, [activeModel, isVideoModel])
 
@@ -789,8 +782,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
                       {job.outputs[0] && !isVideoFile(job.outputs[0]) && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => reuseOutput(job, job.outputs[0])}><Wand2 size={14} />{t.continueThread}</Button>}
                       {job.outputs[0] && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild><a href={api.outputUrl(job.job_id, job.outputs[0])} download><Download size={14} />{t.downloadOutput}</a></Button>}
                       {job.outputs[0] && !isVideoFile(job.outputs[0]) && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => {
-                        const fallback = () => window.open(photoCraftUrl(job.job_id, job.outputs[0]), '_blank', 'noopener')
-                        openInPhotoCraft(job.job_id, job.outputs[0], t.editInPhotoCraft).then(opened => { if (!opened) fallback() }).catch(fallback)
+                        openInPhotoCraft(job.job_id, job.outputs[0], t.editInPhotoCraft).catch(error => toast.error(error instanceof Error ? error.message : t.generationFailed))
                       }}><Pencil size={14} />{t.editInPhotoCraft}</Button>}
                       {job.status === 'succeeded' && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => uploadJob(job)}><CloudUpload size={14} />{t.immichUpload}</Button>}
                       {hasFailedUpload(job) && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => retryImmich(job)}><RotateCcw size={14} />{t.immichRetry}</Button>}

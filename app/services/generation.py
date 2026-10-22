@@ -161,7 +161,7 @@ async def create_job(user_key: str, request: GenerateRequest, access_token: str 
         video_frames=effective_video_frames if parameters.get("video_frames", False) else 0,
         fps=(request.fps or int(defaults.get("fps", 0) or 0)) if parameters.get("fps", False) else 0,
         vae_tiling=_runtime_bool(request.vae_tiling, defaults, parameters, "vae_tiling", False),
-        vae_tile_size=request.vae_tile_size.strip() if parameters.get("vae_tile_size", True) else "",
+        vae_tile_size=(request.vae_tile_size.strip() or str(defaults.get("vae_tile_size", ""))) if parameters.get("vae_tile_size", True) else "",
         vae_tile_overlap=_runtime_float(request.vae_tile_overlap, defaults, parameters, "vae_tile_overlap", 0.5),
         temporal_tiling=_runtime_bool(request.temporal_tiling, defaults, parameters, "temporal_tiling", False),
         temporal_tile_frames=_runtime_int(request.temporal_tile_frames, defaults, parameters, "temporal_tile_frames", 4),

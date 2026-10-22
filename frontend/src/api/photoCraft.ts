@@ -13,20 +13,23 @@ type WindowWithOpenTab = Window & {
   }
 }
 
-/** PhotoCraft 用当前账户取回同源图片，交接地址不携带源应用令牌。 */
-export function photoCraftUrl(jobId: string, filename: string): string {
+/** 只传递已授权的临时图片地址，不把 VOS 登录令牌放进交接 URL。 */
+export function photoCraftUrl(outputPath: string, filename: string): string {
   const params = new URLSearchParams({
-    open: api.outputUrl(jobId, filename).split('?')[0],
+    open: outputPath,
     name: filename,
     source: SOURCE_APP_ID,
   })
   return `${PHOTOCRAFT_PATH}?${params.toString()}`
 }
 
-/** 打开 PhotoCraft 编辑这张图；返回 false 表示当前环境没有桥，调用方降级。 */
-export async function openInPhotoCraft(jobId: string, filename: string, title = 'PhotoCraft'): Promise<boolean> {
-  const openTab = (window as WindowWithOpenTab).vos_platform?.platform?.openTab
-  if (typeof openTab !== 'function') return false
-  await openTab({ url: photoCraftUrl(jobId, filename), title })
-  return true
+/** 打开编辑器；无平台桥或桥不可用时打开新窗口。 */
+export async function openInPhotoCraft(jobId: string, filename: string, title = 'PhotoCraft'): Promise<void> {
+  const handoff = await api.photoCraftHandoff(jobId, filename)
+  const url = photoCraftUrl(handoff.url, filename)
+  const platform = (window as WindowWithOpenTab).vos_platform?.platform
+  if (typeof platform?.openTab === 'function') {
+    try { await platform.openTab({ url, title }); return } catch { /* fall back below */ }
+  }
+  window.open(url, '_blank', 'noopener')
 }

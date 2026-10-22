@@ -95,8 +95,8 @@ class AdapterCancellationTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(profile=profile), patch.object(settings, "profile", profile):
                 expected = {field: JobRecord.model_fields[field].default for field in RUNTIME_PARAMETER_FIELDS}
                 expected.update(weight_type="q4_0" if profile == "l4t" else "f16",
-                                max_vram=2.0 if profile == "l4t" else 0.0,
-                                vae_tiling=True, vae_tile_size="" if profile == "l4t" else "128x128",
+                                max_vram=1.5 if profile == "l4t" else 0.0,
+                                vae_tiling=True, vae_tile_size="128x128", clip_on_cpu=profile == "l4t",
                                 has_reference=False)
                 limits = dict(width=512, height=512, steps=4, batch_count=1, video_frames=0,
                               prompt_characters=4000, negative_prompt_characters=4000)

@@ -7,7 +7,8 @@ import { Panel, PanelTitle } from '@/components/app/panel'
 import { StatusBadge } from '@/components/app/status-badge'
 import { useConfirm } from '@/components/app/confirm'
 import { api, JobRecord } from '../api/client'
-import { openInPhotoCraft, photoCraftUrl } from '../api/photoCraft'
+import { openInPhotoCraft } from '../api/photoCraft'
+import { toast } from 'sonner'
 import { messages } from '../i18n'
 import { hasFailedUpload, hasPendingUpload, hasPendingUploads, ImmichUploadStatus, useImmichUploads } from '../immichUploads'
 
@@ -89,9 +90,7 @@ export default function JobsPage({ t }: { t: typeof messages['zh-CN'] }) {
                     size="icon"
                     title={t.editInPhotoCraft}
                     onClick={() => {
-                      // 无平台桥或 openTab 被拒时退化为新窗口。
-                      const fallback = () => window.open(photoCraftUrl(job.job_id, output), '_blank', 'noopener')
-                      openInPhotoCraft(job.job_id, output, t.editInPhotoCraft).then(opened => { if (!opened) fallback() }).catch(fallback)
+                      openInPhotoCraft(job.job_id, output, t.editInPhotoCraft).catch(error => toast.error(error instanceof Error ? error.message : t.generationFailed))
                     }}
                   >
                     <Pencil size={15} />

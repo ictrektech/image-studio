@@ -409,6 +409,9 @@ both expose the effective profile defaults, including 512×512 and 4 steps for
 SD-Turbo. Omitted API fields use those defaults; explicitly supplied dimensions
 and runtime settings retain their normal calibration checks. The VOS package
 uses fixed internal Model Hub / V-Scheduler service URLs.
+Generated images can be opened with **Edit in PhotoCraft** in both the generation
+conversation and job history. The handoff passes a same-origin output path;
+PhotoCraft retrieves the image using the current VOS account.
 These settings match its measured calibration; AMD CUDA retains its own
 profile settings and calibration. Oversized or altered execution settings require a
 matching approved calibration.

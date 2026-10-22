@@ -13,10 +13,10 @@ type WindowWithOpenTab = Window & {
   }
 }
 
-/** PhotoCraft 的入口 URL；open 指向带凭据的同源图片地址，PhotoCraft 可直接加载。 */
+/** PhotoCraft 用当前账户取回同源图片，交接地址不携带源应用令牌。 */
 export function photoCraftUrl(jobId: string, filename: string): string {
   const params = new URLSearchParams({
-    open: api.outputUrl(jobId, filename),
+    open: api.outputUrl(jobId, filename).split('?')[0],
     name: filename,
     source: SOURCE_APP_ID,
   })

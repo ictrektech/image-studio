@@ -24,6 +24,7 @@ import { Panel, PanelHeading, PanelTitle } from '@/components/app/panel'
 import { StatusBadge } from '@/components/app/status-badge'
 import { useConfirm } from '@/components/app/confirm'
 import { api, GeneratePayload, InputItem, JobRecord, ModelInfo, SessionInfo, TemplateInfo } from '../api/client'
+import { openInPhotoCraft, photoCraftUrl } from '../api/photoCraft'
 import { messages } from '../i18n'
 import { hasFailedUpload, hasPendingUploads, ImmichUploadStatus, useImmichUploads } from '../immichUploads'
 
@@ -200,6 +201,8 @@ function readInitialPayload(): GeneratePayload {
 
 export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { models: ModelInfo[]; onRefresh: () => void; onOpenModels: () => void; t: typeof messages['zh-CN'] }) {
   const [payload, setPayload] = useState<GeneratePayload>(readInitialPayload)
+  const hadStoredPayload = useRef(Boolean(readStoredPayload(payload.model_key, payload.model_variant)))
+  const initializedDefaults = useRef(false)
   const [jobs, setJobs] = useState<JobRecord[]>([])
   const [inputs, setInputs] = useState<InputItem[]>([])
   const [session, setSession] = useState<SessionInfo | null>(null)
@@ -314,6 +317,12 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
       batch_count: nextVideoModel ? 1 : base.batch_count,
     }
   }
+
+  useEffect(() => {
+    if (initializedDefaults.current || !activeModel) return
+    initializedDefaults.current = true
+    if (!hadStoredPayload.current) setPayload(current => applyRuntimeDefaults(current, activeModel, isVideoModel))
+  }, [activeModel, isVideoModel])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -768,6 +777,10 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {job.outputs[0] && !isVideoFile(job.outputs[0]) && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => reuseOutput(job, job.outputs[0])}><Wand2 size={14} />{t.continueThread}</Button>}
                       {job.outputs[0] && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild><a href={api.outputUrl(job.job_id, job.outputs[0])} download><Download size={14} />{t.downloadOutput}</a></Button>}
+                      {job.outputs[0] && !isVideoFile(job.outputs[0]) && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => {
+                        const fallback = () => window.open(photoCraftUrl(job.job_id, job.outputs[0]), '_blank', 'noopener')
+                        openInPhotoCraft(job.job_id, job.outputs[0], t.editInPhotoCraft).then(opened => { if (!opened) fallback() }).catch(fallback)
+                      }}><Pencil size={14} />{t.editInPhotoCraft}</Button>}
                       {job.status === 'succeeded' && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => uploadJob(job)}><CloudUpload size={14} />{t.immichUpload}</Button>}
                       {hasFailedUpload(job) && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => retryImmich(job)}><RotateCcw size={14} />{t.immichRetry}</Button>}
                       <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-destructive hover:text-destructive" onClick={() => deleteJob(job)}><Trash2 size={14} />{job.outputs.some(isVideoFile) ? t.deleteVideoOutput : t.deleteOutput}</Button>

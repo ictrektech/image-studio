@@ -24,13 +24,14 @@ _submission_lock = asyncio.Lock()
 RUNTIME_PARAMETER_FIELDS = ("weight_type", "tensor_type_rules", "cache_mode", "cache_option", "qwen_image_layers", "vae_tiling", "vae_tile_size", "vae_tile_overlap", "temporal_tiling", "temporal_tile_frames", "temporal_tile_overlap", "max_vram", "stream_layers", "auto_fit", "clip_on_cpu", "offload_to_cpu", "vae_cpu_fallback", "backend", "params_backend")
 
 
-def _atomic(path: Path, value: dict) -> None:
+def _atomic(path: Path, value: dict, *, durable: bool = True) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
     with temporary.open("w") as stream:
         json.dump(value, stream)
         stream.flush()
-        os.fsync(stream.fileno())
+        if durable:
+            os.fsync(stream.fileno())
     temporary.replace(path)
 
 
@@ -243,7 +244,9 @@ async def stop() -> None:
 
 
 def _lease(path: Path, seconds: int) -> None:
-    _atomic(path.with_suffix(".lease"), {"deadline": time.monotonic() + seconds})
+    # A monotonic lease is ephemeral. Atomic replacement is required, but forcing
+    # a durable disk flush can stall renewal behind unrelated image/model I/O.
+    _atomic(path.with_suffix(".lease"), {"deadline": time.monotonic() + seconds}, durable=False)
 
 
 def _marker(path: Path) -> dict:
@@ -280,13 +283,20 @@ async def _execute(path: Path, record: dict, job: JobRecord) -> None:
     try:
         await run_job(job)
         state = load_job(job.user_key, job.job_id)
-        cancelled = _read(path).get("cancel_requested", False) or _read(path.with_suffix(".lease")).get("deadline", 0) <= time.monotonic()
-        record["status"] = "cancelled" if cancelled else (state.status if state and state.status in {"succeeded", "failed"} else "failed")
+        cancelled = _read(path).get("cancel_requested", False)
+        expired = _read(path.with_suffix(".lease")).get("deadline", 0) <= time.monotonic()
+        record["status"] = "cancelled" if cancelled else "failed" if expired else (state.status if state and state.status in {"succeeded", "failed"} else "failed")
         record["result"] = {"job_id": job.job_id, "outputs": state.outputs if state else [], "error": state.error if state else "job unavailable"}
+        if expired and not cancelled:
+            record["result"].update(code="NATIVE_LEASE_EXPIRED", retryable=True, error="Native execution lease expired; retry requires confirmed native exit")
     except asyncio.CancelledError:
         # run_job handles cancellation and terminates its child; do not report stopped before this returns.
         await cancel_job(job.user_key, job.job_id, local_only=True)
-        record["status"] = "cancelled"
+        cancelled = _read(path).get("cancel_requested", False)
+        record["status"] = "cancelled" if cancelled else "failed"
+        if not cancelled:
+            expired = _read(path.with_suffix(".lease")).get("deadline", 0) <= time.monotonic()
+            record["result"] = {"code": "NATIVE_LEASE_EXPIRED" if expired else "EXECUTOR_SHUTDOWN", "retryable": True, "error": "Execution interrupted; retry requires confirmed native exit"}
     finally:
         watcher.cancel()
         await asyncio.gather(watcher, return_exceptions=True)

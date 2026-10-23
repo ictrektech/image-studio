@@ -213,3 +213,51 @@ class LeaseSupervisorTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(marker["stopped"])
             self.assertFalse(Path(f"/proc/{marker.get('child_pid', 0)}").exists())
             self.assertEqual(json.loads(lease.read_text()).keys(), {"deadline"})
+
+
+class LeasePressureRegressionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_lease_renewals_survive_slow_durable_disk_flush(self):
+        from app.services import scheduler
+        # The real child supervisor must stay alive while durable disk writes stall.
+        with tempfile.TemporaryDirectory() as folder:
+            lease = Path(folder) / 'attempt.lease'
+            scheduler._lease(lease, 1)
+            process = await asyncio.create_subprocess_exec(
+                sys.executable, '-m', 'app.services.scheduler_process', str(lease),
+                sys.executable, '-c', 'import time; time.sleep(2)',
+            )
+            try:
+                with patch.object(scheduler.os, 'fsync', side_effect=lambda _fd: time.sleep(1.2)):
+                    while process.returncode is None:
+                        await asyncio.to_thread(scheduler._lease, lease, 1)
+                        await asyncio.sleep(.1)
+                self.assertEqual(process.returncode, 0, 'healthy computation lost its lease behind a durable fsync')
+            finally:
+                if process.returncode is None:
+                    process.kill()
+                await process.wait()
+
+    async def test_expired_lease_is_retryable_failure_not_user_cancellation(self):
+        from app.services import generation, scheduler
+        job = SimpleNamespace(user_key='synthetic', job_id='synthetic', status='running', outputs=[], error='', progress=.5)
+        async def native_work(_job):
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                return  # run_job likewise finishes its native teardown before returning.
+        with tempfile.TemporaryDirectory() as folder, patch.object(settings, 'data_dir', Path(folder)), patch.object(generation, 'run_job', native_work), patch.object(scheduler, 'load_job', return_value=job), patch.object(scheduler, '_marker', return_value={'stopped':True}), patch.object(scheduler, '_alive', return_value=False):
+            attempt = str(uuid.uuid4())
+            path = scheduler._path(attempt)
+            record = {'attempt_id':attempt,'fence':1,'status':'running','stopped':False,'result':{}}
+            scheduler._atomic(path, record)
+            scheduler._lease(path, .05)
+            task = asyncio.create_task(scheduler._execute(path, record, job))
+            scheduler._executions[attempt] = task
+            try:
+                await asyncio.wait_for(task, 3)
+                self.assertEqual(record['status'], 'failed')
+                self.assertEqual(record['result']['code'], 'NATIVE_LEASE_EXPIRED')
+                self.assertTrue(record['result']['retryable'])
+                self.assertTrue(record['stopped'])
+            finally:
+                scheduler._executions.pop(attempt, None)

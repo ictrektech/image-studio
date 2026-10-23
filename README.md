@@ -439,3 +439,8 @@ Accepted tasks and native execution still block binding changes until stopped.
 模型页面统一显示 V-Scheduler，添加云端模型入口打开 `com.ictrek.v-scheduler`；内部 `v-router` 协议标识及旧 API 路径仅用于兼容，不依赖单独的 V-Router 应用。
 
 VOS 登录态同时支持直接存储和旧版 `{value: ...}` 包装的 access store；沿用用户令牌，不把应用 context 身份提升为用户身份。统一推理入口默认 `http://v-scheduler:8080`，旧 `v-router` / `v-router-backend` 继续回退，自定义网关地址优先级保持不变。
+
+
+### 调度租约与冷调用
+
+执行租约使用原子更新，续期不等待持久化磁盘刷写；任务状态和原生进程停止证明仍持久化。租约失效会标为可重试的执行失败，确认原生进程退出后，按已批准的 attempt/fence 和次数限制重跑；用户取消不重跑。

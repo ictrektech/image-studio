@@ -1,6 +1,6 @@
 import { clearCachedVOSBearerToken, getCachedVOSBearerToken, getVOSBearerToken } from './vos-auth'
 
-const API_BASE = import.meta.env.VITE_API_BASE || '/api/com.ictrek.image-studio'
+export const API_BASE = import.meta.env.VITE_API_BASE || '/api/com.ictrek.image-studio'
 
 export interface ModelSourceSpec {
   source: string

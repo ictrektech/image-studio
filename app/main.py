@@ -4,6 +4,8 @@ import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html
+from app.api_documentation import build_openapi
 
 from app.config import settings
 from app.routers.api import router
@@ -17,7 +19,13 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 
-app = FastAPI(title="Image Studio", version=settings.app_version)
+app = FastAPI(title="Image Studio", version=settings.app_version, docs_url=None)
+app.openapi = lambda: build_openapi(app)
+
+
+@app.get("/docs", include_in_schema=False)
+async def api_documentation():
+    return get_swagger_ui_html(openapi_url="openapi.json", title="Image Studio API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

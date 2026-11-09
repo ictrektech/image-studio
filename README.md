@@ -444,3 +444,7 @@ VOS 登录态同时支持直接存储和旧版 `{value: ...}` 包装的 access s
 ### 调度租约与冷调用
 
 执行租约使用原子更新，续期不等待持久化磁盘刷写；任务状态和原生进程停止证明仍持久化。租约失效会标为可重试的执行失败，确认原生进程退出后，按已批准的 attempt/fence 和次数限制重跑；用户取消不重跑。
+
+## Complete API reference
+
+The in-app API page links to the complete interactive reference and OpenAPI JSON, including generation/job/input/output schemas, templates/settings, model downloads, PhotoCraft/Immich handoffs and the protected Scheduler binding/execution callbacks. The Swagger spec URL is relative so VOS reverse-proxy prefixes work. [English reference](ictrek.app/docs/api-reference.en.md) / [中文参考](ictrek.app/docs/api-reference.zh.md) include all 36 operations, shared field schemas, ownership boundaries, errors and a complete polling/download example. OpenAPI metadata does not add response filtering or alter existing handlers. This source-only documentation update is deferred to the next Image Studio release.

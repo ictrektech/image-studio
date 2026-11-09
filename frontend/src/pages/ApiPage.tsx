@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Panel, PanelTitle } from '@/components/app/panel'
-import { api, ModelInfo, SessionInfo } from '../api/client'
+import { api, API_BASE, ModelInfo, SessionInfo } from '../api/client'
 import { messages } from '../i18n'
 
 type T = typeof messages['zh-CN']
@@ -325,6 +325,13 @@ export default function ApiPage({ models, t }: { models: ModelInfo[]; t: T }) {
     <Panel className="mx-auto max-w-[980px] p-3">
       <PanelTitle>{t.api}</PanelTitle>
       <p className="mt-0.5 text-xs text-muted-foreground">{t.apiHelp}</p>
+      <nav className="mt-3 flex flex-wrap gap-3 text-sm" aria-label={t.apiReferenceTitle}>
+        <a className="underline" href={`${API_BASE}/docs`} target="_blank" rel="noopener noreferrer">{t.apiReferenceTitle}</a>
+        <a className="underline" href={`${API_BASE}/openapi.json`} target="_blank" rel="noopener noreferrer">OpenAPI JSON</a>
+        <a className="underline" href="#image-api-flow">{t.apiFlowTitle}</a>
+        <a className="underline" href="#image-api-errors">{t.apiErrorsTitle}</a>
+      </nav>
+      <p className="mt-2 text-xs text-muted-foreground">{t.apiReferenceHelp}</p>
 
       <Table className="mt-3.5 text-xs">
         <TableBody>
@@ -341,7 +348,7 @@ export default function ApiPage({ models, t }: { models: ModelInfo[]; t: T }) {
         </TableBody>
       </Table>
 
-      <SectionHeading>{t.apiFlowTitle}</SectionHeading>
+      <div id="image-api-flow"><SectionHeading>{t.apiFlowTitle}</SectionHeading></div>
       <p className="mt-0.5 text-xs text-muted-foreground">{t.apiFlowHelp}</p>
       <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">{t.apiStatusNote}</p>
       <GuideCode t={t}>{SETUP_EXAMPLE}</GuideCode>
@@ -370,7 +377,7 @@ export default function ApiPage({ models, t }: { models: ModelInfo[]; t: T }) {
       <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">{t.apiRecipeHNote}</p>
       <GuideCode t={t}>{RECIPE_H}</GuideCode>
 
-      <h4 className="mt-4 mb-1 text-[13.5px] font-bold">{t.apiErrorsTitle}</h4>
+      <h4 id="image-api-errors" className="mt-4 mb-1 text-[13.5px] font-bold">{t.apiErrorsTitle}</h4>
       <pre className="mt-1.5 whitespace-pre-wrap font-sans text-[12.5px] leading-loose text-muted-foreground">{t.apiErrList}</pre>
 
       <SectionHeading>{t.apiParamsTitle}</SectionHeading>

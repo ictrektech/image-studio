@@ -386,6 +386,8 @@ VOS 安装后，应用通过 Scheduler 的可信绑定获得 `lifecycle_protocol
 
 仅应用层变更可在对应架构构建机设置 `IMAGE_STUDIO_APPLICATION_BASE_IMAGE=<已核验的同 profile 发布镜像>`，再运行原有 `docker/build_image.sh --sheet <sheet> --component backend`。此方式保留原生依赖与已校准的运行环境，只替换当前 `app/`；变更原生依赖或推理参数时仍须完整构建。
 
+同一天需要再次发布前端时，在 `--component frontend` 构建中设置 `IMAGE_STUDIO_FRONTEND_TAG_SUFFIX` 生成新镜像标签，已发应用包仍使用原标签。 For a second frontend release on the same date, set `IMAGE_STUDIO_FRONTEND_TAG_SUFFIX` with `--component frontend` to give the new image its own tag.
+
 打包时，同一次飞书查表的结果写入主节点 Compose 服务的 `image` 和后端容器的 `IMAGE_STUDIO_BACKEND_IMAGES`。该环境变量是 JSON 对象，以 V-Scheduler 节点固定 Profile 为键，每项包含 Image Studio 的运行 Profile（`profile`）和发布时选定的完整镜像引用（`image`）。
 
 | V-Scheduler 节点 Profile | Image Studio 运行 Profile |

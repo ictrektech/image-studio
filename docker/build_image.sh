@@ -12,6 +12,7 @@ set -euo pipefail
 #   ./build_image.sh --sheet l4t --sheet thor_spark
 #   ./build_image.sh --component backend
 #   ./build_image.sh --component frontend
+#   IMAGE_STUDIO_FRONTEND_TAG_SUFFIX=vos077fix ./build_image.sh --component frontend
 #
 # Supported sheets:
 #   AMD: AMD_with_cuda, AMD_with_mxn100
@@ -469,12 +470,15 @@ FEISHU_APP_SECRET="$(read_feishu_field "feishu_app_secret")"
 [[ -n "$FEISHU_APP_ID" && -n "$FEISHU_APP_SECRET" ]] || die "feishu_app_id or feishu_app_secret missing in $FEISHU_CONFIG_FILE"
 
 DATE=$(date +%Y%m%d)
+FRONTEND_SUFFIX="${IMAGE_STUDIO_FRONTEND_TAG_SUFFIX:-}"
+[[ -z "$FRONTEND_SUFFIX" || "$FRONTEND_SUFFIX" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$ ]] \
+  || die "invalid IMAGE_STUDIO_FRONTEND_TAG_SUFFIX"
 log "Host architecture: ${HOST_ARCH}"
 log "Sheets: ${TARGET_SHEETS[*]}"
 log "Components: ${COMPONENTS[*]}"
 
 if contains "frontend" "${COMPONENTS[@]}"; then
-  FRONTEND_TAG="${HOST_ARCH}_${DATE}"
+  FRONTEND_TAG="${HOST_ARCH}_${DATE}${FRONTEND_SUFFIX:+_$FRONTEND_SUFFIX}"
   FRONTEND_IMAGE="${FRONTEND_REPOSITORY}:${FRONTEND_TAG}"
   log "Building shared ${HOST_ARCH} frontend image: ${FRONTEND_IMAGE}"
   docker buildx build \

@@ -85,6 +85,7 @@ class DeployReceipt(BaseModel):
 class ComputeDeployment(DeployReceipt):
     target_kind: Literal["ssh", "cluster"]
     target_id: str
+    node_name: str | None = Field(default=None, description="Deployment target display name when available. 可发现时返回部署节点显示名称。")
     profile: str
     image: str
     last_error: str | None
@@ -112,6 +113,7 @@ class ModelPlacement(BaseModel):
     deployment_id: str
     model_id: str
     node_id: str = Field(description="The V-Scheduler node assigned to this deployment. 部署绑定的 V-Scheduler 节点 ID。")
+    node_name: str | None = Field(default=None, description="Display name of the deployment target, when discoverable. 可发现时返回部署节点显示名称。")
     executor_id: str = Field(description="The registered V-Scheduler executor. 已注册的 V-Scheduler 执行器 ID。")
     profile: str
     runtime_parameters: dict[str, str | int | float | bool]
@@ -134,11 +136,22 @@ def _catalog() -> dict:
         raise HTTPException(503, "COMPUTE_IMAGE_CATALOG_INVALID") from None
 
 
-async def _targets(client: httpx.AsyncClient) -> list[dict]:
+def _node_name(node: dict) -> str | None:
+    return next((value for key in ("name", "hostname") if isinstance(value := node.get(key), str)
+                 and value.strip() and value != node["id"]), None)
+
+
+def _node_names(inventory: dict) -> dict[tuple[str, str], str | None]:
+    return {(kind, node["id"]): _node_name(node) for kind, field in (("ssh", "items"), ("cluster", "cluster_nodes"))
+            for node in inventory.get(field, [])}
+
+
+async def _targets(client: httpx.AsyncClient, inventory: dict | None = None) -> list[dict]:
     catalog = _catalog()
     if not catalog:
         return []
-    inventory = await deployment_request(client, "GET", "managed-nodes")
+    if inventory is None:
+        inventory = await deployment_request(client, "GET", "managed-nodes")
     grant = await deployment_request(client, "GET", f"backend-deployment-access/{APP_ID}")
     authorized = {(row["kind"], row["id"], row["profile"]) for row in grant["targets"]}
     targets = []
@@ -153,7 +166,7 @@ async def _targets(client: httpx.AsyncClient) -> list[dict]:
             if image.rsplit(":", 1)[0] not in grant["repositories"]:
                 continue
             targets.append({
-                "kind": kind, "node_id": node["id"], "name": node.get("name") or node["id"],
+                "kind": kind, "node_id": node["id"], "name": _node_name(node) or profile,
                 "profile": profile, "runtime_profile": entry["profile"], "image": image,
             })
     return targets
@@ -193,11 +206,17 @@ async def compute_placements(authorization: str = Header(default="")):
         return []
     async with deployment_client() as client:
         data = await deployment_request(client, "GET", "backend-deployments")
-    running = {row["id"] for row in data["items"] if row["app_id"] == APP_ID and row["state"] == "running" and row.get("endpoint")}
+        try:
+            inventory = await deployment_request(client, "GET", "managed-nodes")
+        except HTTPException:
+            inventory = {}
+    running = {row["id"]: row for row in data["items"] if row["app_id"] == APP_ID and row["state"] == "running" and row.get("endpoint")}
+    names = _node_names(inventory)
     return [
         {
             "deployment_id": row["deployment_id"], "model_id": row["model_id"], "profile": row["runtime_profile"],
             "node_id": row["node_id"], "executor_id": row["executor_id"],
+            "node_name": names.get((running[row["deployment_id"]].get("target_kind"), running[row["deployment_id"]].get("target_id"))),
             "runtime_parameters": {key: value for key, value in row["model_parameters"].items() if key != "has_reference"},
             "has_reference": row["model_parameters"].get("has_reference") is True,
         }
@@ -210,11 +229,13 @@ async def compute_overview():
     if not _catalog():
         return {"targets": [], "deployments": [], "preparations": []}
     async with deployment_client() as client:
-        targets = await _targets(client)
+        inventory = await deployment_request(client, "GET", "managed-nodes")
+        targets = await _targets(client, inventory)
         result = await deployment_request(client, "GET", "backend-deployments")
+    names = _node_names(inventory)
     fields = ("id", "target_kind", "target_id", "profile", "image", "state", "last_error")
     deployments = [
-        {key: row.get(key) for key in fields}
+        {**{key: row.get(key) for key in fields}, "node_name": names.get((row["target_kind"], row["target_id"]))}
         for row in result["items"] if row.get("app_id") == APP_ID and row.get("config", {}).get("mode") == WORKER_MODE
     ]
     visible = {row["id"] for row in deployments}

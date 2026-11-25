@@ -694,9 +694,9 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
                 <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="local">{t.remoteComputeLocal}</SelectItem>
-                  {modelPlacements.map(row => (
+                  {modelPlacements.map((row, index) => (
                     <SelectItem key={row.deployment_id} value={row.deployment_id}>
-                      {row.node_id || row.profile} · {row.deployment_id.slice(0, 8)}
+                      {row.node_name || row.profile}{modelPlacements.filter(item => (item.node_name || item.profile) === (row.node_name || row.profile)).length > 1 ? ` #${index + 1}` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>

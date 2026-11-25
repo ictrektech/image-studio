@@ -322,12 +322,15 @@ for profile_spec in sys.argv[5:]:
         raise SystemExit(f"invalid backend image for {app_profile}")
     catalog[node_profile] = {"profile": app_profile, "image": image}
 env["IMAGE_STUDIO_BACKEND_IMAGES"] = json.dumps(catalog, separators=(",", ":"))
+env["V_SCHEDULER_BACKEND_IMAGES"] = json.dumps(
+    {profile: row["image"] for profile, row in catalog.items()}, separators=(",", ":"),
+)
 
 text = src.read_text(encoding="utf-8").replace("__APP_VERSION__", version)
 
 def replace_image_var(match):
     key = match.group(1)
-    if (key.endswith("_IMAGE") or key == "IMAGE_STUDIO_BACKEND_IMAGES") and key in env:
+    if (key.endswith("_IMAGE") or key in {"IMAGE_STUDIO_BACKEND_IMAGES", "V_SCHEDULER_BACKEND_IMAGES"}) and key in env:
         return env[key]
     return match.group(0)
 

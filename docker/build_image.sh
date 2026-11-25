@@ -11,6 +11,7 @@ set -euo pipefail
 #   ./build_image.sh --sheet AMD_with_cuda
 #   ./build_image.sh --sheet l4t --sheet thor_spark
 #   ./build_image.sh --component backend
+#   IMAGE_STUDIO_BACKEND_TAG_SUFFIX=vos079 ./build_image.sh --component backend
 #   ./build_image.sh --component frontend
 #   IMAGE_STUDIO_FRONTEND_TAG_SUFFIX=vos077fix ./build_image.sh --component frontend
 #
@@ -471,8 +472,11 @@ FEISHU_APP_SECRET="$(read_feishu_field "feishu_app_secret")"
 
 DATE=$(date +%Y%m%d)
 FRONTEND_SUFFIX="${IMAGE_STUDIO_FRONTEND_TAG_SUFFIX:-}"
+BACKEND_SUFFIX="${IMAGE_STUDIO_BACKEND_TAG_SUFFIX:-}"
 [[ -z "$FRONTEND_SUFFIX" || "$FRONTEND_SUFFIX" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$ ]] \
   || die "invalid IMAGE_STUDIO_FRONTEND_TAG_SUFFIX"
+[[ -z "$BACKEND_SUFFIX" || "$BACKEND_SUFFIX" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$ ]] \
+  || die "invalid IMAGE_STUDIO_BACKEND_TAG_SUFFIX"
 log "Host architecture: ${HOST_ARCH}"
 log "Sheets: ${TARGET_SHEETS[*]}"
 log "Components: ${COMPONENTS[*]}"
@@ -499,7 +503,7 @@ fi
 for sheet in "${TARGET_SHEETS[@]}"; do
   spec="$(sheet_spec "$sheet")"
   IFS='|' read -r PROFILE TAG_PREFIX BACKEND_DOCKERFILE NODE_TAG NGINX_TAG <<< "$spec"
-  TAG="${TAG_PREFIX}_${DATE}"
+  TAG="${TAG_PREFIX}_${DATE}${BACKEND_SUFFIX:+_$BACKEND_SUFFIX}"
   BUILD_ARGS=(
     --build-arg "PYTHON_BASE_IMAGE=${REGISTRY}/python:${TAG_PREFIX%%_cuda}_3.12-slim"
     --build-arg "GITHUB_ACCELERATOR=${GITHUB_ACCELERATOR}"

@@ -1,3 +1,5 @@
+x-v-scheduler-backend-images: ${V_SCHEDULER_BACKEND_IMAGES}
+
 x-image-studio-frontend-env: &image-studio-frontend-env
   APP_VERSION: "__APP_VERSION__"
   API_BASE: /api/com.ictrek.image-studio

@@ -19,6 +19,32 @@ from app.services.storage import job_dir, load_job, save_job
 
 
 class RemoteExecutionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_overview_names_deployed_nodes_and_keeps_undeployed_targets(self):
+        inventory = {"items": [
+            {"id": "spark-a", "name": "Spark A", "profile": "dgx-spark"},
+            {"id": "spark-b", "name": "Spark B", "profile": "dgx-spark"},
+        ]}
+        image = "registry.test/app/backend:thor_20261125"
+        catalog = {"jetson-thor": {"image": image, "profile": "thor"}}
+        grant = {"targets": [{"kind": "ssh", "id": name, "profile": "dgx-spark"}
+                             for name in ("spark-a", "spark-b")], "repositories": ["registry.test/app/backend"]}
+        deployments = {"items": [{
+            "id": "a" * 32, "target_kind": "ssh", "target_id": "spark-a", "app_id": compute.APP_ID,
+            "config": {"mode": compute.WORKER_MODE}, "profile": "dgx-spark", "image": image,
+            "state": "running", "last_error": None,
+        }]}
+        directory = self.enterContext(tempfile.TemporaryDirectory())
+        with (
+            patch.object(settings, "data_dir", Path(directory)),
+            patch.object(settings, "scheduler_url", "http://scheduler.test/api/v1"),
+            patch.object(settings, "scheduler_token", "fixture-service"),
+            patch.object(compute, "_catalog", return_value=catalog),
+            patch.object(compute, "deployment_request", new_callable=AsyncMock, side_effect=[inventory, grant, deployments]),
+        ):
+            overview = await compute.compute_overview()
+        self.assertEqual([target["name"] for target in overview["targets"]], ["Spark A", "Spark B"])
+        self.assertEqual([(row["node_name"], row["state"]) for row in overview["deployments"]], [("Spark A", "running")])
+
     async def test_user_can_match_a_placement_to_the_scheduler_node(self):
         directory = self.enterContext(tempfile.TemporaryDirectory())
         self.enterContext(patch.object(settings, "data_dir", Path(directory)))
@@ -36,17 +62,18 @@ class RemoteExecutionTests(unittest.IsolatedAsyncioTestCase):
         app = FastAPI()
         app.include_router(compute.placement_router)
         scheduler_receipt = {"items": [{"id": deployment, "app_id": compute.APP_ID, "state": "running",
-                                         "endpoint": "http://worker.test"}]}
+                                         "endpoint": "http://worker.test", "target_kind": "ssh", "target_id": "spark"}]}
+        inventory = {"items": [{"id": "spark", "name": "Spark test node"}]}
         with (
             patch.object(compute, "_catalog", return_value={"jetson-thor": {}}),
-            patch.object(compute, "deployment_request", new_callable=AsyncMock, return_value=scheduler_receipt),
+            patch.object(compute, "deployment_request", new_callable=AsyncMock, side_effect=[scheduler_receipt, inventory]),
             patch("app.services.session.verify_vos_identity", new_callable=AsyncMock, return_value=True),
         ):
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://studio.test") as client:
                 response = await client.get("/api/v1/compute/placements", headers={"Authorization": "Bearer user-fixture"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), [{
-            "deployment_id": deployment, "model_id": model, "profile": "thor", "node_id": "spark-worker",
+            "deployment_id": deployment, "model_id": model, "profile": "thor", "node_id": "spark-worker", "node_name": "Spark test node",
             "executor_id": "app-remote-image-studio-fixture", "runtime_parameters": {"weight_type": "f16"},
             "has_reference": False,
         }])

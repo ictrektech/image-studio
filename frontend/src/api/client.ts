@@ -67,6 +67,7 @@ export interface ComputeDeployment {
   id: string
   target_kind: ComputeTarget['kind']
   target_id: string
+  node_name: string | null
   profile: string
   image: string
   state: 'pending' | 'running' | 'failed' | 'stopping' | 'deleting' | 'stopped' | 'removed' | 'cleanup_failed'
@@ -95,6 +96,7 @@ export interface ComputePlacement {
   deployment_id: string
   model_id: string
   node_id: string
+  node_name: string | null
   executor_id: string
   profile: string
   runtime_parameters: Partial<GeneratePayload>

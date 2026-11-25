@@ -1,42 +1,64 @@
 import { useEffect, useRef, useState } from 'react'
 import { Panel, PanelHeading, PanelTitle } from '@/components/app/panel'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { api, type ComputeOverview, type ComputeTarget, type ModelInfo } from '../api/client'
+import { api, type ComputeDeployment, type ComputeOverview, type ComputeTarget, type ModelInfo } from '../api/client'
 import { messages } from '../i18n'
 
 type Text = typeof messages['zh-CN']
 
 const targetKey = (target: ComputeTarget) => `${target.kind}:${target.node_id}`
+const deploymentTarget = (row: ComputeDeployment) => `${row.target_kind}:${row.target_id}`
+
+function imageVersion(image: string): string {
+  const tag = image.split('/').pop()?.split('@')[0].split(':')[1] || ''
+  const match = /^(?:amd(?:_cu128)?|arm(?:_cu128)?|l4t|thor)_(\d{4})(\d{2})(\d{2})(?:_(vos\d+))?(?:_|$)/.exec(tag)
+  if (match) return [`${match[1]}-${match[2]}-${match[3]}`, match[4]].filter(Boolean).join(' · ')
+  return /^v?\d+\.\d+\.\d+(?:-[a-z]+\d*)?$/i.test(tag) && tag.length <= 24 ? tag : ''
+}
 
 export default function RemoteComputePanel({ models, t }: { models: ModelInfo[]; t: Text }) {
   const [open, setOpen] = useState(false)
   const [overview, setOverview] = useState<ComputeOverview | null>(null)
-  const [targetId, setTargetId] = useState('')
-  const [deploymentId, setDeploymentId] = useState('')
-  const [modelId, setModelId] = useState('')
-  const [error, setError] = useState('')
-  const [overviewError, setOverviewError] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [modelIds, setModelIds] = useState<Record<string, string>>({})
+  const [error, setError] = useState(false)
+  const [overviewError, setOverviewError] = useState(false)
+  const [busy, setBusy] = useState('')
   const deployKeys = useRef(new Map<string, string>())
-  const target = overview?.targets.find(row => targetKey(row) === targetId)
-  const readyModels = models.filter(model => model.source !== 'v-router').flatMap(model => [
+  const localModels = models.filter(model => model.source !== 'v-router').flatMap(model => [
     { id: model.key, key: model.key, variant: '', name: model.name, ready: model.status === 'ready' },
     ...(model.variants || []).filter(variant => variant.id).map(variant => ({
       id: `${model.key}@${variant.id}`, key: model.key, variant: variant.id!,
       name: `${model.name} · ${variant.name}`, ready: variant.status === 'ready',
     })),
-  ]).filter(model => model.ready)
-  const selectedModel = readyModels.find(model => model.id === modelId)
-  const deployments = overview?.deployments.filter(row => row.state !== 'removed') ?? []
-  const running = deployments.filter(row => row.state === 'running' && !row.last_error)
+  ])
+  const readyModels = localModels.filter(model => model.ready)
+  const nodes = new Map<string, { name: string; profile: string; target?: ComputeTarget; deployments: ComputeDeployment[] }>()
+  for (const target of overview?.targets ?? []) {
+    nodes.set(targetKey(target), { name: target.name, profile: target.profile, target, deployments: [] })
+  }
+  for (const row of overview?.deployments ?? []) {
+    if (row.state === 'removed') continue
+    const key = deploymentTarget(row)
+    let node = nodes.get(key)
+    if (!node) {
+      node = { name: row.node_name || t.remoteComputeUnknownNode, profile: row.profile, deployments: [] }
+      nodes.set(key, node)
+    }
+    node.deployments.push(row)
+  }
 
-  const refresh = () => api.computeOverview().then(value => {
-    setOverview(value)
-    setOverviewError('')
-  }).catch((reason: Error) => setOverviewError(reason.message))
+  async function refresh() {
+    try {
+      setOverview(await api.computeOverview())
+      setOverviewError(false)
+    } catch {
+      setOverviewError(true)
+    }
+  }
 
   useEffect(() => {
     if (!open) return
@@ -45,26 +67,26 @@ export default function RemoteComputePanel({ models, t }: { models: ModelInfo[];
     return () => window.clearInterval(timer)
   }, [open])
 
-  async function act(action: () => Promise<unknown>) {
-    setBusy(true)
-    setError('')
+  async function act(key: string, action: () => Promise<unknown>) {
+    setBusy(key)
+    setError(false)
     try {
       await action()
       await refresh()
-    } catch (reason) {
-      setError((reason as Error).message)
+    } catch {
+      setError(true)
     } finally {
-      setBusy(false)
+      setBusy('')
     }
   }
 
-  function deploy() {
-    if (!target) return
-    const key = deployKeys.current.get(targetId) || crypto.randomUUID()
-    deployKeys.current.set(targetId, key)
-    void act(async () => {
+  function deploy(target: ComputeTarget) {
+    const node = targetKey(target)
+    const key = deployKeys.current.get(node) || crypto.randomUUID()
+    deployKeys.current.set(node, key)
+    void act(node, async () => {
       await api.deployCompute(target, key)
-      deployKeys.current.delete(targetId)
+      deployKeys.current.delete(node)
     })
   }
 
@@ -77,59 +99,71 @@ export default function RemoteComputePanel({ models, t }: { models: ModelInfo[];
         </Button>
       </PanelHeading>
       {open && <div className="mt-3 grid gap-3">
-        {(error || overviewError) && <Alert><AlertDescription>{t.remoteComputeError} <code>{error || overviewError}</code></AlertDescription></Alert>}
-        {overview && <>
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={targetId} onValueChange={setTargetId}>
-              <SelectTrigger aria-label={t.remoteComputeTarget}><SelectValue placeholder={t.remoteComputeTarget} /></SelectTrigger>
-              <SelectContent>
-                {overview.targets.map(row => <SelectItem key={targetKey(row)} value={targetKey(row)}>{row.name} · {row.profile}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Button disabled={busy || !target} onClick={deploy}>{t.remoteComputeDeploy}</Button>
-          </div>
-          {!overview.targets.length && <p className="text-xs text-muted-foreground">{t.remoteComputeNoTargets}</p>}
-          {target && <code className="break-all text-xs text-muted-foreground">{target.image}</code>}
-          {deployments.map(row => <div key={row.id} className="rounded-md border px-3 py-2 text-sm">
-            <div className="flex flex-wrap justify-between gap-2">
-              <span>{row.target_id} · {row.profile}</span>
-              <span>{t.remoteComputeStates[row.state]}</span>
-            </div>
-            {row.last_error && <code className="text-xs text-muted-foreground">{row.last_error}</code>}
-          </div>)}
-          {running.length > 0 && <div className="flex flex-wrap items-center gap-2">
-            <Select value={deploymentId} onValueChange={setDeploymentId}>
-              <SelectTrigger aria-label={t.remoteComputeBackend}><SelectValue placeholder={t.remoteComputeBackend} /></SelectTrigger>
-              <SelectContent>
-                {running.map(row => <SelectItem key={row.id} value={row.id}>{row.target_id} · {row.id.slice(0, 8)}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={modelId} onValueChange={setModelId}>
-              <SelectTrigger aria-label={t.remoteComputeModel}><SelectValue placeholder={t.remoteComputeModel} /></SelectTrigger>
-              <SelectContent>
-                {readyModels.map(model => <SelectItem key={model.id} value={model.id}>{model.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Button disabled={busy || !selectedModel || !running.some(row => row.id === deploymentId)}
-              onClick={() => selectedModel && void act(() => api.prepareComputeModel(deploymentId, selectedModel.key, selectedModel.variant))}>
-              {t.remoteComputeTransfer}
-            </Button>
-          </div>}
-          {overview.preparations.map(row => {
-            const percentage = row.total_bytes ? Math.round(100 * row.received_bytes / row.total_bytes) : 0
-            return <div key={`${row.deployment_id}:${row.model_id}`} className="grid gap-1 rounded-md border px-3 py-2">
-              <div className="flex flex-wrap justify-between gap-2 text-sm">
-                <span>{row.model_id} · {row.deployment_id.slice(0, 8)}</span>
-                <span>
-                  {t.remoteComputeStates[row.state]}{row.state === 'transferring' ? ` · ${percentage}%` : ''}
-                  {row.weight_source && ` · ${row.weight_source === 'shared' ? t.remoteComputeShared : t.remoteComputeCopy}`}
-                </span>
+        {(error || overviewError) && <Alert><AlertDescription>{t.remoteComputeError}</AlertDescription></Alert>}
+        {overview && !nodes.size && <p className="text-sm text-muted-foreground">{t.remoteComputeNoTargets}</p>}
+        {[...nodes].map(([nodeKey, { name, profile, target, deployments }]) => {
+          const hasActiveDeployment = deployments.some(row => row.state === 'pending' || row.state === 'running' || row.state === 'stopping' || row.state === 'deleting')
+          const candidateVersion = !hasActiveDeployment && target ? imageVersion(target.image) : ''
+          return <section key={nodeKey} className="min-w-0 rounded-lg border" aria-label={name}>
+            <header className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5">
+              <div className="min-w-0">
+                <h3 className="break-words text-sm font-semibold">{name}</h3>
+                <p className="text-xs text-muted-foreground">{profile}{candidateVersion && ` · ${t.remoteComputeImageVersion} ${candidateVersion}`}</p>
               </div>
-              {row.state === 'transferring' && <Progress value={percentage} aria-label={t.remoteComputeTransfer} />}
-              {row.error && <code className="text-xs text-muted-foreground">{row.error}</code>}
-            </div>
-          })}
-        </>}
+              <div className="flex flex-wrap items-center gap-2">
+                {!deployments.length && <Badge variant="secondary">{t.remoteComputeNotDeployed}</Badge>}
+                {target && !hasActiveDeployment && <Button size="sm" disabled={!!busy} onClick={() => deploy(target)}>
+                  {busy === nodeKey ? t.remoteComputeStates.pending : t.remoteComputeDeploy}
+                </Button>}
+              </div>
+            </header>
+            {deployments.map((row, index) => {
+              const version = imageVersion(row.image)
+              const preparations = overview?.preparations.filter(item => item.deployment_id === row.id) ?? []
+              const selectedModel = readyModels.find(model => model.id === modelIds[row.id])
+              const running = row.state === 'running' && !row.last_error
+              return <div key={row.id} className="grid gap-3 border-t px-3 py-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span>{t.remoteComputeBackendLabel}{deployments.length > 1 && ` ${index + 1}`}{version && ` · ${t.remoteComputeImageVersion} ${version}`}</span>
+                  <Badge variant={row.last_error ? 'destructive' : running ? 'default' : 'secondary'}>
+                    {row.last_error && row.state === 'running' ? t.remoteComputeStates.failed : t.remoteComputeStates[row.state]}
+                  </Badge>
+                </div>
+                {preparations.map(item => {
+                  const percentage = item.total_bytes ? Math.round(100 * item.received_bytes / item.total_bytes) : 0
+                  return <div key={item.model_id} className="grid gap-1 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                      <span className="font-medium">{localModels.find(model => model.id === item.model_id)?.name || t.remoteComputeModelLabel}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {running && item.state === 'registered' ? t.remoteComputeModelReady : t.remoteComputeStates[item.state]}
+                        {item.state === 'transferring' && ` · ${percentage}%`}
+                        {item.weight_source && ` · ${item.weight_source === 'shared' ? t.remoteComputeShared : t.remoteComputeCopy}`}
+                      </span>
+                    </div>
+                    {item.state === 'transferring' && <Progress value={percentage} aria-label={t.remoteComputeTransfer} />}
+                  </div>
+                })}
+                {running && <div className="flex flex-wrap items-end gap-2">
+                  <div className="grid gap-1">
+                    <span className="text-xs font-medium">{t.remoteComputeModelLabel}</span>
+                    <Select value={modelIds[row.id] || ''} onValueChange={value => setModelIds(current => ({ ...current, [row.id]: value }))}>
+                      <SelectTrigger aria-label={`${t.remoteComputeModelLabel} · ${name}`}>
+                        <SelectValue placeholder={t.remoteComputeModel} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {readyModels.map(model => <SelectItem key={model.id} value={model.id}>{model.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button size="sm" disabled={!!busy || !selectedModel || preparations.some(item => item.model_id === selectedModel.id && (item.state === 'registered' || item.state === 'transferring'))}
+                    onClick={() => selectedModel && void act(row.id, () => api.prepareComputeModel(row.id, selectedModel.key, selectedModel.variant))}>
+                    {t.remoteComputeTransfer}
+                  </Button>
+                </div>}
+              </div>
+            })}
+          </section>
+        })}
       </div>}
     </Panel>
   )

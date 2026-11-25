@@ -21,12 +21,14 @@ VOS 根地址：`https://<VOS-HOST>:1180/api/com.ictrek.image-studio`；容器�
 | `GET /api/v1/compute` | 无参数。200 返回 `targets`、`deployments` 和 `preparations` 数组，空数组表示暂无对应记录。 |
 | `POST /api/v1/compute/deployments` | 必填 `kind`（`ssh` 或 `cluster`）、`node_id` 和 `request_key`（1–96 位 ASCII 字母、数字、点、下划线或连字符）。相同键和参数用于安全重试。200 返回 `id` 和 `state`。 |
 | `POST /api/v1/compute/deployments/{deployment_id}/models` | 路径 ID 为 32 位小写十六进制；必填 `model_key`，`model_variant` 默认为空字符串。两者最多 96 位小写字母、数字、点、下划线或连字符。202 返回一条模型准备记录。相同部署和模型重复提交会返回进行中的记录或从已确认的偏移续传。 |
-| `GET /api/v1/compute/placements` | 无参数。200 返回位置数组，字段为 `deployment_id`、`model_id`（`key` 或 `key@variant`）、`profile`（应用运行配置）、`runtime_parameters`（逐模型校准字段及批准值）、`has_reference`（是否要求参考图）。 |
+| `GET /api/v1/compute/placements` | 无参数。200 返回位置数组，字段为 `deployment_id`、`model_id`（`key` 或 `key@variant`）、`node_id`（V-Scheduler 节点 ID）、`executor_id`（该模型的执行器 ID）、`profile`（应用运行配置）、`runtime_parameters`（逐模型校准字段及批准值）、`has_reference`（是否要求参考图）。按 `node_id` 和 `model_id` 选择位置，在生图请求中传它的 `deployment_id`。 |
 | `POST /api/v1/generate` | 新增可选 `compute_deployment_id`。空字符串或省略时使用主节点，非空时为 32 位小写十六进制部署 ID。匹配模型与变体后使用该部署的校准配置。若显式传运行参数，值须与批准值相同。提交和结果格式仍为 `JobRecord`。 |
 
 `targets` 每项含 `kind`、`node_id`、`name`、`profile`（固定硬件 Profile）、`runtime_profile`（Image Studio 运行 Profile）及完整 `image`。部署记录包含 `id`、`target_kind`、`target_id`、`profile`、`image`、`state` 及可空的 `last_error`。部署状态为 `pending`、`running`、`failed`、`stopping`、`deleting`、`stopped`、`removed`、`cleanup_failed`。准备记录包含 `deployment_id`、`model_id`、`state`、`received_bytes`、`total_bytes`，以及可空的 `executor_id`、`node_id`、`error`。字节数为非负整数，准备状态为 `transferring`、`interrupted`、`registered`、`failed`。开始传输前 `total_bytes` 可为 0。
 
 准备记录的 `weight_source` 为 `shared`（只读 NFS）、`copy`（节点副本）或 `null`（来源尚未确定）。共享可用时先校验共享文件，无法挂载或文件与主节点版本不匹配时再复制。共享模式的 `received_bytes` 表示确认的权重字节数。
+
+远端任务的 `metadata` 包含目标 `compute_node_id`、`compute_executor_id`、`compute_deployment_id`。任务下发后，使用 `scheduler_task_id` 查询 V-Scheduler 的 `GET /scheduler/api/v1/tasks/{id}`，以调度任务返回的 `node_id` 核对实际执行节点。
 
 依次授权目标和镜像仓库、发起部署、轮询到 `running`、提交模型准备、轮询到 `registered`。随后以相同模型和部署提交生成，使用 `GET /api/v1/jobs/{job_id}` 和 `GET /api/v1/outputs/{job_id}/{filename}` 获取结果。401 重新登录，403 检查管理员角色或部署授权，404 核对实例，409 检查运行状态和模型注册，422 修正请求或选择匹配参考图模式和运行参数的校准，503 检查节点、身份服务和 Scheduler。准备失败时在记录中读取 `error`，修复后重试同一模型。
 

@@ -205,6 +205,7 @@ async def create_job(user_key: str, request: GenerateRequest, access_token: str 
     if compute:
         job.metadata["compute_deployment_id"] = request.compute_deployment_id
         job.metadata["compute_executor_id"] = compute["executor_id"]
+        job.metadata["compute_node_id"] = compute["node_id"]
     if compute or settings.scheduler_url or settings.scheduler_required:
         from app.services.scheduler import prepare
         await prepare(job, operator_authorization=("Bearer " + access_token) if access_token else "")

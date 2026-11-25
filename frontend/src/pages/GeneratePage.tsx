@@ -696,7 +696,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
                   <SelectItem value="local">{t.remoteComputeLocal}</SelectItem>
                   {modelPlacements.map(row => (
                     <SelectItem key={row.deployment_id} value={row.deployment_id}>
-                      {row.profile} · {row.deployment_id.slice(0, 8)}
+                      {row.node_id || row.profile} · {row.deployment_id.slice(0, 8)}
                     </SelectItem>
                   ))}
                 </SelectContent>

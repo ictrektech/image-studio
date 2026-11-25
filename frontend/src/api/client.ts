@@ -94,6 +94,8 @@ export interface ComputeOverview {
 export interface ComputePlacement {
   deployment_id: string
   model_id: string
+  node_id: string
+  executor_id: string
   profile: string
   runtime_parameters: Partial<GeneratePayload>
   has_reference: boolean

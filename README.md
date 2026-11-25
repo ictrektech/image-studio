@@ -408,6 +408,8 @@ VOS 安装后，应用通过 Scheduler 的可信绑定获得 `lifecycle_protocol
 
 主节点可只协调远端任务。V-Scheduler 可以下发空的本机批准模型列表，建立部署和任务服务身份。本机生成仍要求对应模型的本机批准。
 
+API 调用方可在 `GET /api/v1/compute/placements` 用 `node_id` 和 `model_id` 查找部署，再在 `POST /api/v1/generate` 传入该部署的 `compute_deployment_id`。返回的 `executor_id` 对应 V-Scheduler 执行器。任务下发后可用 `metadata.scheduler_task_id` 核对调度实际执行的节点。
+
 ### Scheduling options
 
 `POST /api/v1/generate` accepts an optional `scheduling` object:

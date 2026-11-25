@@ -6,17 +6,51 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
+from fastapi import FastAPI
 
 from app.config import settings
 from app.models import JobRecord
+from app.routers import compute
 from app.services import remote_execution, scheduler, weight_sync
 from app.services.storage import job_dir, load_job, save_job
 
 
 class RemoteExecutionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_user_can_match_a_placement_to_the_scheduler_node(self):
+        directory = self.enterContext(tempfile.TemporaryDirectory())
+        self.enterContext(patch.object(settings, "data_dir", Path(directory)))
+        self.enterContext(patch.object(settings, "scheduler_url", "http://scheduler.test/api/v1"))
+        self.enterContext(patch.object(settings, "scheduler_token", "fixture-service"))
+        deployment = "a" * 32
+        model = "sd-turbo"
+        registered = compute._preparation_path(deployment, model).with_suffix(".registered")
+        registered.parent.mkdir(parents=True)
+        registered.write_text(json.dumps({
+            "deployment_id": deployment, "model_id": model, "runtime_profile": "thor",
+            "node_id": "spark-worker", "executor_id": "app-remote-image-studio-fixture",
+            "model_parameters": {"has_reference": False, "weight_type": "f16"},
+        }))
+        app = FastAPI()
+        app.include_router(compute.placement_router)
+        scheduler_receipt = {"items": [{"id": deployment, "app_id": compute.APP_ID, "state": "running",
+                                         "endpoint": "http://worker.test"}]}
+        with (
+            patch.object(compute, "_catalog", return_value={"jetson-thor": {}}),
+            patch.object(compute, "deployment_request", new_callable=AsyncMock, return_value=scheduler_receipt),
+            patch("app.services.session.verify_vos_identity", new_callable=AsyncMock, return_value=True),
+        ):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://studio.test") as client:
+                response = await client.get("/api/v1/compute/placements", headers={"Authorization": "Bearer user-fixture"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [{
+            "deployment_id": deployment, "model_id": model, "profile": "thor", "node_id": "spark-worker",
+            "executor_id": "app-remote-image-studio-fixture", "runtime_parameters": {"weight_type": "f16"},
+            "has_reference": False,
+        }])
+
     async def test_execution_uses_selected_deployment_with_fence_and_returns_verified_output(self):
         directory = self.enterContext(tempfile.TemporaryDirectory())
         self.enterContext(patch.object(settings, "data_dir", Path(directory)))

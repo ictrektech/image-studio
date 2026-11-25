@@ -111,6 +111,8 @@ class ComputeOverview(BaseModel):
 class ModelPlacement(BaseModel):
     deployment_id: str
     model_id: str
+    node_id: str = Field(description="The V-Scheduler node assigned to this deployment. 部署绑定的 V-Scheduler 节点 ID。")
+    executor_id: str = Field(description="The registered V-Scheduler executor. 已注册的 V-Scheduler 执行器 ID。")
     profile: str
     runtime_parameters: dict[str, str | int | float | bool]
     has_reference: bool
@@ -195,6 +197,7 @@ async def compute_placements(authorization: str = Header(default="")):
     return [
         {
             "deployment_id": row["deployment_id"], "model_id": row["model_id"], "profile": row["runtime_profile"],
+            "node_id": row["node_id"], "executor_id": row["executor_id"],
             "runtime_parameters": {key: value for key, value in row["model_parameters"].items() if key != "has_reference"},
             "has_reference": row["model_parameters"].get("has_reference") is True,
         }

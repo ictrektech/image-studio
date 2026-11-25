@@ -299,6 +299,11 @@ export const api = {
     '/api/v1/compute/deployments',
     { method: 'POST', body: JSON.stringify({ kind: target.kind, node_id: target.node_id, request_key: requestKey }) },
   ),
+  controlCompute: (deployment: string, action: 'start' | 'stop' | 'remove') =>
+    request<Pick<ComputeDeployment, 'id' | 'state'>>(
+      `/api/v1/compute/deployments/${deployment}${action === 'remove' ? '' : `/${action}`}`,
+      { method: action === 'remove' ? 'DELETE' : 'POST' },
+    ),
   prepareComputeModel: (deployment: string, modelKey: string, modelVariant: string) => request<ComputePreparation>(
     `/api/v1/compute/deployments/${deployment}/models`,
     { method: 'POST', body: JSON.stringify({ model_key: modelKey, model_variant: modelVariant }) },

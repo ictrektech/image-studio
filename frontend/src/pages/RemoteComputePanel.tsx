@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Panel, PanelHeading, PanelTitle } from '@/components/app/panel'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -24,9 +25,10 @@ export default function RemoteComputePanel({ models, t }: { models: ModelInfo[];
   const [open, setOpen] = useState(false)
   const [overview, setOverview] = useState<ComputeOverview | null>(null)
   const [modelIds, setModelIds] = useState<Record<string, string>>({})
-  const [error, setError] = useState(false)
+  const [error, setError] = useState('')
   const [overviewError, setOverviewError] = useState(false)
   const [busy, setBusy] = useState('')
+  const [remove, setRemove] = useState<{ id: string; node: string }>()
   const deployKeys = useRef(new Map<string, string>())
   const localModels = models.filter(model => model.source !== 'v-router').flatMap(model => [
     { id: model.key, key: model.key, variant: '', name: model.name, ready: model.status === 'ready' },
@@ -69,15 +71,32 @@ export default function RemoteComputePanel({ models, t }: { models: ModelInfo[];
 
   async function act(key: string, action: () => Promise<unknown>) {
     setBusy(key)
-    setError(false)
+    setError('')
     try {
       await action()
       await refresh()
-    } catch {
-      setError(true)
+    } catch (reason) {
+      const code = reason instanceof Error ? reason.message : ''
+      const errors: Record<string, string> = {
+        BACKEND_TASKS_ACTIVE: t.remoteComputeTasksActive,
+        COMPUTE_MODEL_PREPARATION_ACTIVE: t.remoteComputePreparationActive,
+        COMPUTE_DEPLOYMENT_BUSY: t.remoteComputeBusy,
+        BACKEND_BUSY: t.remoteComputeBusy,
+      }
+      setError(errors[code] || t.remoteComputeError)
     } finally {
       setBusy('')
     }
+  }
+
+  function control(id: string, action: 'start' | 'stop' | 'remove') {
+    void act(id, async () => {
+      const receipt = await api.controlCompute(id, action)
+      setOverview(current => current && {
+        ...current,
+        deployments: current.deployments.map(row => row.id === id ? { ...row, ...receipt, last_error: null } : row),
+      })
+    })
   }
 
   function deploy(target: ComputeTarget) {
@@ -99,11 +118,11 @@ export default function RemoteComputePanel({ models, t }: { models: ModelInfo[];
         </Button>
       </PanelHeading>
       {open && <div className="mt-3 grid gap-3">
-        {(error || overviewError) && <Alert><AlertDescription>{t.remoteComputeError}</AlertDescription></Alert>}
+        {(error || overviewError) && <Alert><AlertDescription>{error || t.remoteComputeError}</AlertDescription></Alert>}
         {overview && !nodes.size && <p className="text-sm text-muted-foreground">{t.remoteComputeNoTargets}</p>}
         {[...nodes].map(([nodeKey, { name, profile, target, deployments }]) => {
-          const hasActiveDeployment = deployments.some(row => row.state === 'pending' || row.state === 'running' || row.state === 'stopping' || row.state === 'deleting')
-          const candidateVersion = !hasActiveDeployment && target ? imageVersion(target.image) : ''
+          const canDeploy = !deployments.length && target
+          const candidateVersion = canDeploy ? imageVersion(target.image) : ''
           return <section key={nodeKey} className="min-w-0 rounded-lg border" aria-label={name}>
             <header className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5">
               <div className="min-w-0">
@@ -112,7 +131,7 @@ export default function RemoteComputePanel({ models, t }: { models: ModelInfo[];
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {!deployments.length && <Badge variant="secondary">{t.remoteComputeNotDeployed}</Badge>}
-                {target && !hasActiveDeployment && <Button size="sm" disabled={!!busy} onClick={() => deploy(target)}>
+                {target && canDeploy && <Button size="sm" disabled={!!busy} onClick={() => deploy(target)}>
                   {busy === nodeKey ? t.remoteComputeStates.pending : t.remoteComputeDeploy}
                 </Button>}
               </div>
@@ -122,12 +141,22 @@ export default function RemoteComputePanel({ models, t }: { models: ModelInfo[];
               const preparations = overview?.preparations.filter(item => item.deployment_id === row.id) ?? []
               const selectedModel = readyModels.find(model => model.id === modelIds[row.id])
               const running = row.state === 'running' && !row.last_error
+              const transitioning = row.state === 'stopping' || row.state === 'deleting'
               return <div key={row.id} className="grid gap-3 border-t px-3 py-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                   <span>{t.remoteComputeBackendLabel}{deployments.length > 1 && ` ${index + 1}`}{version && ` · ${t.remoteComputeImageVersion} ${version}`}</span>
-                  <Badge variant={row.last_error ? 'destructive' : running ? 'default' : 'secondary'}>
-                    {row.last_error && row.state === 'running' ? t.remoteComputeStates.failed : t.remoteComputeStates[row.state]}
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={row.last_error ? 'destructive' : running ? 'default' : 'secondary'}>
+                      {row.last_error && row.state === 'running' ? t.remoteComputeStates.failed : t.remoteComputeStates[row.state]}
+                    </Badge>
+                    {(row.state === 'running' || row.state === 'pending') &&
+                      <Button variant="outline" size="sm" disabled={!!busy} onClick={() => control(row.id, 'stop')}>{t.remoteComputeStop}</Button>}
+                    {(row.state === 'stopped' || row.state === 'failed') &&
+                      <Button variant="outline" size="sm" disabled={!!busy} onClick={() => control(row.id, 'start')}>{t.remoteComputeStart}</Button>}
+                    {!transitioning &&
+                      <Button variant="outline" size="sm" className="text-destructive" disabled={!!busy}
+                        onClick={() => setRemove({ id: row.id, node: name })}>{t.remoteComputeRemove}</Button>}
+                  </div>
                 </div>
                 {preparations.map(item => {
                   const percentage = item.total_bytes ? Math.round(100 * item.received_bytes / item.total_bytes) : 0
@@ -165,6 +194,20 @@ export default function RemoteComputePanel({ models, t }: { models: ModelInfo[];
           </section>
         })}
       </div>}
+      <AlertDialog open={!!remove} onOpenChange={value => { if (!value) setRemove(undefined) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t.remoteComputeRemove} · {remove?.node}</AlertDialogTitle>
+            <AlertDialogDescription>{t.remoteComputeRemoveDescription}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.remoteComputeCancel}</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => { if (remove) control(remove.id, 'remove') }}>
+              {t.remoteComputeRemove}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Panel>
   )
 }

@@ -23,6 +23,8 @@ VOS 根地址：`https://<VOS-HOST>:1180/api/com.ictrek.image-studio`；容器�
 | `GET /api/v1/compute` | 无参数。200 返回 `targets`、`deployments` 和 `preparations` 数组，空数组表示暂无对应记录。 |
 | `POST /api/v1/compute/deployments` | 必填 `kind`（`ssh` 或 `cluster`）、`node_id` 和 `request_key`（1–96 位 ASCII 字母、数字、点、下划线或连字符）。相同键和参数用于安全重试。200 返回 `id` 和 `state`。 |
 | `POST /api/v1/compute/deployments/{deployment_id}/models` | 路径 ID 为 32 位小写十六进制；必填 `model_key`，`model_variant` 默认为空字符串。两者最多 96 位小写字母、数字、点、下划线或连字符。202 返回一条模型准备记录。相同部署和模型重复提交会返回进行中的记录或从已确认的偏移续传。 |
+| `POST /api/v1/compute/deployments/{deployment_id}/{action}` | `action`: `start` / `stop`. 路径 `deployment_id` 是 32 位小写十六进制 ID。无请求体。200 返回 `{id,state}`。启动接受 `stopped` 或 `failed` 并进入 `pending`，对已运行或部署中的实例返回现状。停止、删除依次进入 `stopping`、`deleting`，完成后在概览中读取 `stopped` 或 `removed`。V-Scheduler 清理失败时显示 `cleanup_failed`，可重试删除。 |
+| `DELETE /api/v1/compute/deployments/{deployment_id}` | 路径 `deployment_id` 是 32 位小写十六进制 ID。无请求体。200 返回 `{id,state}`。启动接受 `stopped` 或 `failed` 并进入 `pending`，对已运行或部署中的实例返回现状。停止、删除依次进入 `stopping`、`deleting`，完成后在概览中读取 `stopped` 或 `removed`。V-Scheduler 清理失败时显示 `cleanup_failed`，可重试删除。 |
 | `GET /api/v1/compute/placements` | 无参数。200 返回位置数组，字段为 `deployment_id`、`model_id`（`key` 或 `key@variant`）、`node_id`（V-Scheduler 节点 ID）、`node_name`（节点显示名，无法查到时为 null）、`executor_id`（该模型的执行器 ID）、`profile`（应用运行配置）、`runtime_parameters`（逐模型校准字段及批准值）、`has_reference`（是否要求参考图）。按 `node_id` 和 `model_id` 选择位置，在生图请求中传它的 `deployment_id`。 |
 | `POST /api/v1/generate` | 新增可选 `compute_deployment_id`。空字符串或省略时使用主节点，非空时为 32 位小写十六进制部署 ID。匹配模型与变体后使用该部署的校准配置。若显式传运行参数，值须与批准值相同。提交和结果格式仍为 `JobRecord`。 |
 
@@ -33,6 +35,10 @@ VOS 根地址：`https://<VOS-HOST>:1180/api/com.ictrek.image-studio`；容器�
 远端任务的 `metadata` 包含目标 `compute_node_id`、`compute_executor_id`、`compute_deployment_id`。任务下发后，使用 `scheduler_task_id` 查询 V-Scheduler 的 `GET /scheduler/api/v1/tasks/{id}`，以调度任务返回的 `node_id` 核对实际执行节点。
 
 选择镜像匹配的节点、发起部署、轮询到 `running`、提交模型准备、轮询到 `registered`。随后以相同模型和部署提交生成，使用 `GET /api/v1/jobs/{job_id}` 和 `GET /api/v1/outputs/{job_id}/{filename}` 获取结果。401 重新登录，403 检查管理员角色或部署授权，404 核对实例，409 检查运行状态和模型注册，422 修正请求或选择匹配参考图模式和运行参数的校准，503 检查节点、身份服务和 Scheduler。准备失败时在记录中读取 `error`，修复后重试同一模型。
+
+管理员可在同一节点卡片停止、启动或删除后端，也可在 V-Scheduler → 节点管理 → 应用后端操作同一部署。删除需要确认，主节点与 NFS 上的模型文件会保留。
+
+开始或删除失败会返回标准 `{detail}`。401 需要登录，403 需要系统管理员权限，404 表示部署不存在或不属于 Image Studio 后端，422 表示 ID 或操作无效。409 `BACKEND_TASKS_ACTIVE` 或 `COMPUTE_MODEL_PREPARATION_ACTIVE` 时等待任务或模型准备结束。409 `BACKEND_BUSY` 或 `COMPUTE_DEPLOYMENT_BUSY` 时刷新并重试。`BACKEND_STATE_CONFLICT` 表示当前状态不支持启动。503 表示 Scheduler 或 VOS 鉴权依赖不可用或响应异常。
 
 ### 本地生成
 

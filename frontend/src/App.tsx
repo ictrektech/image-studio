@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, CircleCheck, CircleOff, CircleX, Clock, Cpu, Database, ImageIcon, Info, ListChecks, LoaderCircle, Monitor, Moon, PlugZap, Sun } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -10,12 +10,9 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { api, AboutInfo, ImmichStatus, ModelInfo } from './api/client'
 import GeneratePage from './pages/GeneratePage'
-
-// 首屏只需要 GeneratePage，其余页面按需加载（实测延后约 41kB）。
-// 主包 570kB 主要来自 radix + lucide，要继续压首屏得在 vite 里拆 vendor，不是靠路由懒加载。
-const ModelsPage = lazy(() => import('./pages/ModelsPage'))
-const JobsPage = lazy(() => import('./pages/JobsPage'))
-const ApiPage = lazy(() => import('./pages/ApiPage'))
+import ModelsPage from './pages/ModelsPage'
+import JobsPage from './pages/JobsPage'
+import ApiPage from './pages/ApiPage'
 import { messages, useLanguage } from './i18n'
 import appIcon from './assets/icon.png'
 import { useTheme } from './hooks/useTheme'
@@ -181,11 +178,9 @@ export default function App() {
         {tab === 'generate' && <GeneratePage models={models} onRefresh={refresh} onOpenModels={() => setTab('models')} t={t} />}
         {tab !== 'generate' && (
           <div className="p-3 pb-6 md:px-3">
-            <Suspense fallback={<p className="p-6 text-xs text-muted-foreground">{t.loading}</p>}>
-              {tab === 'models' && <ModelsPage models={models} onRefresh={refresh} t={t} />}
-              {tab === 'jobs' && <JobsPage t={t} />}
-              {tab === 'api' && <ApiPage models={models} t={t} />}
-            </Suspense>
+            {tab === 'models' && <ModelsPage models={models} onRefresh={refresh} t={t} />}
+            {tab === 'jobs' && <JobsPage t={t} />}
+            {tab === 'api' && <ApiPage models={models} t={t} />}
           </div>
         )}
       </div>

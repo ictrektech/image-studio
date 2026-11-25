@@ -19,6 +19,43 @@ from app.services.storage import job_dir, load_job, save_job
 
 
 class RemoteExecutionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_backend_lifecycle_is_scoped_and_uses_scheduler(self):
+        deployment = "a" * 32
+        route = f"/api/v1/compute/deployments/{deployment}"
+        app = FastAPI()
+        app.include_router(compute.router)
+        app.dependency_overrides[compute.require_compute_admin] = lambda: None
+        worker = {"app_id": compute.APP_ID, "config": {"mode": compute.WORKER_MODE}}
+        path = f"backend-deployments/{deployment}"
+        with (
+            patch.object(settings, "scheduler_url", "http://scheduler.test/api/v1"),
+            patch.object(settings, "scheduler_token", "fixture-service"),
+            patch.object(compute, "deployment_request", new_callable=AsyncMock) as upstream,
+        ):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://studio.test") as client:
+                for method, suffix, forwarded, state in (
+                    ("POST", "/stop", path + "/stop", "stopping"),
+                    ("POST", "/start", path + "/start", "pending"),
+                    ("DELETE", "", path, "deleting"),
+                ):
+                    upstream.reset_mock()
+                    upstream.side_effect = [worker, {"id": deployment, "state": state}]
+                    response = await client.request(method, route + suffix)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.json(), {"id": deployment, "state": state})
+                    self.assertEqual([call.args[1:] for call in upstream.await_args_list], [("GET", path), (method, forwarded)])
+
+                upstream.reset_mock()
+                upstream.side_effect = [{"app_id": "com.example.other", "config": {"mode": compute.WORKER_MODE}}]
+                self.assertEqual((await client.delete(route)).status_code, 404)
+                self.assertEqual(upstream.await_count, 1)
+
+                upstream.reset_mock()
+                with patch.dict(compute._pending, {(deployment, "sd-turbo"): object()}):
+                    blocked = await client.delete(route)
+                self.assertEqual(blocked.json(), {"detail": "COMPUTE_MODEL_PREPARATION_ACTIVE"})
+                upstream.assert_not_awaited()
+
     async def test_overview_names_deployed_nodes_and_keeps_undeployed_targets(self):
         inventory = {"items": [
             {"id": "spark-a", "name": "Spark A", "profile": "dgx-spark"},

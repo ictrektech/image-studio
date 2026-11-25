@@ -21,7 +21,8 @@ from app.worker import WORKER_MODE, WORKER_PROFILES
 
 APP_ID = "com.ictrek.image-studio"
 _DEPLOYMENT_ID = r"^[0-9a-f]{32}$"
-_pending: dict[str, asyncio.Task] = {}
+_pending: dict[tuple[str, str], asyncio.Task] = {}
+_changing: set[str] = set()
 DeploymentState = Literal["pending", "running", "failed", "stopping", "deleting", "stopped", "removed", "cleanup_failed"]
 
 
@@ -243,7 +244,7 @@ async def compute_overview():
     for path in _preparations().glob("*.json"):
         record = json.loads(path.read_text())
         if record["deployment_id"] in visible:
-            if record["state"] == "transferring" and path.stem not in _pending:
+            if record["state"] == "transferring" and (record["deployment_id"], record["model_id"]) not in _pending:
                 record.update(state="interrupted", error="COMPUTE_TRANSFER_INTERRUPTED")
             preparations.append(record)
     return {"targets": targets, "deployments": deployments, "preparations": preparations}
@@ -300,7 +301,7 @@ async def _prepare(path: Path, record: dict, model: PrepareModelRequest) -> None
         try:
             _atomic(path, record)
         finally:
-            _pending.pop(path.stem, None)
+            _pending.pop((record["deployment_id"], record["model_id"]), None)
 
 
 @router.post("/deployments/{deployment_id}/models", status_code=202, response_model=Preparation)
@@ -308,14 +309,14 @@ async def prepare_backend_model(deployment_id: str, payload: PrepareModelRequest
     if not re.fullmatch(_DEPLOYMENT_ID, deployment_id):
         raise HTTPException(422, "INVALID_BACKEND_DEPLOYMENT_ID")
     async with deployment_client() as client:
-        deployment = await deployment_request(client, "GET", f"backend-deployments/{deployment_id}")
-    if deployment.get("app_id") != APP_ID or deployment.get("config", {}).get("mode") != WORKER_MODE:
-        raise HTTPException(404, "COMPUTE_DEPLOYMENT_NOT_FOUND")
+        deployment = await _worker_deployment(client, deployment_id)
+    if deployment_id in _changing:
+        raise HTTPException(409, "COMPUTE_DEPLOYMENT_BUSY")
     if deployment["state"] != "running" or not deployment.get("endpoint"):
         raise HTTPException(409, "COMPUTE_BACKEND_NOT_RUNNING")
     model_id = f"{payload.model_key}@{payload.model_variant}" if payload.model_variant else payload.model_key
     path = _preparation_path(deployment_id, model_id)
-    key = path.stem
+    key = (deployment_id, model_id)
     if key in _pending:
         return json.loads(path.read_text())
     record = {
@@ -326,3 +327,41 @@ async def prepare_backend_model(deployment_id: str, payload: PrepareModelRequest
     _atomic(path, record)
     _pending[key] = asyncio.create_task(_prepare(path, record, payload))
     return record
+
+
+async def _worker_deployment(client: httpx.AsyncClient, deployment_id: str) -> dict:
+    row = await deployment_request(client, "GET", f"backend-deployments/{deployment_id}")
+    if row.get("app_id") != APP_ID or row.get("config", {}).get("mode") != WORKER_MODE:
+        raise HTTPException(404, "COMPUTE_DEPLOYMENT_NOT_FOUND")
+    return row
+
+
+async def _change_deployment(deployment_id: str, action: Literal["start", "stop", "remove"]):
+    if not re.fullmatch(_DEPLOYMENT_ID, deployment_id):
+        raise HTTPException(422, "INVALID_BACKEND_DEPLOYMENT_ID")
+    if deployment_id in _changing:
+        raise HTTPException(409, "COMPUTE_DEPLOYMENT_BUSY")
+    if action != "start" and any(candidate == deployment_id for candidate, _ in _pending):
+        raise HTTPException(409, "COMPUTE_MODEL_PREPARATION_ACTIVE")
+    _changing.add(deployment_id)
+    try:
+        async with deployment_client() as client:
+            await _worker_deployment(client, deployment_id)
+            path = f"backend-deployments/{deployment_id}"
+            row = await (
+                deployment_request(client, "DELETE", path) if action == "remove"
+                else deployment_request(client, "POST", f"{path}/{action}")
+            )
+        return {"id": row["id"], "state": row["state"]}
+    finally:
+        _changing.discard(deployment_id)
+
+
+@router.post("/deployments/{deployment_id}/{action}", response_model=DeployReceipt)
+async def change_backend(deployment_id: str, action: Literal["start", "stop"]):
+    return await _change_deployment(deployment_id, action)
+
+
+@router.delete("/deployments/{deployment_id}", response_model=DeployReceipt)
+async def remove_backend(deployment_id: str):
+    return await _change_deployment(deployment_id, "remove")

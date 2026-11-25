@@ -14,6 +14,8 @@ VOS 根地址：`https://<VOS-HOST>:1180/api/com.ictrek.image-studio`；容器�
 
 部署和模型准备接口要求验证通过的 VOS 系统管理员 Bearer token。应用后端使用自身的 Scheduler 服务身份发起部署、传输和注册。可用位置与远端生成要求有效 VOS 用户身份。地址沿用上文 VOS 或容器基址。POST 请求体为 `application/json`。
 
+主节点可只协调远端计算。受信任的 V-Scheduler 绑定可传空的 `models` 字典，`GET /api/v1/scheduler/binding` 仍返回 `configured: true`，而 `approved_model_count` 为 0。本机模型生成继续要求本机批准。
+
 | 请求 | 输入与响应 |
 | --- | --- |
 | `GET /api/v1/compute` | 无参数。200 返回 `targets`、`deployments` 和 `preparations` 数组，空数组表示暂无对应记录。 |

@@ -234,7 +234,7 @@ async def _outbox() -> None:
 
 async def start() -> None:
     global _loop
-    if settings.scheduler_required:
+    if settings.scheduler_required and (settings.scheduler_models or settings.scheduler_config.get("gateway_executors")):
         application_lifecycle().start()
     if _loop and not _loop.done():
         return

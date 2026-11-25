@@ -120,7 +120,8 @@ async def bind(request: Request):
         for field in ("token", "executor_token"):
             if not isinstance(config.get(field), str) or not 32 <= len(config[field]) <= 4096 or any(character.isspace() for character in config[field]):
                 raise ValueError()
-        if not isinstance(config.get("models"), dict) or not 1 <= len(config["models"]) <= 512:
+        # A coordinator can deploy remote compute without any approved local model.
+        if not isinstance(config.get("models"), dict) or len(config["models"]) > 512:
             raise ValueError()
         if not isinstance(config.get("model_limits"), dict):
             raise ValueError()

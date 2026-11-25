@@ -17,6 +17,43 @@ from app.models import JobRecord
 
 
 class BindingTests(unittest.TestCase):
+    def test_verified_scheduler_can_bind_remote_only_coordinator(self):
+        app = FastAPI()
+        app.include_router(binding.router)
+        config = {
+            "protocol_version": 1, "binding_revision": 1, "lifecycle_protocol_version": 1,
+            "app_id": binding.APP_ID, "url": binding.URL, "upstream_url": binding.UPSTREAM,
+            "token": "a" * 32, "executor_token": "b" * 32, "models": {}, "gateway_executors": {},
+            "model_limits": {}, "model_parameters": {}, "execution_settings": binding.execution_settings(),
+        }
+        identity = AsyncMock()
+        identity.__aenter__.return_value = identity
+        identity.get.return_value = httpx.Response(
+            200, json={"sub": "com.ictrek.v-scheduler", "enable": 1},
+            request=httpx.Request("GET", "http://identity/userinfo"),
+        )
+        changes = {field: getattr(settings, field) for field in (
+            "scheduler_url", "scheduler_token", "scheduler_executor_token", "scheduler_config",
+            "scheduler_models", "scheduler_model_limits", "scheduler_model_parameters",
+        )}
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.multiple(settings, **changes),
+            patch.object(binding, "config_path", return_value=Path(directory) / "scheduler.json"),
+            patch.object(binding.httpx, "AsyncClient", return_value=identity),
+            patch.object(binding, "controller", return_value=[]),
+            patch("app.services.scheduler.start", new_callable=AsyncMock),
+            patch.dict(os.environ, {"VOS_USERINFO_URL": "http://identity/userinfo"}),
+            TestClient(app) as api,
+        ):
+            response = api.post("/api/v1/scheduler/binding", json=config, headers={"Authorization": "Bearer fixture"})
+            self.assertEqual(response.status_code, 200, response.text)
+            status = api.get("/api/v1/scheduler/binding").json()
+            self.assertTrue(status["configured"])
+            self.assertEqual(status["approved_model_count"], 0)
+            self.assertEqual(settings.scheduler_models, {})
+            self.assertEqual(settings.scheduler_url, binding.URL)
+
     def test_legacy_vos_application_identity_is_checked_not_bypassed(self):
         app = FastAPI()
         app.include_router(binding.router)

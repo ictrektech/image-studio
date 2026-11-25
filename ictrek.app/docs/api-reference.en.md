@@ -14,6 +14,8 @@ Use the same valid VOS Bearer token for generation, polling and files. Business 
 
 The overview, deployment and model preparation routes require a verified VOS system administrator Bearer token. The application backend uses its own Scheduler service identity for deployment, transfer and registration. Listing placements and submitting remote jobs require a verified VOS user. Use the VOS or container base URL above and send `application/json` for POST bodies.
 
+The main node can coordinate remote compute with an empty approved local `models` map in its trusted V-Scheduler binding. `GET /api/v1/scheduler/binding` then reports `configured: true` and an `approved_model_count` of 0. Main-node inference still requires local model approval.
+
 | Request | Input and response |
 | --- | --- |
 | `GET /api/v1/compute` | No parameters. 200 returns `targets`, `deployments` and `preparations` arrays. An empty array means there are no matching records. |

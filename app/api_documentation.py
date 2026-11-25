@@ -95,7 +95,7 @@ def build_openapi(app) -> dict:
         "upstream_url": {"type": "string", "const": UPSTREAM},
         "token": {"type": "string", "minLength": 32, "maxLength": 4096, "writeOnly": True, "description": "Provisioned Scheduler service identity, never an upstream vendor key."},
         "executor_token": {"type": "string", "minLength": 32, "maxLength": 4096, "writeOnly": True},
-        "models": {"type": "object", "additionalProperties": S, "minProperties": 1, "maxProperties": 512},
+        "models": {"type": "object", "additionalProperties": S, "maxProperties": 512, "description": "Approved main-node models. An empty object enables remote coordination with no local compute approval. 空对象表示只启用远端协调，没有本机计算批准。"},
         "gateway_executors": {"type": "object", "additionalProperties": S, "maxProperties": 512},
         "model_limits": {"type": "object", "additionalProperties": model_limit},
         "model_parameters": {"type": "object", "additionalProperties": obj(parameter_properties)},

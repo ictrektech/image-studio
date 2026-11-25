@@ -404,6 +404,8 @@ VOS 安装后，应用通过 Scheduler 的可信绑定获得 `lifecycle_protocol
 3. 目标能挂载 Model Hub 的只读 NFS 共享时，应用校验共享文件并直接加载。共享不可用或缺少匹配权重时，从主节点分块复制到目标。准备中断时重新提交同一部署和模型，已复制的字节会用于续传。模型校验完成后登记执行器，界面显示「NFS 共享」或「节点副本」。
 4. 在「生成 → 计算节点」选择该部署。任务、参考图和下载仍使用当前 VOS 用户上下文。详细字段见[中文 API 参考](ictrek.app/docs/api-reference.zh.md)和[英文 API 参考](ictrek.app/docs/api-reference.en.md)，应用内可打开「API → 完整接口与请求/响应字段」。
 
+主节点可只协调远端任务。V-Scheduler 可以下发空的本机批准模型列表，建立部署和任务服务身份。本机生成仍要求对应模型的本机批准。
+
 ### Scheduling options
 
 `POST /api/v1/generate` accepts an optional `scheduling` object:

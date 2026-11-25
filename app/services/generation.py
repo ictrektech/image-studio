@@ -16,6 +16,7 @@ from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
 import httpx
+from fastapi import HTTPException
 
 from app.config import settings
 from app.models import GenerateRequest, JobRecord
@@ -95,8 +96,24 @@ _FRAME_RE = re.compile(r"\b(?:frame|frames|video)\D{0,32}(\d+)\s*/\s*(\d+)", re.
 
 async def create_job(user_key: str, request: GenerateRequest, access_token: str = "") -> JobRecord:
     if request.model_key.startswith("v-router/"):
+        if request.compute_deployment_id:
+            raise HTTPException(422, "COMPUTE_REQUIRES_IMAGE_STUDIO_MODEL")
         return await create_v_router_job(user_key, request, access_token)
-    runtime = get_model_def(request.model_key, request.model_variant)["runtime"]
+    compute = None
+    if request.compute_deployment_id:
+        from app.routers.compute import registered_compute_model
+        from app.services.session import verify_vos_identity
+        if not access_token or not await verify_vos_identity(access_token):
+            raise HTTPException(401, "COMPUTE_VOS_LOGIN_REQUIRED")
+        requested = f"{request.model_key}@{request.model_variant}" if request.model_variant else request.model_key
+        compute = registered_compute_model(request.compute_deployment_id, requested)
+        request = request.model_copy(update={
+            key: value for key, value in compute["model_parameters"].items()
+            if key in GenerateRequest.model_fields and key not in request.model_fields_set
+        })
+    runtime = get_model_def(
+        request.model_key, request.model_variant, profile=compute["runtime_profile"] if compute else None,
+    )["runtime"]
     video_mode = runtime.get("mode") == "video"
     defaults = runtime.get("defaults") or {}
     parameters = runtime.get("parameters") or {}
@@ -107,8 +124,10 @@ async def create_job(user_key: str, request: GenerateRequest, access_token: str 
         for field in ("width", "height", "steps", "cfg_scale", "sampler", "vae_tile_size")
         if field not in request.model_fields_set and field in defaults
     })
-    await assert_model_hub_ready(request.model_key, request.model_variant)
-    model_path = model_path_for(request.model_key, request.model_variant)
+    model_path = ""
+    if not compute:
+        await assert_model_hub_ready(request.model_key, request.model_variant)
+        model_path = str(model_path_for(request.model_key, request.model_variant))
     now = datetime.now(timezone.utc)
     supports_reference = parameters.get("reference_image", False)
     effective_video_frames = request.video_frames or int(defaults.get("video_frames", 0) or 0)
@@ -123,7 +142,7 @@ async def create_job(user_key: str, request: GenerateRequest, access_token: str 
         negative_prompt=request.negative_prompt if parameters.get("negative_prompt", runtime.get("negative", True)) else "",
         model_key=request.model_key,
         model_variant=request.model_variant,
-        model_path=str(model_path),
+        model_path=model_path,
         width=request.width,
         height=request.height,
         steps=request.steps,
@@ -183,7 +202,10 @@ async def create_job(user_key: str, request: GenerateRequest, access_token: str 
         created_at=now,
         updated_at=now,
     )
-    if settings.scheduler_url or settings.scheduler_required:
+    if compute:
+        job.metadata["compute_deployment_id"] = request.compute_deployment_id
+        job.metadata["compute_executor_id"] = compute["executor_id"]
+    if compute or settings.scheduler_url or settings.scheduler_required:
         from app.services.scheduler import prepare
         await prepare(job, operator_authorization=("Bearer " + access_token) if access_token else "")
         return job
@@ -496,7 +518,8 @@ def build_sd_args(job: JobRecord, output: Path, seed_offset: int = 0, low_memory
     video_mode = runtime.get("mode") == "video"
     defaults = runtime.get("defaults") or {}
     parameters = runtime.get("parameters") or {}
-    role_paths = runtime_paths_for(job.model_key, job.model_variant)
+    remote_roles = job.metadata.get("_worker_role_paths")
+    role_paths = remote_roles if isinstance(remote_roles, dict) else runtime_paths_for(job.model_key, job.model_variant)
 
     args = [settings.sd_cpp_bin]
     if video_mode:
@@ -555,7 +578,11 @@ async def run_sd_cpp(
     progress_span: float = 0.87,
 ) -> None:
     args = build_sd_args(job, output, seed_offset=seed_offset, low_memory_retry=low_memory_retry)
-    logger.info("sd-cli 启动 (job=%s run=%s): %s", job.job_id, seed_offset, shlex.join(args))
+    worker_job = "_worker_role_paths" in job.metadata
+    if worker_job:
+        logger.info("sd-cli worker start (job=%s run=%s)", job.job_id, seed_offset)
+    else:
+        logger.info("sd-cli 启动 (job=%s run=%s): %s", job.job_id, seed_offset, shlex.join(args))
     video_mode = get_model_def(job.model_key, job.model_variant)["runtime"].get("mode") == "video"
     timeout = settings.video_timeout_seconds if video_mode else settings.default_timeout_seconds
     task_key = (job.user_key, job.job_id)
@@ -595,6 +622,10 @@ async def run_sd_cpp(
         _job_processes.pop(task_key, None)
     if process.returncode != 0:
         detail = " | ".join(line.strip() for line in list(output_tail)[-6:] if line.strip())
+        if worker_job:
+            if _is_memory_error(detail):
+                raise RuntimeError("Worker sd-cli ran out of memory")
+            raise RuntimeError(f"Worker sd-cli exited with code {process.returncode}")
         logger.error("sd-cli 失败 (job=%s code=%s): %s", job.job_id, process.returncode, shlex.join(args))
         raise RuntimeError(f"sd-cli 退出码 {process.returncode}: {detail or '无错误输出'}")
 
@@ -917,6 +948,9 @@ async def _terminate_process(process: asyncio.subprocess.Process) -> None:
 
 
 def init_image_path(job: JobRecord) -> Path | None:
+    worker_path = job.metadata.get("_worker_reference_path")
+    if worker_path:
+        return Path(worker_path)
     init_input_id = str(job.metadata.get("init_input_id") or "").strip()
     if init_input_id:
         path = input_path(job.user_key, init_input_id)

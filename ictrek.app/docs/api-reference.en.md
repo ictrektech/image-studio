@@ -10,6 +10,26 @@ Use the same valid VOS Bearer token for generation, polling and files. Business 
 
 ## Complete workflow
 
+### Remote compute API
+
+The overview, deployment and model preparation routes require a verified VOS system administrator Bearer token. The application backend uses its own Scheduler service identity for deployment, transfer and registration. Listing placements and submitting remote jobs require a verified VOS user. Use the VOS or container base URL above and send `application/json` for POST bodies.
+
+| Request | Input and response |
+| --- | --- |
+| `GET /api/v1/compute` | No parameters. 200 returns `targets`, `deployments` and `preparations` arrays. An empty array means there are no matching records. |
+| `POST /api/v1/compute/deployments` | Required `kind` (`ssh` or `cluster`), `node_id` and `request_key` (1–96 ASCII letters, digits, periods, underscores or hyphens). Replay the same key and parameters to recover an ambiguous result. 200 returns `id` and `state`. |
+| `POST /api/v1/compute/deployments/{deployment_id}/models` | The path ID is 32 lowercase hex characters. `model_key` is required. `model_variant` defaults to the empty string. Each accepts up to 96 lowercase letters, digits, periods, underscores or hyphens. 202 returns a preparation record. Submitting the same deployment and model returns the active operation or resumes from confirmed offsets. |
+| `GET /api/v1/compute/placements` | No parameters. 200 returns an array of placements with `deployment_id`, `model_id` (`key` or `key@variant`), `profile` (Image Studio runtime Profile), `runtime_parameters` (calibrated fields and approved values), and `has_reference` (whether a reference image is required). |
+| `POST /api/v1/generate` | Optional `compute_deployment_id` selects the registered deployment. Omit it or send an empty string to use the main node. A nonempty ID is 32 lowercase hex characters. Match the model and variant and use the target's calibrated runtime values. Explicit runtime parameters must match the approved values. The response remains a `JobRecord`. |
+
+Targets contain `kind`, `node_id`, `name`, `profile` (fixed hardware Profile), `runtime_profile` (Image Studio runtime Profile) and full `image`. Deployments contain `id`, `target_kind`, `target_id`, `profile`, `image`, `state` and nullable `last_error`. Deployment states are `pending`, `running`, `failed`, `stopping`, `deleting`, `stopped`, `removed` and `cleanup_failed`. Preparation records contain `deployment_id`, `model_id`, `state`, `received_bytes`, `total_bytes` and nullable `executor_id`, `node_id` and `error`. Counts are nonnegative bytes. Preparation states are `transferring`, `interrupted`, `registered` and `failed`. `total_bytes` can be 0 before transfer starts.
+
+The preparation record's `weight_source` is `shared` for read-only NFS, `copy` for a node copy, or `null` while the source is pending. Image Studio tries to verify shared weights first. Copying is used when the mount is unavailable or shared files do not match the source revision. With shared weights, `received_bytes` counts verified bytes.
+
+Grant the target and repository, deploy, and poll for `running`. Submit model preparation and poll for `registered`. Generate against that deployment, then use `GET /api/v1/jobs/{job_id}` and `GET /api/v1/outputs/{job_id}/{filename}` for results. For 401, sign in again. For 403, check the administrator role or deployment grant. For 404, check the deployment ID. For 409, check runtime and model readiness. For 422, correct the request or choose a model with the matching calibration. For 503, check the node, identity service and Scheduler. If preparation fails, inspect the record's `error`, resolve it and retry the same model.
+
+### Main-node generation
+
 ```sh
 export IMAGE_API='https://<VOS-HOST>:1180/api/com.ictrek.image-studio'
 curl --fail-with-body -H "Authorization: Bearer $VOS_TOKEN" "$IMAGE_API/api/v1/models"

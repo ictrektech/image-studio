@@ -11,6 +11,7 @@ import { Panel, PanelHeading, PanelTitle } from '@/components/app/panel'
 import { StatusBadge } from '@/components/app/status-badge'
 import { api, ModelInfo, VRouterStatus } from '../api/client'
 import { messages } from '../i18n'
+import RemoteComputePanel from './RemoteComputePanel'
 
 type T = typeof messages['zh-CN']
 type ModelEntry = { base: ModelInfo; active: ModelInfo; variantId: string; isVariant: boolean }
@@ -147,6 +148,7 @@ export default function ModelsPage({ models, onRefresh, t }: { models: ModelInfo
 
   return (
     <div className="grid gap-2.5">
+      <RemoteComputePanel models={models} t={t} />
       <Panel className="p-3">
         <PanelHeading className="mb-3">
           <div>

@@ -10,6 +10,7 @@ import { api, API_BASE, ModelInfo, SessionInfo } from '../api/client'
 import { messages } from '../i18n'
 
 type T = typeof messages['zh-CN']
+type TextKey = { [Key in keyof T]: T[Key] extends string ? Key : never }[keyof T]
 
 // 内置注册表快照（实时状态以 GET /api/v1/models 为准）
 const MODEL_KEYS: [string, string, string, string, string][] = [
@@ -60,7 +61,7 @@ const MODEL_KEYS: [string, string, string, string, string][] = [
   ['lingbot-video', '1.3B', 'Video', 'LingBot Video', 'video (首帧 -i)'],
 ]
 
-const PARAMS: [string, string, string, keyof T & string][] = [
+const PARAMS: [string, string, string, TextKey][] = [
   ['prompt', 'string · 1~4000 字符', '必填', 'apiP_prompt'],
   ['model_key', 'string', 'sd15', 'apiP_model_key'],
   ['model_variant', 'string', '""', 'apiP_model_variant'],
@@ -347,6 +348,18 @@ export default function ApiPage({ models, t }: { models: ModelInfo[]; t: T }) {
           ))}
         </TableBody>
       </Table>
+
+      <SectionHeading>{t.remoteCompute}</SectionHeading>
+      <p className="text-xs text-muted-foreground">{t.remoteComputeApiSetup}</p>
+      <GuideCode t={t}>{`GET /api/v1/compute
+POST /api/v1/compute/deployments
+{"kind":"ssh","node_id":"<node-id>","request_key":"deploy-1"}
+POST /api/v1/compute/deployments/<deployment-id>/models
+{"model_key":"sd-turbo","model_variant":""}
+GET /api/v1/compute/placements
+POST /api/v1/generate
+{"prompt":"A small red house","model_key":"sd-turbo","compute_deployment_id":"<deployment-id>"}`}</GuideCode>
+      <p className="mt-2 text-xs text-muted-foreground">{t.remoteComputeApiUse}</p>
 
       <div id="image-api-flow"><SectionHeading>{t.apiFlowTitle}</SectionHeading></div>
       <p className="mt-0.5 text-xs text-muted-foreground">{t.apiFlowHelp}</p>

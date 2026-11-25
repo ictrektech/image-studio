@@ -386,6 +386,24 @@ VOS 安装后，应用通过 Scheduler 的可信绑定获得 `lifecycle_protocol
 
 仅应用层变更可在对应架构构建机设置 `IMAGE_STUDIO_APPLICATION_BASE_IMAGE=<已核验的同 profile 发布镜像>`，再运行原有 `docker/build_image.sh --sheet <sheet> --component backend`。此方式保留原生依赖与已校准的运行环境，只替换当前 `app/`；变更原生依赖或推理参数时仍须完整构建。
 
+打包时，同一次飞书查表的结果写入主节点 Compose 服务的 `image` 和后端容器的 `IMAGE_STUDIO_BACKEND_IMAGES`。该环境变量是 JSON 对象，以 V-Scheduler 节点固定 Profile 为键，每项包含 Image Studio 的运行 Profile（`profile`）和发布时选定的完整镜像引用（`image`）。
+
+| V-Scheduler 节点 Profile | Image Studio 运行 Profile |
+| --- | --- |
+| `amd-cpu` | `amd` |
+| `amd-cuda` | `amd-cuda` |
+| `arm-cpu` | `arm` |
+| `arm-cuda` | `arm-cuda` |
+| `jetson-orin` | `l4t` |
+| `jetson-thor` | `thor` |
+
+### 远端计算后端
+
+1. 在 V-Scheduler 授权 Image Studio 的应用服务身份访问目标节点和 `image-studio-backend` 镜像仓库。目标须报告固定 Profile，具备可用的部署通道。调度使用目标节点已批准的资源预算和模型校准。
+2. 以 VOS 系统管理员打开 Image Studio「模型 → 远端计算后端 → 管理部署」，选择目标并部署。后端运行后，选择主节点已准备好的模型，点击「准备模型并注册」。
+3. 目标能挂载 Model Hub 的只读 NFS 共享时，应用校验共享文件并直接加载。共享不可用或缺少匹配权重时，从主节点分块复制到目标。准备中断时重新提交同一部署和模型，已复制的字节会用于续传。模型校验完成后登记执行器，界面显示「NFS 共享」或「节点副本」。
+4. 在「生成 → 计算节点」选择该部署。任务、参考图和下载仍使用当前 VOS 用户上下文。详细字段见[中文 API 参考](ictrek.app/docs/api-reference.zh.md)和[英文 API 参考](ictrek.app/docs/api-reference.en.md)，应用内可打开「API → 完整接口与请求/响应字段」。
+
 ### Scheduling options
 
 `POST /api/v1/generate` accepts an optional `scheduling` object:

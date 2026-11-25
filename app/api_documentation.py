@@ -103,14 +103,16 @@ def build_openapi(app) -> dict:
     }, ["protocol_version", "binding_revision", "app_id", "url", "upstream_url", "token", "executor_token", "models", "model_limits", "model_parameters", "execution_settings"])
     spec["components"]["securitySchemes"] = {
         "VOSBearer": {"type": "http", "scheme": "bearer", "description": "VOS user token for stable user attribution. Trusted-network legacy fallbacks are not a public authentication boundary."},
+        "VOSComputeAdmin": {"type": "http", "scheme": "bearer", "description": "Verified and enabled VOS system administrator for compute deployments and weight preparation."},
         "SchedulerApplication": {"type": "http", "scheme": "bearer", "description": "Verified V-Scheduler application identity only; ordinary users, model keys and vendor keys are insufficient."},
         "ExecutorBearer": {"type": "http", "scheme": "bearer", "description": "Separately provisioned executor_token from the accepted binding."},
     }
     files = {"output_file", "input_file", "photocraft_output"}
     from app.routers.api import router as application_router
+    from app.routers.compute import placement_router, router as deployment_router
     from app.services.scheduler import router as execution_router
     from app.services.scheduler_binding import router as binding_router
-    routes = [route for router in (application_router, execution_router, binding_router, app) for route in router.routes]
+    routes = [route for router in (application_router, deployment_router, placement_router, execution_router, binding_router, app) for route in router.routes]
     documented = set()
     for route in routes:
         if not isinstance(route, APIRoute) or not route.include_in_schema:
@@ -132,6 +134,9 @@ def build_openapi(app) -> dict:
                 operation["security"] = [{"SchedulerApplication": []}]
             elif name in {"execute", "inspect", "cancel"}:
                 operation["security"] = [{"ExecutorBearer": []}]
+                operation["parameters"] = [parameter for parameter in operation.get("parameters", []) if parameter.get("name", "").lower() != "authorization"]
+            elif route.path.startswith("/api/v1/compute"):
+                operation["security"] = [{("VOSBearer" if name == "compute_placements" else "VOSComputeAdmin"): []}]
                 operation["parameters"] = [parameter for parameter in operation.get("parameters", []) if parameter.get("name", "").lower() != "authorization"]
             elif name in {"me", "settings", "update_settings", "generate", "jobs", "job", "delete_generation_job", "outputs", "output_file", "photocraft_handoff", "upload_input", "inputs", "input_file", "remove_input", "upload_job_to_immich", "retry_job_immich_upload"}:
                 operation["security"] = [{"VOSBearer": []}, {}]

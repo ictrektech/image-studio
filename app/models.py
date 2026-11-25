@@ -16,6 +16,10 @@ class SchedulingOptions(BaseModel):
 
 class GenerateRequest(BaseModel):
     scheduling: SchedulingOptions | None = None
+    compute_deployment_id: str = Field(
+        default="", pattern=r"^([0-9a-f]{32})?$",
+        description="Registered compute deployment ID; empty uses the main node. 已注册的计算部署 ID，空值使用主节点。",
+    )
     prompt: str = Field(min_length=1, max_length=4000)
     negative_prompt: str = ""
     model_key: str = "sd15"

@@ -1305,16 +1305,16 @@ def get_model(key: str) -> ModelInfo:
     raise KeyError(key)
 
 
-def get_model_def(key: str, variant_id: str = "") -> dict[str, Any]:
+def get_model_def(key: str, variant_id: str = "", *, profile: str | None = None) -> dict[str, Any]:
     for item in MODEL_DEFS:
         if item["key"] == key:
-            return _effective_model_item(item, variant_id)
+            return _effective_model_item(item, variant_id, profile=profile)
     raise KeyError(key)
 
 
-def _effective_model_item(item: dict[str, Any], variant_id: str = "") -> dict[str, Any]:
+def _effective_model_item(item: dict[str, Any], variant_id: str = "", *, profile: str | None = None) -> dict[str, Any]:
     # Orin 的统一内存使用本机实测的低内存边界，保留原始共享权重。
-    if item["key"] == "sd-turbo" and settings.profile == "l4t":
+    if item["key"] == "sd-turbo" and (profile or settings.profile) == "l4t":
         item = {**item, "runtime": _with_runtime_defaults(item["runtime"], weight_type="q4_0", max_vram=1.5, vae_tile_size="128x128", clip_on_cpu=True)}
     variant_id = (variant_id or "").strip()
     if not variant_id:

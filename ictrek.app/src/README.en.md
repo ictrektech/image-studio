@@ -34,6 +34,12 @@ Expected path:
 
 If the model is missing, use the Models tab to trigger Model Hub pull or sync.
 
+## Remote Compute
+
+Grant the Image Studio service identity access to the target and repository in V-Scheduler. A system administrator can then open **Models → Remote compute backends → Manage deployments**. Select a node, start its backend, and choose **Prepare and register** for a model prepared on the main node. Image Studio verifies and loads the weights from a read-only NFS share when available. If the share is unavailable, it copies the weights in chunks. Registration requires verified weights and an approved configuration for the actual target. To resume an interrupted copy, select the same deployment and model.
+
+Signed-in users can select a registered deployment under **Generate → Compute node**. API callers send `compute_deployment_id` to `POST /api/v1/generate` and use the existing job and output routes. Use the approved dimensions, step count, reference mode and runtime settings for the target. Open **API → Complete API and request/response fields** for the contract.
+
 ## Install-Time Choices
 
 After uploading the package, the installer shows the install location,

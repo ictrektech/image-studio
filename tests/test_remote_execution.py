@@ -1,0 +1,88 @@
+import asyncio
+import base64
+import hashlib
+import json
+import tempfile
+import unittest
+from datetime import datetime, timezone
+from pathlib import Path
+from unittest.mock import patch
+
+import httpx
+
+from app.config import settings
+from app.models import JobRecord
+from app.services import remote_execution, scheduler, weight_sync
+from app.services.storage import job_dir, load_job, save_job
+
+
+class RemoteExecutionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_execution_uses_selected_deployment_with_fence_and_returns_verified_output(self):
+        directory = self.enterContext(tempfile.TemporaryDirectory())
+        self.enterContext(patch.object(settings, "data_dir", Path(directory)))
+        self.enterContext(patch.object(settings, "scheduler_url", "http://scheduler.test/api/v1"))
+        self.enterContext(patch.object(settings, "scheduler_token", "fixture-service"))
+        self.enterContext(patch.object(settings, "scheduler_executor_token", "fixture-callback"))
+        deployment_id = "a" * 32
+        executor = "app-remote-image-studio-fixture"
+        now = datetime.now(timezone.utc)
+        job = JobRecord(
+            job_id="job_fixture", user_key="owner", status="queued", prompt="a fixture",
+            model_key="sd-turbo", model_path="", width=512, height=512, steps=4,
+            cfg_scale=1, sampler="euler_a", seed=1, batch_count=1, created_at=now, updated_at=now,
+            metadata={"compute_deployment_id": deployment_id, "compute_executor_id": executor,
+                      "scheduler_managed": True, "scheduler_task_id": "task-fixture"},
+        )
+        policy = {
+            "executor_id": executor, "transfer_id": "b" * 64,
+            "model_limits": {"width": 512, "height": 512, "steps": 4, "batch_count": 1, "video_frames": 0,
+                             "prompt_characters": 200, "negative_prompt_characters": 200},
+            "model_parameters": scheduler.runtime_parameters(job),
+        }
+        save_job(job)
+        attempt = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+        command = {"task_id": "task-fixture", "executor_id": executor, "fence": 7,
+                   "parameters": {"user_key": "owner", "job_id": "job_fixture"}, "lease_seconds": 30}
+        headers = "Bearer fixture-callback"
+        image = b"verified output bytes"
+        calls = []
+
+        def bridge(request):
+            path = request.url.path.removeprefix(f"/api/v1/backend-deployments/{deployment_id}/executions/{attempt}/")
+            self.assertEqual(request.headers["Authorization"], "Bearer fixture-service")
+            calls.append(path)
+            if path == "start":
+                payload = json.loads(request.content)
+                self.assertEqual(payload["task_id"], command["task_id"])
+                self.assertEqual(payload["fence"], 7)
+                self.assertEqual(payload["job"]["user_key"], "owner")
+                self.assertNotIn("metadata", payload["job"])
+                return httpx.Response(200, json={"code": "OK", "data": {"status": "running", "stopped": False}})
+            if path == "inspect":
+                return httpx.Response(200, json={"code": "OK", "data": {
+                    "status": "succeeded", "stopped": True, "result": {"outputs": ["output.png"]},
+                }})
+            self.assertEqual(path, "outputs/output.png")
+            self.assertEqual(request.headers["X-Scheduler-Fence"], "7")
+            return httpx.Response(200, json={"code": "OK", "data": {
+                "offset": 0, "size_bytes": len(image), "sha256": hashlib.sha256(image).hexdigest(),
+                "data_b64": base64.b64encode(image).decode(),
+            }})
+
+        factory = httpx.AsyncClient
+        with (
+            patch("app.routers.compute.registered_compute_model", return_value=policy),
+            patch.object(weight_sync.httpx, "AsyncClient", side_effect=lambda **opts: factory(
+                transport=httpx.MockTransport(bridge), **opts,
+            )),
+        ):
+            started = await scheduler.execute(attempt, command, headers)
+            self.assertEqual(started["status"], "running")
+            waiting = await scheduler.inspect(attempt, command, headers)
+            self.assertEqual(waiting, {"status": "running", "stopped": False, "progress": {"percent": 0.99}})
+            await asyncio.wait_for(remote_execution._output_tasks[attempt], 5)
+            completed = await scheduler.inspect(attempt, command, headers)
+            self.assertEqual(completed["status"], "succeeded")
+            self.assertEqual(load_job(job.user_key, job.job_id).outputs, ["output.png"])
+            self.assertEqual((job_dir(job.user_key, job.job_id) / "output.png").read_bytes(), image)
+            self.assertEqual(calls, ["start", "inspect", "outputs/output.png"])

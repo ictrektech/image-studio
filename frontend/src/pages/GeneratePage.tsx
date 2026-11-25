@@ -23,7 +23,7 @@ import { CheckRow, Field, FieldRow, IgnoredTag } from '@/components/app/field'
 import { Panel, PanelHeading, PanelTitle } from '@/components/app/panel'
 import { StatusBadge } from '@/components/app/status-badge'
 import { useConfirm } from '@/components/app/confirm'
-import { api, GeneratePayload, InputItem, JobRecord, ModelInfo, SessionInfo, TemplateInfo } from '../api/client'
+import { api, ComputePlacement, GeneratePayload, InputItem, JobRecord, ModelInfo, SessionInfo, TemplateInfo } from '../api/client'
 import { openInPhotoCraft } from '../api/photoCraft'
 import { repairLegacyL4TDefaults } from '../generationDefaults'
 import { messages } from '../i18n'
@@ -207,6 +207,8 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
   const [jobs, setJobs] = useState<JobRecord[]>([])
   const [inputs, setInputs] = useState<InputItem[]>([])
   const [session, setSession] = useState<SessionInfo | null>(null)
+  const [placements, setPlacements] = useState<ComputePlacement[]>([])
+  const [computeId, setComputeId] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -237,7 +239,10 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
   const selectedModel = models.find(model => model.key === payload.model_key)
   const selectedVariant = selectedModel?.variants?.find(variant => variant.id === payload.model_variant)
   const activeModel = selectedVariant || selectedModel
-  const modelReady = activeModel?.status === 'ready'
+  const currentModelId = payload.model_variant ? `${payload.model_key}@${payload.model_variant}` : payload.model_key
+  const modelPlacements = placements.filter(row => row.model_id === currentModelId)
+  const compute = modelPlacements.find(row => row.deployment_id === computeId)
+  const modelReady = Boolean(compute) || activeModel?.status === 'ready'
   const isVideoModel = activeModel?.runtime?.mode === 'video'
   const supportedParams = activeModel?.runtime?.parameters || {}
   const supportsParam = (name: string, fallback = true) => supportedParams[name] ?? fallback
@@ -433,6 +438,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
 
   useEffect(() => {
     api.me().then(setSession).catch(() => undefined)
+    api.computePlacements().then(setPlacements).catch(() => undefined)
   }, [])
 
   // 新消息到达时贴底（Radix ScrollArea 的滚动发生在 viewport 元素上）
@@ -472,7 +478,13 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
     setSubmitting(true)
     setError('')
     try {
-      await api.generate(payload)
+      if (compute && isImg2Img !== compute.has_reference) {
+        setError(t.remoteComputeReferenceMismatch)
+        return
+      }
+      await api.generate({
+        ...payload, ...compute?.runtime_parameters, compute_deployment_id: compute?.deployment_id || '',
+      })
       await loadJobs()
     } catch (e: any) {
       setError(e.message || t.submitFailed)
@@ -675,6 +687,23 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
             <Button variant="outline" size="icon" className="size-8" onClick={resetCurrentModelDefaults} title={t.resetModelDefaults}><RotateCcw size={15} /></Button>
           </div>
         </div>
+        {modelPlacements.length > 0 && (
+          <div className="mt-2">
+            <Field label={t.remoteComputePlacement} labelClassName="mb-0.5 text-[10px]">
+              <Select value={compute?.deployment_id || 'local'} onValueChange={value => setComputeId(value === 'local' ? '' : value)}>
+                <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="local">{t.remoteComputeLocal}</SelectItem>
+                  {modelPlacements.map(row => (
+                    <SelectItem key={row.deployment_id} value={row.deployment_id}>
+                      {row.profile} · {row.deployment_id.slice(0, 8)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+        )}
         </CollapsibleContent>
         </Collapsible>
       </Panel>

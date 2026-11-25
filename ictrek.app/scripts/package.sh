@@ -19,12 +19,12 @@ VERSION_FILE="${ROOT_DIR}/VERSION"
 LOCK_DIR="${DIST_DIR}/.package.lock"
 
 PROFILES=(
-  "amd|AMD_with_mxn100"
-  "amd-cuda|AMD_with_cuda"
-  "arm|ARM_without_cuda,SOPHON_bm1688"
-  "arm-cuda|ARM_with_cuda"
-  "l4t|l4t"
-  "thor|thor_spark"
+  "amd|AMD_with_mxn100|amd-cpu"
+  "amd-cuda|AMD_with_cuda|amd-cuda"
+  "arm|ARM_without_cuda,SOPHON_bm1688|arm-cpu"
+  "arm-cuda|ARM_with_cuda|arm-cuda"
+  "l4t|l4t|jetson-orin"
+  "thor|thor_spark|jetson-thor"
 )
 COMPONENTS=(
   "IMAGE_STUDIO_BACKEND|image-studio-backend|swr.cn-southwest-2.myhuaweicloud.com/ictrek/image-studio-backend"
@@ -293,7 +293,8 @@ render_compose_file() {
   local src="$1"
   local dst="$2"
   local env_file="$3"
-  python3 - "$src" "$dst" "$APP_VERSION" "$env_file" <<'PYRENDER'
+  python3 - "$src" "$dst" "$APP_VERSION" "$env_file" "${PROFILES[@]}" <<'PYRENDER'
+import json
 import re
 import sys
 from pathlib import Path
@@ -307,11 +308,26 @@ for line in env_path.read_text(encoding="utf-8").splitlines():
     key, value = line.split("=", 1)
     env[key] = value
 
+catalog = {}
+for profile_spec in sys.argv[5:]:
+    app_profile, _, node_profile = profile_spec.split("|")
+    if node_profile in catalog:
+        raise SystemExit(f"duplicate Image Studio node profile: {node_profile}")
+    key = app_profile.upper().replace("-", "_")
+    image = env[f"IMAGE_STUDIO_BACKEND_{key}_IMAGE"]
+    if not re.fullmatch(
+        r"[a-z0-9.-]+\.[a-z0-9.-]+(?::[0-9]+)?/[a-z0-9._/-]+:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}",
+        image,
+    ):
+        raise SystemExit(f"invalid backend image for {app_profile}")
+    catalog[node_profile] = {"profile": app_profile, "image": image}
+env["IMAGE_STUDIO_BACKEND_IMAGES"] = json.dumps(catalog, separators=(",", ":"))
+
 text = src.read_text(encoding="utf-8").replace("__APP_VERSION__", version)
 
 def replace_image_var(match):
     key = match.group(1)
-    if key.endswith("_IMAGE") and key in env:
+    if (key.endswith("_IMAGE") or key == "IMAGE_STUDIO_BACKEND_IMAGES") and key in env:
         return env[key]
     return match.group(0)
 
@@ -466,7 +482,7 @@ for frontend_spec in "${FRONTEND_ARCHES[@]}"; do
 done
 
 for profile_spec in "${PROFILES[@]}"; do
-  IFS='|' read -r profile sheet_title <<< "$profile_spec"
+  IFS='|' read -r profile sheet_title _ <<< "$profile_spec"
   sheet_title="${sheet_title:-$profile}"
   profile_key="$(env_key "$profile")"
   for component_spec in "${COMPONENTS[@]}"; do
@@ -482,8 +498,7 @@ for profile_spec in "${PROFILES[@]}"; do
       log "$profile cannot read $component from $candidate_sheet; trying fallback"
     done
     [[ -n "$image" ]] || die "failed to resolve image for profile=$profile component=$component sheets=$sheet_title"
-    printf '%s_%s_IMAGE=%s
-' "$env_prefix" "$profile_key" "$image" >> "$ENV_FILE"
+    printf '%s_%s_IMAGE=%s\n' "$env_prefix" "$profile_key" "$image" >> "$ENV_FILE"
   done
 done
 

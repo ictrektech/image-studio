@@ -54,7 +54,53 @@ export interface ModelInfo {
   }
 }
 
+export interface ComputeTarget {
+  kind: 'ssh' | 'cluster'
+  node_id: string
+  name: string
+  profile: string
+  runtime_profile: string
+  image: string
+}
+
+export interface ComputeDeployment {
+  id: string
+  target_kind: ComputeTarget['kind']
+  target_id: string
+  profile: string
+  image: string
+  state: 'pending' | 'running' | 'failed' | 'stopping' | 'deleting' | 'stopped' | 'removed' | 'cleanup_failed'
+  last_error: string | null
+}
+
+export interface ComputePreparation {
+  deployment_id: string
+  model_id: string
+  state: 'transferring' | 'interrupted' | 'registered' | 'failed'
+  received_bytes: number
+  total_bytes: number
+  executor_id: string | null
+  node_id: string | null
+  error: string | null
+  weight_source: 'copy' | 'shared' | null
+}
+
+export interface ComputeOverview {
+  targets: ComputeTarget[]
+  deployments: ComputeDeployment[]
+  preparations: ComputePreparation[]
+}
+
+export interface ComputePlacement {
+  deployment_id: string
+  model_id: string
+  profile: string
+  runtime_parameters: Partial<GeneratePayload>
+  has_reference: boolean
+}
+
 export interface GeneratePayload {
+  compute_deployment_id?: string
   prompt: string
   negative_prompt: string
   model_key: string
@@ -243,6 +289,16 @@ export const api = {
   updateSettings: (payload: UserSettings) => request<UserSettings>('/api/v1/settings', { method: 'PUT', body: JSON.stringify(payload) }),
   immichStatus: () => request<ImmichStatus>('/api/v1/immich'),
   listModels: () => request<ModelInfo[]>('/api/v1/models'),
+  computeOverview: () => request<ComputeOverview>('/api/v1/compute'),
+  computePlacements: () => request<ComputePlacement[]>('/api/v1/compute/placements'),
+  deployCompute: (target: ComputeTarget, requestKey: string) => request<Pick<ComputeDeployment, 'id' | 'state'>>(
+    '/api/v1/compute/deployments',
+    { method: 'POST', body: JSON.stringify({ kind: target.kind, node_id: target.node_id, request_key: requestKey }) },
+  ),
+  prepareComputeModel: (deployment: string, modelKey: string, modelVariant: string) => request<ComputePreparation>(
+    `/api/v1/compute/deployments/${deployment}/models`,
+    { method: 'POST', body: JSON.stringify({ model_key: modelKey, model_variant: modelVariant }) },
+  ),
   vRouterStatus: () => request<VRouterStatus>('/api/v1/v-router/status'),
   pullModel: (key: string, force = false, variant = '') => {
     const params = new URLSearchParams()

@@ -75,14 +75,25 @@ def runtime_parameters(job: JobRecord) -> dict:
 
 
 def validate_limits(job: JobRecord) -> None:
+    if job.metadata.get("compute_deployment_id"):
+        from .remote_execution import compute_policy
+        policy = compute_policy(job)
+        validate_calibrated_job(job, policy["model_limits"], policy["model_parameters"])
+        return
     if not settings.scheduler_required:
         return
     from app.services.scheduler_binding import execution_settings
     if settings.scheduler_config.get("execution_settings") != execution_settings():
         raise HTTPException(503, "Runtime settings no longer match calibrated binding")
-    if settings.scheduler_model_parameters.get(model_id(job)) != runtime_parameters(job):
+    validate_calibrated_job(
+        job, settings.scheduler_model_limits.get(model_id(job), {}),
+        settings.scheduler_model_parameters.get(model_id(job)),
+    )
+
+
+def validate_calibrated_job(job: JobRecord, limits: dict, parameters: dict | None) -> None:
+    if parameters != runtime_parameters(job):
         raise HTTPException(422, "Runtime parameters are not calibrated for this model")
-    limits = settings.scheduler_model_limits.get(model_id(job), {})
     for field in ("width", "height", "steps", "batch_count", "video_frames"):
         maximum = limits.get(field)
         if type(maximum) is not int or maximum < 0 or getattr(job, field) > maximum:
@@ -103,14 +114,15 @@ def validate_limits(job: JobRecord) -> None:
 async def submit(job: JobRecord, operator_authorization: str = "") -> None:
     # Rebinding must not race a controller request whose receipt is not saved yet.
     async with _submission_lock:
-        if settings.scheduler_config.get("lifecycle_protocol_version") == 1:
+        remote_executor = job.metadata.get("compute_executor_id")
+        if not remote_executor and settings.scheduler_config.get("lifecycle_protocol_version") == 1:
             from .scheduler_lifecycle import LifecycleError
             try:
                 await asyncio.to_thread(application_lifecycle().ensure, settings.scheduler_config)
             except (LifecycleError, OSError):
                 raise HTTPException(503, "Application lifecycle unavailable") from None
         validate_limits(job)
-        executor = settings.scheduler_models.get(model_id(job))
+        executor = remote_executor or settings.scheduler_models.get(model_id(job))
         if not executor:
             if settings.scheduler_required:
                 raise HTTPException(503, "Model executor is not approved")
@@ -131,7 +143,7 @@ async def submit(job: JobRecord, operator_authorization: str = "") -> None:
 
 
 async def prepare(job: JobRecord, operator_authorization: str = "") -> None:
-    if settings.scheduler_required and not settings.scheduler_models.get(model_id(job)):
+    if settings.scheduler_required and not (job.metadata.get("compute_executor_id") or settings.scheduler_models.get(model_id(job))):
         raise HTTPException(503, "V-Scheduler model binding required")
     validate_limits(job)
     job.metadata["scheduler_managed"] = True
@@ -318,6 +330,14 @@ async def execute(attempt: str, body: dict, authorization: str = Header(default=
         if old:
             if old["fence"] != body.get("fence") or old["parameters"] != body.get("parameters"):
                 raise HTTPException(409, "attempt conflict")
+            if old.get("compute_deployment_id"):
+                from .remote_execution import start_remote
+                if old["executor_id"] != body.get("executor_id") or old["task_id"] != body.get("task_id"):
+                    raise HTTPException(409, "COMPUTE_ATTEMPT_BINDING_CONFLICT")
+                job = load_job(old["parameters"]["user_key"], old["parameters"]["job_id"])
+                if not job:
+                    raise HTTPException(409, "job unavailable")
+                return await start_remote(attempt, job, body, old)
             if old["status"] == "running" and attempt in _executions and not _executions[attempt].done():
                 _lease(path, min(30, int(body.get("lease_seconds", 30))))
             return await inspect(attempt, body, authorization)
@@ -341,6 +361,16 @@ async def execute(attempt: str, body: dict, authorization: str = Header(default=
             raise HTTPException(422, "Executor accepts local jobs only")
         validate_limits(job)
         record = {"attempt_id": attempt, "fence": body["fence"], "parameters": parameters, "status": "running", "stopped": False, "result": {}}
+        if job.metadata.get("compute_deployment_id"):
+            from .remote_execution import start_remote
+            executor_id = job.metadata["compute_executor_id"]
+            if executor_id != body.get("executor_id"):
+                raise HTTPException(409, "COMPUTE_ATTEMPT_BINDING_CONFLICT")
+            record.update(compute_deployment_id=job.metadata["compute_deployment_id"], executor_id=executor_id, task_id=body["task_id"])
+            _atomic(path, record)
+            job.metadata["scheduler_attempt_id"] = attempt
+            save_job(job)
+            return await start_remote(attempt, job, body, record)
         _atomic(path, record)
         _lease(path, min(30, int(body.get("lease_seconds", 30))))
         job.metadata["scheduler_attempt_id"] = attempt
@@ -359,6 +389,20 @@ async def inspect(attempt: str, body: dict, authorization: str = Header(default=
         return {"status": "unknown", "stopped": False}
     if record["fence"] != body.get("fence"):
         raise HTTPException(409, "stale fence")
+    if record.get("compute_deployment_id"):
+        from .remote_execution import inspect_remote
+        if record["executor_id"] != body.get("executor_id") or record["task_id"] != body.get("task_id"):
+            raise HTTPException(409, "COMPUTE_ATTEMPT_BINDING_CONFLICT")
+        result = await inspect_remote(attempt, body, record)
+        if result.get("stopped") and result.get("status") in {"succeeded", "failed", "cancelled"}:
+            _atomic(path, {**record, "status": result["status"], "stopped": True, "remote_receipt": result})
+        elif result.get("status") == "running":
+            job = load_job(record["parameters"]["user_key"], record["parameters"]["job_id"])
+            if job and job.status not in {"failed", "succeeded"}:
+                job.status = "running"
+                job.progress = result.get("progress", {}).get("percent", job.progress)
+                save_job(job)
+        return result
     running = _executions.get(attempt)
     if record["status"] == "running" and (not running or running.done()):
         # A restart never blindly replays a job. Surviving wrapper stops on its own lease.
@@ -387,6 +431,11 @@ async def cancel(attempt: str, body: dict, authorization: str = Header(default="
             _atomic(path, record)
         if record["fence"] != body.get("fence"):
             raise HTTPException(409, "stale fence")
+        if record.get("compute_deployment_id"):
+            from .remote_execution import cancel_remote
+            if record["executor_id"] != body.get("executor_id") or record["task_id"] != body.get("task_id"):
+                raise HTTPException(409, "COMPUTE_ATTEMPT_BINDING_CONFLICT")
+            return await cancel_remote(attempt, body, record)
         record["cancel_requested"] = True
         record["preempted"] = body.get("preempted") is True
         _atomic(path, record)

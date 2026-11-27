@@ -68,6 +68,7 @@ def deployed_worker() -> FastAPI | None:
                 models.append({"id": model_id, "task_type": "video.generate" if mode == "video" else "image.generate"})
         return {
             "protocol_version": 1,
+            "weight_model_delete": True,
             "execution_settings": execution_settings(),
             "async_models": models,
             "preemption_modes": [],

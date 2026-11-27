@@ -309,6 +309,10 @@ export const api = {
     `/api/v1/compute/deployments/${deployment}/models`,
     { method: 'POST', body: JSON.stringify({ model_key: modelKey, model_variant: modelVariant }) },
   ),
+  deleteComputeModel: (deployment: string, modelId: string) => request<{ deleted_transfers: number }>(
+    `/api/v1/compute/deployments/${deployment}/models/${encodeURIComponent(modelId)}`,
+    { method: 'DELETE' },
+  ),
   vRouterStatus: () => request<VRouterStatus>('/api/v1/v-router/status'),
   pullModel: (key: string, force = false, variant = '') => {
     const params = new URLSearchParams()

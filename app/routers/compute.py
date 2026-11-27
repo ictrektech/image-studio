@@ -8,15 +8,19 @@ import os
 import re
 from hashlib import sha256
 from pathlib import Path
-from typing import Literal
+from time import monotonic
+from typing import Annotated, Literal
+from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import Path as RoutePath
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.config import settings
 from app.services.scheduler import RUNTIME_PARAMETER_FIELDS, _atomic
 from app.services.weight_sync import deployment_client, deployment_request, sync_weights
+from app.services.weight_transfers import MODEL_ID_PATTERN
 from app.worker import WORKER_MODE, WORKER_PROFILES
 
 APP_ID = "com.ictrek.image-studio"
@@ -111,6 +115,10 @@ class ComputeOverview(BaseModel):
     targets: list[ComputeTarget]
     deployments: list[ComputeDeployment]
     preparations: list[Preparation]
+
+
+class DeleteModelReceipt(BaseModel):
+    deleted_transfers: int = Field(ge=0)
 
 
 class ModelPlacement(BaseModel):
@@ -273,14 +281,18 @@ async def deploy_backend(payload: DeployRequest):
 
 
 async def _prepare(path: Path, record: dict, model: PrepareModelRequest) -> None:
+    last_reported = 0.0
+    reported_bytes = record["received_bytes"]
+
     def progress(phase: str, received: int, total: int) -> None:
-        # Write the durable UI receipt only when the percentage changes.
-        previous = record["received_bytes"] * 100 // max(1, record["total_bytes"])
-        current = received * 100 // max(1, total)
+        nonlocal last_reported, reported_bytes
+        now = monotonic()
         changed = record.get("phase") != phase or record["total_bytes"] != total
         record.update(phase=phase, received_bytes=received, total_bytes=total)
-        if changed or current != previous:
+        if changed or (received != reported_bytes and (now - last_reported >= 1 or received == total)):
             _atomic(path, record)
+            last_reported = now
+            reported_bytes = received
 
     try:
         result = await sync_weights(record["deployment_id"], model.model_key, model.model_variant, progress)
@@ -338,6 +350,33 @@ async def _worker_deployment(client: httpx.AsyncClient, deployment_id: str) -> d
     if row.get("app_id") != APP_ID or row.get("config", {}).get("mode") != WORKER_MODE:
         raise HTTPException(404, "COMPUTE_DEPLOYMENT_NOT_FOUND")
     return row
+
+
+@router.delete("/deployments/{deployment_id}/models/{model_id}", response_model=DeleteModelReceipt)
+async def remove_backend_model(
+    deployment_id: Annotated[str, RoutePath(pattern=_DEPLOYMENT_ID)],
+    model_id: Annotated[str, RoutePath(pattern=MODEL_ID_PATTERN)],
+):
+    if (deployment_id, model_id) in _pending:
+        raise HTTPException(409, "COMPUTE_MODEL_PREPARATION_ACTIVE")
+    if deployment_id in _changing:
+        raise HTTPException(409, "COMPUTE_DEPLOYMENT_BUSY")
+    _changing.add(deployment_id)
+    try:
+        async with deployment_client() as client:
+            deployment = await _worker_deployment(client, deployment_id)
+            if deployment["state"] != "running" or not deployment.get("endpoint"):
+                raise HTTPException(409, "COMPUTE_BACKEND_NOT_RUNNING")
+            receipt = await deployment_request(client, "DELETE", f"backend-deployments/{deployment_id}/models/{quote(model_id, safe='')}")
+        deleted = receipt.get("deleted_transfers")
+        if type(deleted) is not int or deleted < 0:
+            raise HTTPException(503, "COMPUTE_SCHEDULER_INVALID_RESPONSE")
+        path = _preparation_path(deployment_id, model_id)
+        path.with_suffix(".registered").unlink(missing_ok=True)
+        path.unlink(missing_ok=True)
+        return {"deleted_transfers": deleted}
+    finally:
+        _changing.discard(deployment_id)
 
 
 async def _change_deployment(deployment_id: str, action: Literal["start", "stop", "remove"]):

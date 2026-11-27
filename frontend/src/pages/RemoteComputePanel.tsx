@@ -13,6 +13,7 @@ type Text = typeof messages['zh-CN']
 
 const targetKey = (target: ComputeTarget) => `${target.kind}:${target.node_id}`
 const deploymentTarget = (row: ComputeDeployment) => `${row.target_kind}:${row.target_id}`
+const weightMiB = (bytes: number) => (bytes / 1048576).toFixed(1)
 
 function imageVersion(image: string): string {
   const tag = image.split('/').pop()?.split('@')[0].split(':')[1] || ''
@@ -28,7 +29,7 @@ export default function RemoteComputePanel({ models, t }: { models: ModelInfo[];
   const [error, setError] = useState('')
   const [overviewError, setOverviewError] = useState(false)
   const [busy, setBusy] = useState('')
-  const [remove, setRemove] = useState<{ id: string; node: string }>()
+  const [remove, setRemove] = useState<{ id: string; node: string; model?: { id: string; name: string } }>()
   const deployKeys = useRef(new Map<string, string>())
   const localModels = models.filter(model => model.source !== 'v-router').flatMap(model => [
     { id: model.key, key: model.key, variant: '', name: model.name, ready: model.status === 'ready' },
@@ -82,6 +83,7 @@ export default function RemoteComputePanel({ models, t }: { models: ModelInfo[];
         COMPUTE_MODEL_PREPARATION_ACTIVE: t.remoteComputePreparationActive,
         COMPUTE_DEPLOYMENT_BUSY: t.remoteComputeBusy,
         BACKEND_BUSY: t.remoteComputeBusy,
+        BACKEND_MODEL_DELETE_UNSUPPORTED: t.remoteComputeDeleteUnsupported,
       }
       setError(errors[code] || t.remoteComputeError)
     } finally {
@@ -159,18 +161,25 @@ export default function RemoteComputePanel({ models, t }: { models: ModelInfo[];
                   </div>
                 </div>
                 {preparations.map(item => {
-                  const percentage = item.total_bytes ? Math.floor(100 * item.received_bytes / item.total_bytes) : 0
+                  const modelName = localModels.find(model => model.id === item.model_id)?.name || t.remoteComputeModelLabel
+                  const percentage = item.total_bytes ? 100 * item.received_bytes / item.total_bytes : 0
                   const preparing = item.state === 'transferring'
                   const showProgress = preparing && item.total_bytes > 0 && item.phase !== 'registering'
                   const status = preparing && item.phase ? t.remoteComputeStates[item.phase] : t.remoteComputeStates[item.state]
                   return <div key={item.model_id} className="grid gap-1 text-sm">
                     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-                      <span className="font-medium">{localModels.find(model => model.id === item.model_id)?.name || t.remoteComputeModelLabel}</span>
+                      <span className="font-medium">{modelName}</span>
                       <span className="text-xs text-muted-foreground">
                         {running && item.state === 'registered' ? t.remoteComputeModelReady : status}
-                        {showProgress && ` · ${percentage}%`}
+                        {showProgress && ` · ${weightMiB(item.received_bytes)} / ${weightMiB(item.total_bytes)} MiB · ${Math.floor(percentage)}%`}
                         {item.weight_source && ` · ${item.weight_source === 'shared' ? t.remoteComputeShared : t.remoteComputeCopy}`}
                       </span>
+                      {running && !preparing && (
+                        <Button variant="outline" size="sm" className="text-destructive" disabled={!!busy}
+                          onClick={() => setRemove({ id: row.id, node: name, model: { id: item.model_id, name: modelName } })}>
+                          {t.remoteComputeDeleteModel}
+                        </Button>
+                      )}
                     </div>
                     {showProgress && <Progress value={percentage} aria-label={status} />}
                     {item.error && item.state === 'failed' && <p className="text-xs text-destructive">
@@ -203,13 +212,18 @@ export default function RemoteComputePanel({ models, t }: { models: ModelInfo[];
       <AlertDialog open={!!remove} onOpenChange={value => { if (!value) setRemove(undefined) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t.remoteComputeRemove} · {remove?.node}</AlertDialogTitle>
-            <AlertDialogDescription>{t.remoteComputeRemoveDescription}</AlertDialogDescription>
+            <AlertDialogTitle>{remove?.model ? t.remoteComputeDeleteModel : t.remoteComputeRemove} · {remove?.node}{remove?.model && ` · ${remove.model.name}`}</AlertDialogTitle>
+            <AlertDialogDescription>{remove?.model ? t.remoteComputeDeleteModelDescription : t.remoteComputeRemoveDescription}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t.remoteComputeCancel}</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => { if (remove) control(remove.id, 'remove') }}>
-              {t.remoteComputeRemove}
+            <AlertDialogAction variant="destructive" onClick={() => {
+              if (!remove) return
+              const { id, model } = remove
+              if (model) void act(id, () => api.deleteComputeModel(id, model.id))
+              else control(id, 'remove')
+            }}>
+              {remove?.model ? t.remoteComputeDeleteModel : t.remoteComputeRemove}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

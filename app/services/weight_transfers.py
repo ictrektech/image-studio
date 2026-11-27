@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import os
 import re
+import shutil
 from contextlib import contextmanager
 from pathlib import Path
 from time import monotonic
@@ -23,7 +24,7 @@ MAX_CHUNK_BYTES = 1024 * 1024
 MAX_MANIFEST_BYTES = 64 * 1024
 _DIGEST = r"^[0-9a-f]{64}$"
 _FILE_ID = r"^[a-z][a-z0-9_]{0,63}$"
-_MODEL_ID = r"^[a-z0-9][a-z0-9_.-]{0,95}(@[a-z0-9][a-z0-9_.-]{0,95})?$"
+MODEL_ID_PATTERN = r"^[a-z0-9][a-z0-9_.-]{0,95}(@[a-z0-9][a-z0-9_.-]{0,95})?$"
 
 
 class WeightFile(BaseModel):
@@ -39,7 +40,7 @@ class WeightFile(BaseModel):
 class WeightManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    model_id: str = Field(pattern=_MODEL_ID)
+    model_id: str = Field(pattern=MODEL_ID_PATTERN)
     files: list[WeightFile] = Field(min_length=1, max_length=32)
     source: Literal["copy", "shared"] = "copy"
 
@@ -199,6 +200,37 @@ class WeightTransfers:
         except FileNotFoundError:
             raise HTTPException(404, "WEIGHT_TRANSFER_NOT_FOUND") from None
 
+    def delete_model(self, model_id: str) -> dict:
+        if not re.fullmatch(MODEL_ID_PATTERN, model_id):
+            raise HTTPException(422, "INVALID_WEIGHT_MODEL")
+        removed = 0
+        if not self.root.is_dir():
+            return {"deleted_transfers": removed}
+        for directory in self.root.iterdir():
+            if not re.fullmatch(_DIGEST, directory.name) or directory.is_symlink() or not directory.is_dir():
+                continue
+            manifest_path = directory / "manifest.json"
+            try:
+                if self._manifest(directory).model_id != model_id:
+                    continue
+            except FileNotFoundError:
+                continue
+            with self._locked(directory.name):
+                if not manifest_path.is_file() or self._manifest(directory).model_id != model_id:
+                    continue
+                (directory / "verified.json").unlink(missing_ok=True)
+                for child in directory.iterdir():
+                    if child.name in {".lock", "manifest.json"}:
+                        continue
+                    if child.is_dir() and not child.is_symlink():
+                        shutil.rmtree(child)
+                    else:
+                        child.unlink()
+                manifest_path.unlink()
+                self._verification.pop(directory.name, None)
+                removed += 1
+        return {"deleted_transfers": removed}
+
     def verified_models(self) -> list[str]:
         if not self.root.is_dir():
             return []
@@ -356,6 +388,10 @@ def transfer_routes(store: WeightTransfers) -> APIRouter:
     @router.get("/{transfer_id}")
     def status(transfer_id: str):
         return store.status(transfer_id)
+
+    @router.delete("/models/{model_id}")
+    def delete_model(model_id: str):
+        return store.delete_model(model_id)
 
     @router.put("/{transfer_id}/files/{file_id}")
     async def append(transfer_id: str, file_id: str, offset: Annotated[int, Query(ge=0)], request: Request):

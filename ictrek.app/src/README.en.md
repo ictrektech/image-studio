@@ -40,7 +40,9 @@ Grant the Image Studio service identity access to the target and repository in V
 
 Signed-in users can select a registered deployment under **Generate → Compute node**. API callers send `compute_deployment_id` to `POST /api/v1/generate` and use the existing job and output routes. Use the approved dimensions, step count, reference mode and runtime settings for the target. Open **API → Complete API and request/response fields** for the contract.
 
-The preparation panel shows the current step. Source verification, copying, and target verification each show a percentage based on the bytes processed for that step. Older compute backends need an updated image to report verification progress.
+On a running node, click Delete remote model on the model row and confirm. The app removes staged and verified copies of that model from the target deployment and removes its V-Scheduler registration. It keeps main-node and NFS files. Wait for preparation and queued or running jobs to finish. Retry the same deletion after a target or channel interruption. The compute backend image must support model deletion.
+
+The preparation panel shows the current step. Source verification, copying, and target verification each show the processed and total MiB alongside the percentage. Older compute backends need an updated image to report verification progress.
 
 ## Install-Time Choices
 

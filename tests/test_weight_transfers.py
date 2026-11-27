@@ -114,6 +114,22 @@ class WeightTransferTests(unittest.TestCase):
         self.assertEqual(self.append(route, 0, b"correct").status_code, 200)
         self.assertTrue(self.api.post(route + "/complete").json()["verified"])
 
+    def test_delete_model_removes_verified_and_partial_copies(self):
+        verified = self.begin(self.manifest(b"weights"))
+        self.assertEqual(self.append(verified, 0, b"weights").status_code, 200)
+        self.assertTrue(self.api.post(verified + "/complete").json()["verified"])
+        partial = self.begin(self.manifest(b"new weight revision"))
+        self.assertEqual(self.append(partial, 0, b"new").status_code, 200)
+        delete = self.route + "/models/sd-turbo"
+        self.assertEqual(self.api.delete(delete, headers={"Authorization": "wrong"}).status_code, 401)
+        self.assertEqual(self.api.delete(delete).json(), {"deleted_transfers": 2})
+        self.assertEqual(self.api.delete(delete).json(), {"deleted_transfers": 0})
+        self.assertEqual(self.api.get(verified).status_code, 404)
+        self.assertEqual(self.api.get(partial).status_code, 404)
+        self.assertFalse(list((settings.data_dir / "weight-transfers").rglob("*.safetensors")))
+        self.assertEqual(self.begin(self.manifest(b"weights")), verified)
+        self.assertEqual(self.api.get(verified).json()["files"][0]["received_bytes"], 0)
+
     def test_read_only_share_is_verified_without_a_copy_and_pins_snapshot(self):
         share = Path(settings.data_dir) / "share"
         source = share / "export" / "model"
@@ -143,6 +159,9 @@ class WeightTransferTests(unittest.TestCase):
                 store = WeightTransfers(Path(settings.data_dir) / "weight-transfers", share)
                 self.assertEqual(store.verified_paths(transfer_id, "sd-turbo")["model"], snapshot / "sd_turbo.safetensors")
                 self.assertFalse((store.root / transfer_id / "model").exists())
+                self.assertEqual(worker.delete(self.route + "/models/sd-turbo").json(), {"deleted_transfers": 1})
+                self.assertEqual(blob.read_bytes(), b"weights")
+                self.assertEqual(worker.get(route).status_code, 404)
 
     def test_status_reports_shared_bytes_while_worker_is_still_verifying(self):
         share = Path(settings.data_dir) / "share"

@@ -159,17 +159,23 @@ export default function RemoteComputePanel({ models, t }: { models: ModelInfo[];
                   </div>
                 </div>
                 {preparations.map(item => {
-                  const percentage = item.total_bytes ? Math.round(100 * item.received_bytes / item.total_bytes) : 0
+                  const percentage = item.total_bytes ? Math.floor(100 * item.received_bytes / item.total_bytes) : 0
+                  const preparing = item.state === 'transferring'
+                  const showProgress = preparing && item.total_bytes > 0 && item.phase !== 'registering'
+                  const status = preparing && item.phase ? t.remoteComputeStates[item.phase] : t.remoteComputeStates[item.state]
                   return <div key={item.model_id} className="grid gap-1 text-sm">
                     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
                       <span className="font-medium">{localModels.find(model => model.id === item.model_id)?.name || t.remoteComputeModelLabel}</span>
                       <span className="text-xs text-muted-foreground">
-                        {running && item.state === 'registered' ? t.remoteComputeModelReady : t.remoteComputeStates[item.state]}
-                        {item.state === 'transferring' && ` · ${percentage}%`}
+                        {running && item.state === 'registered' ? t.remoteComputeModelReady : status}
+                        {showProgress && ` · ${percentage}%`}
                         {item.weight_source && ` · ${item.weight_source === 'shared' ? t.remoteComputeShared : t.remoteComputeCopy}`}
                       </span>
                     </div>
-                    {item.state === 'transferring' && <Progress value={percentage} aria-label={t.remoteComputeTransfer} />}
+                    {showProgress && <Progress value={percentage} aria-label={status} />}
+                    {item.error && item.state === 'failed' && <p className="text-xs text-destructive">
+                      {item.error === 'BACKEND_EXECUTOR_TARGET_NOT_READY' ? t.remoteComputeTargetNotReady : item.error}
+                    </p>}
                   </div>
                 })}
                 {running && <div className="flex flex-wrap items-end gap-2">

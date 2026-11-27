@@ -78,6 +78,7 @@ export interface ComputePreparation {
   deployment_id: string
   model_id: string
   state: 'transferring' | 'interrupted' | 'registered' | 'failed'
+  phase?: 'source_check' | 'copying' | 'target_check' | 'registering' | null
   received_bytes: number
   total_bytes: number
   executor_id: string | null

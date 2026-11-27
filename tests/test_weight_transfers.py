@@ -5,7 +5,9 @@ import json
 import os
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -141,6 +143,64 @@ class WeightTransferTests(unittest.TestCase):
                 store = WeightTransfers(Path(settings.data_dir) / "weight-transfers", share)
                 self.assertEqual(store.verified_paths(transfer_id, "sd-turbo")["model"], snapshot / "sd_turbo.safetensors")
                 self.assertFalse((store.root / transfer_id / "model").exists())
+
+    def test_status_reports_shared_bytes_while_worker_is_still_verifying(self):
+        share = Path(settings.data_dir) / "share"
+        share.mkdir()
+        weight = b"weights"
+        (share / "sd_turbo.safetensors").write_bytes(weight)
+        manifest = self.manifest(weight)
+        manifest["source"] = "shared"
+        manifest["files"][0]["shared_path"] = "sd_turbo.safetensors"
+        started, release = Event(), Event()
+
+        def slow_hash(path, progress):
+            progress(3)
+            started.set()
+            if not release.wait(5):
+                raise TimeoutError("test did not release hashing")
+            return hashlib.sha256(path.read_bytes()).hexdigest()
+
+        with (
+            patch("app.worker.SHARED_MODELS", share),
+            patch("app.services.weight_transfers.os.statvfs", return_value=SimpleNamespace(f_flag=os.ST_RDONLY)),
+            patch("app.services.weight_transfers.sha256_file", side_effect=slow_hash),
+            TestClient(deployed_worker(), headers=self.headers) as worker,
+            ThreadPoolExecutor(max_workers=1) as pool,
+        ):
+            transfer_id = worker.post(self.route, json=manifest).json()["transfer_id"]
+            route = self.route + "/" + transfer_id
+            call = pool.submit(worker.post, route + "/complete")
+            try:
+                self.assertTrue(started.wait(5))
+                status = worker.get(route).json()
+                self.assertEqual(status["verification"], {"state": "verifying", "bytes": 3})
+                self.assertFalse(status["verified"])
+                self.assertEqual(status["files"][0]["received_bytes"], 0)
+            finally:
+                release.set()
+            self.assertTrue(call.result(timeout=5).json()["verified"])
+
+    def test_main_follows_worker_verification_after_channel_timeout(self):
+        async def probe():
+            progress = []
+            calls = iter([2, 5, 8])
+
+            async def request(client, method, path, **kwargs):
+                if method == "POST":
+                    raise HTTPException(502, "BACKEND_CHANNEL_UNAVAILABLE")
+                checked = next(calls)
+                return {
+                    "model_id": "sd-turbo", "verified": checked == 8,
+                    "verification": {"state": "verified" if checked == 8 else "verifying", "bytes": checked},
+                }
+
+            with patch.object(weight_sync, "deployment_request", side_effect=request):
+                status = await weight_sync._follow_verification(None, "transfer", 8, lambda *update: progress.append(update))
+            self.assertTrue(status["verified"])
+            self.assertEqual(progress, [("target_check", 2, 8), ("target_check", 5, 8)])
+
+        asyncio.run(probe())
 
     def test_main_node_resumes_through_scheduler_and_registers_verified_weights(self):
         weight = Path(settings.data_dir) / "sd_turbo.safetensors"

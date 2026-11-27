@@ -96,6 +96,9 @@ class Preparation(BaseModel):
     deployment_id: str
     model_id: str
     state: Literal["transferring", "interrupted", "registered", "failed"]
+    phase: Literal["source_check", "copying", "target_check", "registering"] | None = Field(
+        default=None, description="Current preparation step. Progress bytes are relative to this step. 当前准备阶段，字节进度按阶段计算。",
+    )
     received_bytes: int
     total_bytes: int
     executor_id: str | None
@@ -270,13 +273,13 @@ async def deploy_backend(payload: DeployRequest):
 
 
 async def _prepare(path: Path, record: dict, model: PrepareModelRequest) -> None:
-    def progress(received: int, total: int) -> None:
+    def progress(phase: str, received: int, total: int) -> None:
         # Write the durable UI receipt only when the percentage changes.
         previous = record["received_bytes"] * 100 // max(1, record["total_bytes"])
         current = received * 100 // max(1, total)
-        initial = record["total_bytes"] == 0
-        record.update(received_bytes=received, total_bytes=total)
-        if initial or current != previous:
+        changed = record.get("phase") != phase or record["total_bytes"] != total
+        record.update(phase=phase, received_bytes=received, total_bytes=total)
+        if changed or current != previous:
             _atomic(path, record)
 
     try:
@@ -321,6 +324,7 @@ async def prepare_backend_model(deployment_id: str, payload: PrepareModelRequest
         return json.loads(path.read_text())
     record = {
         "deployment_id": deployment_id, "model_id": model_id, "state": "transferring",
+        "phase": "source_check",
         "received_bytes": 0, "total_bytes": 0, "executor_id": None, "node_id": None, "error": None,
         "runtime_profile": deployment["config"]["profile"],
     }

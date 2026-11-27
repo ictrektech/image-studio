@@ -9,7 +9,8 @@ import os
 import re
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Annotated, Literal
+from time import monotonic
+from typing import Annotated, Callable, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -47,6 +48,7 @@ class WeightTransfers:
     def __init__(self, root: Path, shared_root: Path | None = None):
         self.root = root
         self.shared_root = shared_root
+        self._verification: dict[str, dict] = {}
 
     @contextmanager
     def _locked(self, transfer_id: str):
@@ -171,6 +173,10 @@ class WeightTransfers:
         return {
             "transfer_id": directory.name, "model_id": manifest.model_id,
             "files": files, "verified": verified, "source": manifest.source,
+            "verification": (
+                {"state": "verified", "bytes": sum(file.size_bytes for file in manifest.files)}
+                if verified else self._verification.get(directory.name, {"state": "idle", "bytes": 0})
+            ),
         }
 
     def begin(self, manifest: WeightManifest) -> dict:
@@ -185,8 +191,13 @@ class WeightTransfers:
             return self._status(directory, manifest)
 
     def status(self, transfer_id: str) -> dict:
-        with self._locked(transfer_id) as directory:
+        if not re.fullmatch(_DIGEST, transfer_id):
+            raise HTTPException(404, "WEIGHT_TRANSFER_NOT_FOUND")
+        directory = self.root / transfer_id
+        try:
             return self._status(directory, self._manifest(directory))
+        except FileNotFoundError:
+            raise HTTPException(404, "WEIGHT_TRANSFER_NOT_FOUND") from None
 
     def verified_models(self) -> list[str]:
         if not self.root.is_dir():
@@ -252,36 +263,64 @@ class WeightTransfers:
                     return status
                 if manifest.source == "shared":
                     raise HTTPException(409, "WEIGHT_SHARED_UNAVAILABLE")
-            paths = self._shared_files(manifest) if manifest.source == "shared" else self._prepared_files(directory, manifest)
-            for file in manifest.files:
-                path = paths[file.file_id]
-                if not path.is_file() or path.stat().st_size != file.size_bytes:
-                    raise HTTPException(409, "WEIGHT_TRANSFER_INCOMPLETE")
-            for file in manifest.files:
-                path = paths[file.file_id]
-                try:
-                    matches = sha256_file(path) == file.sha256
-                except OSError:
-                    if manifest.source == "shared":
-                        raise HTTPException(409, "WEIGHT_SHARED_UNAVAILABLE") from None
-                    raise
-                if not matches:
-                    if manifest.source == "shared":
-                        raise HTTPException(409, "WEIGHT_SHARED_UNAVAILABLE")
-                    path.unlink()
-                    raise HTTPException(422, "WEIGHT_CHECKSUM_MISMATCH")
-            receipt = {"model_id": manifest.model_id}
-            if manifest.source == "shared":
-                receipt["shared_paths"] = {key: str(path.relative_to(self.shared_root)) for key, path in paths.items()}
-            _atomic(directory / "verified.json", receipt)
-            return self._status(directory, manifest)
+            self._verification[transfer_id] = {"state": "verifying", "bytes": 0}
+            try:
+                return self._verify_locked(directory, manifest)
+            except HTTPException as exc:
+                self._verification[transfer_id] = {
+                    "state": "failed", "bytes": self._verification[transfer_id]["bytes"], "error": exc.detail,
+                }
+                raise
+            finally:
+                if self._verification.get(transfer_id, {}).get("state") != "failed":
+                    self._verification.pop(transfer_id, None)
+
+    def _verify_locked(self, directory: Path, manifest: WeightManifest) -> dict:
+        paths = self._shared_files(manifest) if manifest.source == "shared" else self._prepared_files(directory, manifest)
+        for file in manifest.files:
+            path = paths[file.file_id]
+            if not path.is_file() or path.stat().st_size != file.size_bytes:
+                raise HTTPException(409, "WEIGHT_TRANSFER_INCOMPLETE")
+        checked = 0
+        for file in manifest.files:
+            path = paths[file.file_id]
+            def progress(size: int) -> None:
+                self._verification[directory.name] = {"state": "verifying", "bytes": checked + size}
+
+            try:
+                matches = sha256_file(path, progress) == file.sha256
+            except OSError:
+                if manifest.source == "shared":
+                    raise HTTPException(409, "WEIGHT_SHARED_UNAVAILABLE") from None
+                raise
+            if not matches:
+                if manifest.source == "shared":
+                    raise HTTPException(409, "WEIGHT_SHARED_UNAVAILABLE")
+                path.unlink()
+                raise HTTPException(422, "WEIGHT_CHECKSUM_MISMATCH")
+            checked += file.size_bytes
+        receipt = {"model_id": manifest.model_id}
+        if manifest.source == "shared":
+            receipt["shared_paths"] = {key: str(path.relative_to(self.shared_root)) for key, path in paths.items()}
+        _atomic(directory / "verified.json", receipt)
+        return self._status(directory, manifest)
 
 
-def sha256_file(path: Path) -> str:
+def sha256_file(path: Path, progress: Callable[[int], None] | None = None) -> str:
     digest = hashlib.sha256()
+    received = 0
+    next_update = monotonic()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(MAX_CHUNK_BYTES), b""):
             digest.update(chunk)
+            if progress:
+                received += len(chunk)
+                now = monotonic()
+                if now >= next_update:
+                    progress(received)
+                    next_update = now + 0.5
+    if progress:
+        progress(received)
     return digest.hexdigest()
 
 

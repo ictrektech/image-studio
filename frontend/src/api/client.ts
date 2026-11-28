@@ -101,7 +101,7 @@ export interface ComputePlacement {
   executor_id: string
   profile: string
   runtime_parameters: Partial<GeneratePayload>
-  has_reference: boolean
+  has_reference: boolean | null
 }
 
 export interface GeneratePayload {

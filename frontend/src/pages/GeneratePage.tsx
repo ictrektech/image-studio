@@ -478,7 +478,7 @@ export default function GeneratePage({ models, onRefresh, onOpenModels, t }: { m
     setSubmitting(true)
     setError('')
     try {
-      if (compute && isImg2Img !== compute.has_reference) {
+      if (compute?.has_reference != null && isImg2Img !== compute.has_reference) {
         setError(t.remoteComputeReferenceMismatch)
         return
       }

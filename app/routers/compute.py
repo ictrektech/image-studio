@@ -18,7 +18,7 @@ from fastapi import Path as RoutePath
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.config import settings
-from app.services.scheduler import RUNTIME_PARAMETER_FIELDS, _atomic
+from app.services.scheduler import RUNTIME_PARAMETER_FIELDS, _atomic, direct_remote_policy
 from app.services.weight_sync import deployment_client, deployment_request, sync_weights
 from app.services.weight_transfers import MODEL_ID_PATTERN
 from app.worker import WORKER_MODE, WORKER_PROFILES
@@ -129,7 +129,7 @@ class ModelPlacement(BaseModel):
     executor_id: str = Field(description="The registered V-Scheduler executor. 已注册的 V-Scheduler 执行器 ID。")
     profile: str
     runtime_parameters: dict[str, str | int | float | bool]
-    has_reference: bool
+    has_reference: bool | None
 
 
 def _catalog() -> dict:
@@ -229,8 +229,10 @@ async def compute_placements(authorization: str = Header(default="")):
             "deployment_id": row["deployment_id"], "model_id": row["model_id"], "profile": row["runtime_profile"],
             "node_id": row["node_id"], "executor_id": row["executor_id"],
             "node_name": names.get((running[row["deployment_id"]].get("target_kind"), running[row["deployment_id"]].get("target_id"))),
-            "runtime_parameters": {key: value for key, value in row["model_parameters"].items() if key != "has_reference"},
-            "has_reference": row["model_parameters"].get("has_reference") is True,
+            "runtime_parameters": {key: value for key, value in row["model_parameters"].items()
+                                   if key in RUNTIME_PARAMETER_FIELDS},
+            "has_reference": None if direct_remote_policy(row.get("model_limits"), row["model_parameters"])
+            else row["model_parameters"].get("has_reference") is True,
         }
         for row in registrations if row["deployment_id"] in running
     ]
@@ -299,7 +301,8 @@ async def _prepare(path: Path, record: dict, model: PrepareModelRequest) -> None
         if (
             not isinstance(result.get("model_limits"), dict)
             or not isinstance(result.get("model_parameters"), dict)
-            or set(result["model_parameters"]) != set(RUNTIME_PARAMETER_FIELDS) | {"has_reference"}
+            or (not direct_remote_policy(result["model_limits"], result["model_parameters"])
+                and set(result["model_parameters"]) != set(RUNTIME_PARAMETER_FIELDS) | {"has_reference"})
         ):
             raise HTTPException(503, "COMPUTE_CALIBRATION_RECEIPT_INVALID")
         record.update(

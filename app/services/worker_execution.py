@@ -187,7 +187,7 @@ def worker_execution_routes(transfers: WeightTransfers) -> APIRouter:
                 job.metadata["scheduler_attempt_id"] = previous_id
             if reference is not None:
                 job.metadata.update(_worker_reference_path=str(reference), init_input_id="in_worker_reference")
-            scheduler.validate_calibrated_job(job, command.model_limits, command.model_parameters)
+            scheduler.validate_remote_job(job, command.model_limits, command.model_parameters)
             save_job(job)
             return await scheduler.execute(attempt, lifecycle, authorization)
 

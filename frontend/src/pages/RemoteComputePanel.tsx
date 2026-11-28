@@ -160,6 +160,9 @@ export default function RemoteComputePanel({ models, t }: { models: ModelInfo[];
                         onClick={() => setRemove({ id: row.id, node: name })}>{t.remoteComputeRemove}</Button>}
                   </div>
                 </div>
+                {row.last_error === 'BACKEND_IMAGE_PULL_FAILED' && (
+                  <Alert><AlertDescription>{t.remoteComputeImagePullFailed}</AlertDescription></Alert>
+                )}
                 {preparations.map(item => {
                   const modelName = localModels.find(model => model.id === item.model_id)?.name || t.remoteComputeModelLabel
                   const percentage = item.total_bytes ? 100 * item.received_bytes / item.total_bytes : 0

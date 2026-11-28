@@ -7,6 +7,11 @@ Image Studio is a VOS app for local Stable Diffusion / `stable-diffusion.cpp`
 image generation. It provides a browser workspace for text-to-image requests,
 job tracking, generated-file access, and Model Hub backed model management.
 
+For an SSH compute deployment, Image Studio selects the published backend image
+for the node's Profile. V-Scheduler prepares that image. Keep polling while the
+deployment is pending, and prepare models after it is running. If image preparation
+fails, check Image Hub upstream authentication and node connectivity in V-Scheduler.
+
 ## Scope
 
 - Generate images from prompts and continue from previously generated images
@@ -401,7 +406,7 @@ VOS 安装后，应用通过 Scheduler 的可信绑定获得 `lifecycle_protocol
 
 ### 远端计算后端
 
-1. 在 V-Scheduler 添加计算节点并设置固定 Profile。Scheduler 从已安装包的镜像清单匹配节点，自动开放这些部署目标。调度使用目标节点已批准的资源预算和模型校准。
+1. 在 V-Scheduler 添加计算节点并设置固定 Profile。Scheduler 从已安装包的镜像清单匹配节点，自动开放这些部署目标。目标权重校验通过后即可注册。已有的匹配校准继续应用。任务在所选节点排队，资源和后端空闲后开始执行。
 2. 以 VOS 系统管理员打开 Image Studio「模型 → 远端计算后端 → 管理部署」，面板按节点列出后端状态。找到显示「未部署」的节点并点击该节点的「部署后端」。显示「运行中」后，在同一个节点下选择主节点已准备好的模型，点击「准备模型并注册」。显示「模型可用」后，可以在生成页选择该节点。镜像用版本或发布日期标识。在部署卡片上可以停止、启动或删除后端。删除需要确认。后端仍有活跃任务或模型正在准备时，请等操作结束。V-Scheduler 的「应用后端」也可管理同一部署。
 3. 目标能挂载 Model Hub 的只读 NFS 共享时，应用校验共享文件并直接加载。共享不可用或缺少匹配权重时，从主节点分块复制到目标。准备中断时重新提交同一部署和模型，已复制的字节会用于续传。模型校验完成后登记执行器，界面显示「NFS 共享」或「节点副本」。 准备面板按「校验主节点权重」「复制模型权重」（需要复制时）「校验目标节点权重」「正在注册模型」显示当前阶段。页面同时显示当前阶段的已处理和总 MiB，以及百分比。旧计算后端需更新镜像才能上报校验过程中已读字节。
 4. 在「生成 → 计算节点」选择该部署。任务、参考图和下载仍使用当前 VOS 用户上下文。详细字段见[中文 API 参考](ictrek.app/docs/api-reference.zh.md)和[英文 API 参考](ictrek.app/docs/api-reference.en.md)，应用内可打开「API → 完整接口与请求/响应字段」。
@@ -410,7 +415,7 @@ VOS 安装后，应用通过 Scheduler 的可信绑定获得 `lifecycle_protocol
 
 主节点可只协调远端任务。V-Scheduler 可以下发空的本机批准模型列表，建立部署和任务服务身份。本机生成仍要求对应模型的本机批准。
 
-API 调用方可在 `GET /api/v1/compute/placements` 用 `node_id` 和 `model_id` 查找部署，再在 `POST /api/v1/generate` 传入该部署的 `compute_deployment_id`。返回的 `executor_id` 对应 V-Scheduler 执行器。任务下发后可用 `metadata.scheduler_task_id` 核对调度实际执行的节点。
+API 调用方可在 `GET /api/v1/compute/placements` 用 `node_id` 和 `model_id` 查找部署，再在 `POST /api/v1/generate` 传入该部署的 `compute_deployment_id`。返回的 `executor_id` 对应 V-Scheduler 执行器。未采用实测校准的部署返回空 `runtime_parameters` 和 `has_reference: null`，调用方可使用模型正常支持的生成参数和参考图模式。任务下发后可用 `metadata.scheduler_task_id` 核对调度实际执行的节点。
 
 ### Scheduling options
 

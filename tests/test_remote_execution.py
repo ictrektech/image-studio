@@ -115,6 +115,21 @@ class RemoteExecutionTests(unittest.IsolatedAsyncioTestCase):
             "has_reference": False,
         }])
 
+        registration = json.loads(registered.read_text())
+        registration.update(model_limits={}, model_parameters={"policy": "direct"})
+        registered.write_text(json.dumps(registration))
+        with (
+            patch.object(compute, "_catalog", return_value={"jetson-thor": {}}),
+            patch.object(compute, "deployment_request", new_callable=AsyncMock, side_effect=[scheduler_receipt, inventory]),
+            patch("app.services.session.verify_vos_identity", new_callable=AsyncMock, return_value=True),
+        ):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://studio.test") as client:
+                response = await client.get("/api/v1/compute/placements", headers={"Authorization": "Bearer user-fixture"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()[0]["runtime_parameters"], {})
+        self.assertIsNone(response.json()[0]["has_reference"])
+        self.assertEqual(response.json()[0]["node_id"], "spark-worker")
+
     async def test_execution_uses_selected_deployment_with_fence_and_returns_verified_output(self):
         directory = self.enterContext(tempfile.TemporaryDirectory())
         self.enterContext(patch.object(settings, "data_dir", Path(directory)))

@@ -78,7 +78,7 @@ def validate_limits(job: JobRecord) -> None:
     if job.metadata.get("compute_deployment_id"):
         from .remote_execution import compute_policy
         policy = compute_policy(job)
-        validate_calibrated_job(job, policy["model_limits"], policy["model_parameters"])
+        validate_remote_job(job, policy["model_limits"], policy["model_parameters"])
         return
     if not settings.scheduler_required:
         return
@@ -89,6 +89,15 @@ def validate_limits(job: JobRecord) -> None:
         job, settings.scheduler_model_limits.get(model_id(job), {}),
         settings.scheduler_model_parameters.get(model_id(job)),
     )
+
+
+def direct_remote_policy(limits: dict | None, parameters: dict) -> bool:
+    return (limits, parameters) == ({}, {"policy": "direct"})
+
+
+def validate_remote_job(job: JobRecord, limits: dict, parameters: dict) -> None:
+    if not direct_remote_policy(limits, parameters):
+        validate_calibrated_job(job, limits, parameters)
 
 
 def validate_calibrated_job(job: JobRecord, limits: dict, parameters: dict | None) -> None:

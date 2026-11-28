@@ -30,16 +30,17 @@ dist/image_studio_${VERSION}_pull.tar
 
 ## Profiles
 
-Image Studio 使用 6 个 Docker Compose profile：
+Image Studio 使用 7 个硬件 Profile：
 
 | Profile | 飞书 sheet | 说明 |
 | --- | --- | --- |
-| `amd` | `AMD_with_mxn100` | AMD64 CPU / 非 NVIDIA runtime |
+| `amd-cpu` | `AMD_with_mxn100` | AMD64 CPU / 非 NVIDIA runtime |
 | `amd-cuda` | `AMD_with_cuda` | AMD64 NVIDIA runtime |
-| `arm` | `ARM_without_cuda`、`SOPHON_bm1688` | ARM64 CPU / 非 NVIDIA runtime |
+| `arm-cpu` | `ARM_without_cuda`、`SOPHON_bm1688` | ARM64 CPU / 非 NVIDIA runtime |
 | `arm-cuda` | `ARM_with_cuda` | ARM64 NVIDIA runtime |
-| `l4t` | `l4t` | Jetson / L4T NVIDIA runtime |
-| `thor` | `thor_spark` | Thor NVIDIA runtime |
+| `jetson-orin` | `l4t` | Jetson / L4T NVIDIA runtime |
+| `jetson-thor` | `thor_spark` | Jetson Thor NVIDIA runtime |
+| `dgx-spark` | `thor_spark` | DGX Spark NVIDIA runtime，复用同一镜像 |
 
 CPU 与 CUDA/L4T/Thor 镜像 tag 分开维护，不假设带加速环境的镜像可在无 CUDA
 设备上通用。

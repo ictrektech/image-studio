@@ -63,7 +63,7 @@ permissions:
       default_roles: [system_admin, platform_admin]
 
 profiles:
-  - name: amd
+  - name: amd-cpu
     title:
       zh-CN: AMD64 CPU
       en: AMD64 CPU
@@ -72,7 +72,7 @@ profiles:
       en: AMD64 platform without nvidia runtime, for CPU or external runtime testing.
     caps:
       arch: amd64
-    conflicts: [amd-cuda, arm, arm-cuda, l4t, thor]
+    conflicts: [amd-cuda, arm-cpu, arm-cuda, jetson-orin, jetson-thor, dgx-spark]
   - name: amd-cuda
     title:
       zh-CN: AMD64 CUDA
@@ -83,8 +83,8 @@ profiles:
     caps:
       arch: amd64
       software: [cuda]
-    conflicts: [amd, arm, arm-cuda, l4t, thor]
-  - name: arm
+    conflicts: [amd-cpu, arm-cpu, arm-cuda, jetson-orin, jetson-thor, dgx-spark]
+  - name: arm-cpu
     title:
       zh-CN: ARM64 CPU
       en: ARM64 CPU
@@ -93,7 +93,7 @@ profiles:
       en: ARM64 platform without nvidia runtime.
     caps:
       arch: arm64
-    conflicts: [amd, amd-cuda, arm-cuda, l4t, thor]
+    conflicts: [amd-cpu, amd-cuda, arm-cuda, jetson-orin, jetson-thor, dgx-spark]
   - name: arm-cuda
     title:
       zh-CN: ARM64 CUDA
@@ -105,33 +105,38 @@ profiles:
       device-type: generic
       arch: arm64
       software: [cuda]
-    conflicts: [amd, amd-cuda, arm, l4t, thor]
-  - name: l4t
+    conflicts: [amd-cpu, amd-cuda, arm-cpu, jetson-orin, jetson-thor, dgx-spark]
+  - name: jetson-orin
     title:
-      zh-CN: Jetson / L4T
-      en: Jetson / L4T
+      zh-CN: Jetson Orin
+      en: Jetson Orin
     description:
-      zh-CN: Jetson / L4T 平台，声明 nvidia runtime。
-      en: Jetson / L4T platform with nvidia runtime.
+      zh-CN: Jetson Orin 平台，声明 nvidia runtime。
+      en: Jetson Orin platform with nvidia runtime.
     caps:
       device-type:
-        - any-of: [l4t, jetson]
+        - any-of: [jetson-orin, l4t, jetson]
       arch: arm64
       software: [cuda]
-    conflicts: [amd, amd-cuda, arm, arm-cuda, thor]
-  - name: thor
-    title:
-      zh-CN: Thor
-      en: Thor
-    description:
-      zh-CN: Thor 平台，声明 nvidia runtime。
-      en: Thor platform with nvidia runtime.
+    conflicts: [amd-cpu, amd-cuda, arm-cpu, arm-cuda, jetson-thor, dgx-spark]
+  - name: jetson-thor
+    title: {zh-CN: Jetson Thor, en: Jetson Thor}
+    description: {zh-CN: Jetson Thor CUDA 加速。, en: Jetson Thor CUDA acceleration.}
     caps:
       device-type:
-        - any-of: [thor-spark, thor]
+        - any-of: [jetson-thor, thor, thor-spark]
       arch: arm64
       software: [cuda]
-    conflicts: [amd, amd-cuda, arm, arm-cuda, l4t]
+    conflicts: [amd-cpu, amd-cuda, arm-cpu, arm-cuda, jetson-orin, dgx-spark]
+  - name: dgx-spark
+    title: {zh-CN: DGX Spark, en: DGX Spark}
+    description: {zh-CN: NVIDIA GB10 CUDA 加速。, en: NVIDIA GB10 CUDA acceleration.}
+    caps:
+      device-type:
+        - any-of: [dgx-spark, spark]
+      arch: arm64
+      software: [cuda]
+    conflicts: [amd-cpu, amd-cuda, arm-cpu, arm-cuda, jetson-orin, jetson-thor]
 
 require-profiles: true
 

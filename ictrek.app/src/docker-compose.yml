@@ -96,7 +96,7 @@ x-image-studio-backend-gpu-base: &image-studio-backend-gpu-base
 services:
   image-studio-frontend-amd:
     <<: *image-studio-frontend-base
-    profiles: ["amd"]
+    profiles: ["amd-cpu"]
     image: ${IMAGE_STUDIO_FRONTEND_AMD_IMAGE}
     environment:
       <<: *image-studio-frontend-env
@@ -109,7 +109,7 @@ services:
 
   image-studio-backend-amd:
     <<: *image-studio-backend-base
-    profiles: ["amd"]
+    profiles: ["amd-cpu"]
     image: ${IMAGE_STUDIO_BACKEND_AMD_IMAGE}
     environment:
       <<: *image-studio-backend-env
@@ -142,7 +142,7 @@ services:
 
   image-studio-frontend-arm:
     <<: *image-studio-frontend-base
-    profiles: ["arm"]
+    profiles: ["arm-cpu"]
     image: ${IMAGE_STUDIO_FRONTEND_ARM_IMAGE}
     environment:
       <<: *image-studio-frontend-env
@@ -155,7 +155,7 @@ services:
 
   image-studio-backend-arm:
     <<: *image-studio-backend-base
-    profiles: ["arm"]
+    profiles: ["arm-cpu"]
     image: ${IMAGE_STUDIO_BACKEND_ARM_IMAGE}
     environment:
       <<: *image-studio-backend-env
@@ -188,7 +188,7 @@ services:
 
   image-studio-frontend-l4t:
     <<: *image-studio-frontend-base
-    profiles: ["l4t"]
+    profiles: ["jetson-orin"]
     image: ${IMAGE_STUDIO_FRONTEND_ARM_IMAGE}
     environment:
       <<: *image-studio-frontend-env
@@ -201,7 +201,7 @@ services:
 
   image-studio-backend-l4t:
     <<: *image-studio-backend-gpu-base
-    profiles: ["l4t"]
+    profiles: ["jetson-orin"]
     image: ${IMAGE_STUDIO_BACKEND_L4T_IMAGE}
     environment:
       <<: *image-studio-backend-env
@@ -212,7 +212,7 @@ services:
 
   image-studio-frontend-thor:
     <<: *image-studio-frontend-base
-    profiles: ["thor"]
+    profiles: ["jetson-thor", "dgx-spark"]
     image: ${IMAGE_STUDIO_FRONTEND_ARM_IMAGE}
     environment:
       <<: *image-studio-frontend-env
@@ -225,7 +225,7 @@ services:
 
   image-studio-backend-thor:
     <<: *image-studio-backend-gpu-base
-    profiles: ["thor"]
+    profiles: ["jetson-thor", "dgx-spark"]
     image: ${IMAGE_STUDIO_BACKEND_THOR_IMAGE}
     environment:
       <<: *image-studio-backend-env

@@ -1,5 +1,7 @@
 # Image Studio
 
+从旧版升级时保留应用存储，选择原后端对应的标准 Profile。`amd` 选 `amd-cpu`，`arm` 选 `arm-cpu`，`l4t` 选 `jetson-orin`。`thor` 按设备选择 `jetson-thor` 或 `dgx-spark`，设备仅报告旧 `thor-spark` 标识时选择 `jetson-thor`。API 升级须显式提交新 `profiles`。回退选择旧包对应的 Profile。推理 API 保持一致。
+
 Image Studio 是基于 `stable-diffusion.cpp` 的本地图像生成工作台，提供文生图、
 任务记录、输出文件访问和模型管理。
 

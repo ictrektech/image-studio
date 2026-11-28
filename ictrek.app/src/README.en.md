@@ -1,5 +1,7 @@
 # Image Studio
 
+When upgrading, keep the app storage and select the canonical Profile for the current backend. Map `amd` to `amd-cpu`, `arm` to `arm-cpu` and `l4t` to `jetson-orin`. Map `thor` to `jetson-thor` or `dgx-spark` according to the device. If it only advertises the legacy `thor-spark` identifier, select `jetson-thor`. Submit the new `profiles` explicitly for API upgrades. Select the matching old Profile when rolling back. Inference API requests stay the same.
+
 Image Studio is a local image generation workspace powered by
 `stable-diffusion.cpp`. It provides prompt-based generation, job history,
 generated-file access, and model management.
